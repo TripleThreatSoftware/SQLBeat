@@ -1,12 +1,14 @@
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[pr_rpt_bufferCacheContents]') AND type in (N'P', N'PC'))
-BEGIN
-EXEC dbo.sp_executesql @statement = N'-- exec pr_rpt_bufferCacheContents ''funmssql02'', null, null
-CREATE procedure [pr_rpt_bufferCacheContents] (@cServerName varchar(100), @dStartDate dateTime, @dEndDate dateTime)
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- exec pr_rpt_bufferCacheContents 'funmssql02', null, null
+ALTER procedure [dbo].[pr_rpt_bufferCacheContents] (@cServerName varchar(100), @dStartDate dateTime, @dEndDate dateTime)
 as
 begin
 
 --	declare @cServerName varchar(100)
---	set @cServerName = ''funmssql02''
+--	set @cServerName = 'funmssql02'
 
 	set @dStartDate = isnull(@dStartDate, dateAdd(week, -1, getDate()))
 	set @dEndDate = isnull(@dEndDate, getDate())
@@ -14,25 +16,16 @@ begin
 	declare @dLatestRun dateTime
 	set @dLatestRun = (
 		select max(ymd)
-			from deepSQLStats (nolock)
+			from deepSQLStats_bufferCache (nolock)
 			where serverName = @cServerName
-				and keyName = ''Buffer Cache Contents''
 				and ymd >= @dStartDate
 				and ymd <= @dEndDate
 		)
 
-	select subkeyName, keyValue, ymd
-		from deepSQLStats (nolock)
+	select databaseName, tableName, indexNumber, buffers
+		from deepSQLStats_bufferCache (nolock)
 		where serverName = @cServerName
-			and keyName = ''Buffer Cache Contents''
 			and ymd = @dLatestRun
-		order by dbo.fn_returnDigits(keyValue, 0) desc
+		order by buffers desc
 
 end
-'
-END
-GO
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO

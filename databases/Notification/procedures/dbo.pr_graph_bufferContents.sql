@@ -1,8 +1,10 @@
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[pr_graph_bufferContents]') AND type in (N'P', N'PC'))
-BEGIN
-EXEC dbo.sp_executesql @statement = N'
--- exec pr_graph_bufferContents ''sqlcluster01'', null, null
-CREATE procedure [pr_graph_bufferContents] (@cServerName varchar(100), @dStartDate dateTime, @dEndDate dateTime)
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+-- exec pr_graph_bufferContents 'mssql-ny', null, null
+ALTER procedure [dbo].[pr_graph_bufferContents] (@cServerName varchar(100), @dStartDate dateTime, @dEndDate dateTime)
 as
 begin
 	declare @nTotalBuffers decimal(10,2)
@@ -13,22 +15,27 @@ begin
 	declare @dLatestRun dateTime
 	set @dLatestRun = (
 		select max(ymd)
-			from deepSQLStats (nolock)
+			from deepSQLStats_bufferCache (nolock)
 			where serverName = @cServerName
-				and keyName = ''Buffer Cache Contents''
 				and ymd >= @dStartDate
 				and ymd <= @dEndDate
 		)
 
-	select top 10 subkeyName as objectName,
-		dbo.fn_returnDigits(keyValue, 0) as numBuffers,
+	if isnull(@dLatestRun, '') = ''
+	begin
+		select '' as graphURL
+		return
+	end
+
+	select top 10
+		databaseName + '.' + tableName + '(' + convert(varchar(20), indexNumber) + ')' as objectName,
+		buffers as numBuffers,
 		convert(decimal(10,1), 0) as relativeSize
 		into #bufferCache
-		from deepSQLStats (nolock)
+		from deepSQLStats_bufferCache (nolock)
 		where serverName = @cServerName
-			and keyName = ''Buffer Cache Contents''
 			and ymd = @dLatestRun
-		order by dbo.fn_returnDigits(keyValue, 0) desc
+		order by buffers desc
 
 	set @nTotalBuffers = (select sum(numBuffers) from #bufferCache)
 
@@ -39,16 +46,16 @@ begin
 	declare @cAxisLabels varchar(8000)
 	declare @cURLString varchar(8000)
 
-	set @cURLString = ''http://chart.apis.google.com/chart?chs=833x350&chd=t:''
+	set @cURLString = 'http://chart.apis.google.com/chart?chs=833x350&chd=t:'
 
-	set @cDatapoints = ''''
-	set @cAxisLabels = ''''
+	set @cDatapoints = ''
+	set @cAxisLabels = ''
 
-	select @cDataPoints = @cDataPoints + convert(varchar(20), convert(decimal(10,1), relativeSize)) + '',''
+	select @cDataPoints = @cDataPoints + convert(varchar(20), convert(decimal(10,1), relativeSize)) + ','
 		from #bufferCache
 		order by objectName
 
-	select @cAxisLabels = @cAxisLabels + objectName + ''|''
+	select @cAxisLabels = @cAxisLabels + objectName + '|'
 		from #bufferCache
 		order by objectName
 
@@ -59,26 +66,18 @@ begin
 
 	set @cURLString = @cURLString +
 
---		''&cht=lc'' + -- line chart
---		''&chxl=0:|'' + @cAxisLabels + -- defining X axis labels as time of day
---		''&chxt=x,y'' + -- showing X and Y axis
-		''&chco=ff0000,00ff00,0000ff,CCCCCC'' + -- showing in these colors
+--		'&cht=lc' + -- line chart
+--		'&chxl=0:|' + @cAxisLabels + -- defining X axis labels as time of day
+--		'&chxt=x,y' + -- showing X and Y axis
+		'&chco=ff0000,00ff00,0000ff,CCCCCC' + -- showing in these colors
 
-		''&cht=p3'' + -- 3d pie chart
-		''&chl='' + @cAxisLabels + -- with these wedge names
+		'&cht=p3' + -- 3d pie chart
+		'&chl=' + @cAxisLabels + -- with these wedge names
 
-		''&chtt=Buffer%20Cache%20Contents'' -- with this title
+		'&chtt=Buffer%20Cache%20Contents' -- with this title
 
 	select @cURLString as graphURL
 
 	drop table #bufferCache
 
 end
-
-'
-END
-GO
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO

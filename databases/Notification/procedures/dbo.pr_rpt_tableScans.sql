@@ -1,8 +1,10 @@
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[pr_rpt_tableScans]') AND type in (N'P', N'PC'))
-BEGIN
-EXEC dbo.sp_executesql @statement = N'-- pr_rpt_tableScans ''sqlcluster01'', null, null
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- pr_rpt_tableScans 'sqlcluster01', null, null
 
-CREATE procedure [pr_rpt_tableScans] (@cServerName varchar(100), @dStartDate dateTime, @dEndDate dateTime)
+ALTER procedure [dbo].[pr_rpt_tableScans] (@cServerName varchar(100), @dStartDate dateTime, @dEndDate dateTime)
 as
 begin
 
@@ -14,19 +16,17 @@ begin
 
 	select
 		ymd,
-		left(substring(keyValue, charindex(''against'', keyValue) + 8, 5000), charindex('' '', substring(keyValue, charindex(''against'', keyValue) + 8, 5000))) as objectName,
-		dbo.fn_returnDigits(substring(keyValue, 1, charindex('' '', keyValue)), 1) as tableScans,
-		dbo.fn_returnDigits(substring(keyValue, charindex(''vs '', keyValue) + 1, 20), 1) as indexSeeks,
+		databaseName + '.' + tableName + '(' + convert(varchar(50), indexNumber) + ')' as objectName,
+		tableScans,
+		indexSeeks,
 		convert(bigint, 0) as delta_tableScans,
 		convert(bigint, 0) as delta_indexSeeks,
-		convert(dateTime, '''') as lastCheck
+		convert(dateTime, '') as lastCheck
 		into #scans
-		from deepSQLStats (nolock)
+		from deepSQLStats_indexesNotOptimal (nolock)
 		where serverName = @cServerName
 			and ymd >= @dStartDate
 			and ymd < @dEndDate
-			and keyName = ''Indexing''
-			and subkeyName = ''Indexes not being used''
 		order by objectName, ymd
 
 	create clustered index ix_tmp_scans on #scans (objectName, ymd) with fillfactor = 100
@@ -83,10 +83,3 @@ begin
 
 	drop table #scans
 end
-'
-END
-GO
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO

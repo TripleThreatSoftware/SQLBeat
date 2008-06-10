@@ -1,8 +1,10 @@
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[pr_rpt_mostRunQueries]') AND type in (N'P', N'PC'))
-BEGIN
-EXEC dbo.sp_executesql @statement = N'-- pr_rpt_mostRunQueries ''sqlcluster01'', null, null
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- pr_rpt_mostRunQueries 'sqlcluster01', null, null
 
-CREATE procedure [pr_rpt_mostRunQueries] (@cServerName varchar(100), @dStartDate dateTime, @dEndDate dateTime)
+ALTER procedure [dbo].[pr_rpt_mostRunQueries] (@cServerName varchar(100), @dStartDate dateTime, @dEndDate dateTime)
 as
 begin
 
@@ -14,18 +16,16 @@ begin
 
 	select
 		ymd,
-		substring(keyValue, charindex('':::'', keyValue) + 4, 500) as query,
-		max(dbo.fn_returnDigits(left(keyValue, charindex(space(1), keyValue)), 0)) as executions,
+		bufferContents as query,
+		sum(numExecutions) as executions,
 		convert(bigint, 0) as delta,
-		convert(dateTime, '''') as lastCheck
+		convert(dateTime, '') as lastCheck
 		into #executions
-		from deepSQLStats (nolock)
+		from deepSQLStats_cpuConsumers (nolock)
 		where serverName = @cServerName
 			and ymd >= @dStartDate
 			and ymd < @dEndDate
-			and keyName = ''CPU Time Consumers''
-			and subKeyName in (''cumulative'', ''queries'')
-		group by ymd, substring(keyValue, charindex('':::'', keyValue) + 4, 500)
+		group by ymd, bufferContents
 		order by query, ymd
 
 	update #executions
@@ -64,10 +64,3 @@ begin
 	drop table #executions
 
 end
-'
-END
-GO
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO

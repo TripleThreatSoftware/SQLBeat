@@ -1,8 +1,10 @@
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[pr_rpt_bufferContents]') AND type in (N'P', N'PC'))
-BEGIN
-EXEC dbo.sp_executesql @statement = N'-- pr_rpt_bufferContents ''sqlcluster01'', null, null
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- pr_rpt_bufferContents 'sqlcluster01', null, null
 
-CREATE procedure [pr_rpt_bufferContents] (@cServerName varchar(100), @dStartDate dateTime, @dEndDate dateTime)
+ALTER procedure [dbo].[pr_rpt_bufferContents] (@cServerName varchar(100), @dStartDate dateTime, @dEndDate dateTime)
 as
 begin
 
@@ -15,7 +17,7 @@ begin
 	declare @dLastScan dateTime
 	set @dLastScan = (
 		select max(ymd)
-			from deepSQLStats (nolock)
+			from deepSQLStats_bufferCache (nolock)
 			where serverName = @cServerName
 				and ymd >= @dStartDate
 				and ymd < @dEndDate
@@ -23,18 +25,17 @@ begin
 
 	select
 		ymd,
-		subkeyName as objectName,
-		dbo.fn_returnDigits(keyValue, 1) as buffers,
+		databaseName + '.' + tableName + '(' + convert(varchar(50), indexNumber) + ')' as objectName,
+		buffers,
 		convert(bigint, 0) as delta,
 		convert(decimal(10,2), 0) as delta_relative,
-		convert(dateTime, '''') as lastCheck
+		convert(dateTime, '') as lastCheck
 		into #bufferChanges
-		from deepSQLStats (nolock)
+		from deepSQLStats_bufferCache (nolock)
 		where serverName = @cServerName
 			and ymd >= @dStartDate
 			and ymd < @dEndDate
-			and keyName = ''Buffer Cache Contents''
-		order by subkeyName, ymd
+		order by objectName, ymd
 
 	update #bufferChanges
 		set lastCheck = b.lastCheck
@@ -68,10 +69,3 @@ begin
 
 	drop table #bufferChanges
 end
-'
-END
-GO
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO

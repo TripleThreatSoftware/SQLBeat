@@ -1,6 +1,10 @@
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 --exec pr_rpt_allTableSizes 'mssql-ny'
 
-alter procedure pr_rpt_allTableSizes (@cServerName varchar(200))
+ALTER procedure [dbo].[pr_rpt_allTableSizes] (@cServerName varchar(200))
 as
 begin
 
@@ -22,7 +26,7 @@ begin
 	declare @cThisServerName varchar(200)
 	declare @cSQLString nvarchar(4000)
 
-	set @cThisServerName = @@serverName
+	set @cThisServerName = (select settingValue from dm_settings where settingName = ''Current machine name'')
 
 	select top 1
 		@cUserName = userName,
@@ -92,7 +96,7 @@ begin
 
 	exec msdb.dbo.sp_start_job @job_name = @cJobName
 
-	waitfor delay '00:00:15'
+	waitfor delay '00:00:45'
 
 	exec msdb.dbo.sp_delete_job @job_name = @cJobName
 
@@ -113,7 +117,3 @@ begin
 	exec sp_executeSQL @cSQLString
 
 end
-
-go
-
-grant exec on pr_rpt_allTableSizes to sqlNotification

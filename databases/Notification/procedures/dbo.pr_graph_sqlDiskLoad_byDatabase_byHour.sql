@@ -1,12 +1,14 @@
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[pr_graph_sqlDiskLoad_byDatabase_byHour]') AND type in (N'P', N'PC'))
-BEGIN
-EXEC dbo.sp_executesql @statement = N'
-create procedure [pr_graph_sqlDiskLoad_byDatabase_byHour] (@cServerName varchar(100))
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+ALTER procedure [dbo].[pr_graph_sqlDiskLoad_byDatabase_byHour] (@cServerName varchar(100))
 as
 begin
 
 --	declare @cServerName varchar(100)
---	set @cServerName = ''mssql-ny''
+--	set @cServerName = 'mssql-ny'
 
 	declare @dStartDate dateTime
 	set @dStartDate = dateAdd(hour, -12, getDate())
@@ -14,10 +16,10 @@ begin
 	set nocount on
 
 	select
-		convert(varchar(20), spid) + isnull(hostname, '''') + isnull(dbname, '''') + isnull(programName, '''') + convert(varchar(20), login_time, 120) as keyString,
+		convert(varchar(20), spid) + isnull(hostname, '') + isnull(dbname, '') + isnull(programName, '') + convert(varchar(20), login_time, 120) as keyString,
 		lastBatchTime, login_time,
 		min(ymd) as ymd,
-		isnull(dbName, ''N/A'') as dbname,
+		isnull(dbName, 'N/A') as dbname,
 		min(cpuTime) as cpuTime_min,
 		max(cpuTime) as cpuTime_max,
 		min(diskIO) as diskIO_min,
@@ -33,9 +35,14 @@ begin
 			and hostname <> convert(varchar(100), @@serverName)
 			and lastBatchTime is not null
 			and spid >= 50
-			and ymd < convert(varchar(13), getDate(), 120) + '':00:00.000''
+			and ymd < convert(varchar(13), getDate(), 120) + ':00:00.000'
 		group by spid, hostname, programName, login_time, lastBatchTime, dbName
 
+	if @@rowcount = 0
+	begin
+		select '' as graphURL
+		return
+	end
 
 	create clustered index ix_tmp_activity on #activity (keyString, lastBatchTime desc) with fillfactor = 100
 
@@ -51,7 +58,7 @@ begin
 			) b on a.keyString = b.keyString
 					and a.lastBatchTime = b.lastBatchTime
 
-	delete from #activity where prevBatchTime < @dStartDate --or isnull(prevBatchTime, '''') = ''''
+	delete from #activity where prevBatchTime < @dStartDate --or isnull(prevBatchTime, '') = ''
 
 	--create index ix_tmp_activity_prevBatch on #activity (prevBatchTime, keyString) with fillfactor = 100
 
@@ -66,7 +73,7 @@ begin
 			and a.diskIO_min >= c.diskIO_max
 		where a.prevBatchTime is not null
 
-	-- for any one-off transaction, any CPU or DISK stats showing are all in. We''ve already added the min/max delta earlier
+	-- for any one-off transaction, any CPU or DISK stats showing are all in. We've already added the min/max delta earlier
 	update a
 		set cpuTime_delta = a.cpuTime_delta + a.cpuTime_min,
 			diskIO_delta = a.diskIO_delta + a.diskIO_min
@@ -79,7 +86,7 @@ begin
 	insert into #dataValues (setName, seriesName, axis_x, axis_y)
 	select
 		dbName as setName,
-		''DiskIO'' as seriesName,
+		'DiskIO' as seriesName,
 		convert(varchar(2),
 			case
 				when datePart(hour, lastBatchTime) >= 13
@@ -88,8 +95,8 @@ begin
 					end) +
 			case
 				when datePart(hour, lastBatchTime) >= 13
-				then ''p''
-				else ''a''
+				then 'p'
+				else 'a'
 			end
 			as axis_x,
 		sum(diskIO_delta) as axis_y
@@ -108,16 +115,18 @@ begin
 				and a.seriesName = b.seriesName
 				and a.sortOrder = b.sortOrder
 
+	insert into #dataValues (setName, seriesName, axis_x, axis_y)
+	select a.setName, 'DiskIO' as seriesName, a.axis_x, 0 as axis_y
+		from (
+			select distinct setName, axis_x
+				from (select distinct setname from #dataValues) a, (select distinct axis_x from #dataValues) b
+			) a
+		left outer join #dataValues b on a.setName = b.setName
+			and a.axis_x = b.axis_x
+		where b.setName is null
+
 	exec pr_generateGoogleChartsRequest @nWidth = 1000, @nHeight = 300, @bRelativeToTotal = 0
 
 	drop table #dataValues
 	drop table #activity
 end
-
-'
-END
-GO
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO

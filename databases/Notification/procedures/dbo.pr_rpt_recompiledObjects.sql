@@ -1,12 +1,14 @@
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[pr_rpt_recompiledObjects]') AND type in (N'P', N'PC'))
-BEGIN
-EXEC dbo.sp_executesql @statement = N'-- exec pr_rpt_recompiledObjects ''funmssql02'', null, null
-CREATE procedure [pr_rpt_recompiledObjects] (@cServerName varchar(100), @dStartDate dateTime, @dEndDate dateTime)
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- exec pr_rpt_recompiledObjects 'funmssql02', null, null
+ALTER procedure [dbo].[pr_rpt_recompiledObjects] (@cServerName varchar(100), @dStartDate dateTime, @dEndDate dateTime)
 as
 begin
 
 --	declare @cServerName varchar(100)
---	set @cServerName = ''funmssql02''
+--	set @cServerName = 'funmssql02'
 
 	set @dStartDate = isnull(@dStartDate, dateAdd(week, -1, getDate()))
 	set @dEndDate = isnull(@dEndDate, getDate())
@@ -17,26 +19,19 @@ begin
 		select max(ymd)
 			from deepSQLStats (nolock)
 			where serverName = @cServerName
-				and keyName =''Recompiled objects''
+				and keyName ='Recompiled objects'
 				and ymd >= @dStartDate
 				and ymd <= @dEndDate
 		)
-	select left(keyValue, charindex(''for "'', keyValue) - 1) as subkeyName,
-		substring(keyValue, charindex(''"'', keyValue) + 1, 8000) as keyValue,
+	select left(keyValue, charindex('for "', keyValue) - 1) as subkeyName,
+		substring(keyValue, charindex('"', keyValue) + 1, 8000) as keyValue,
 		ymd
 		from deepSQLStats (nolock)
 		where serverName = @cServerName
-			and keyName = ''Recompiled objects''
+			and keyName = 'Recompiled objects'
 			and ymd = @dLatestRun
 		order by subkeyName
 
 
 
 end
-'
-END
-GO
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO

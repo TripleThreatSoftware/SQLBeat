@@ -1,26 +1,28 @@
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[pr_examineServer]') AND type in (N'P', N'PC'))
-BEGIN
-EXEC dbo.sp_executesql @statement = N'
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
 --select @@servername
---''doe-cgetzer-2k3\2K3DEVSEED3''
--- EXEC sp_configure ''xp_cmdshell'', ''1''
--- EXEC sp_configure ''agent xps'', ''1''
+--'doe-cgetzer-2k3\2K3DEVSEED3'
+-- EXEC sp_configure 'xp_cmdshell', '1'
+-- EXEC sp_configure 'agent xps', '1'
 -- reconfigure
--- select * from dm_servers where serverName = ''sqlcluster01''
+-- select * from dm_servers where serverName = 'sqlcluster01'
 -- select top 100 * from notificationLog_history order by ymd desc
 -- select top 100 * from processLog order by ukey desc
--- exec pr_examineServer ''sqlcluster01'', 600
--- exec pr_examineServer ''10.3.10.197'', 600
-CREATE procedure [pr_examineServer] (@cServerName varchar(100), @nMinutesBackToLook int)
+-- exec pr_examineServer 'sqlcluster01', 600
+-- exec pr_examineServer '10.3.10.197', 600
+ALTER procedure [dbo].[pr_examineServer] (@cServerName varchar(100), @nMinutesBackToLook int)
 as
 begin
 -- 	declare @cServerName varchar(100)
--- 	set @cServerName = ''sqlserver\instance1''
+-- 	set @cServerName = 'sqlserver\instance1'
 
 	set nocount on
 
 	--***************************************
-	-- I''m important!
+	-- I'm important!
 	--***************************************
 	declare @bTesting bit
 	set @bTesting = 0
@@ -54,11 +56,11 @@ begin
 
 	declare @bIsOffHours bit
 
-	set @cThisServerName = convert(varchar(100), serverProperty(''servername''))
+	set @cThisServerName = (select settingValue from dm_settings where settingName = 'Current machine name')
 
 	set @nRunStamp = (select dbo.fn_returnRunStamp(getDate()))
 
-	-- We need to know if it''s business hours so we can queue the low priority alerts
+	-- We need to know if it's business hours so we can queue the low priority alerts
 
 	if dbo.fn_isBusinessHours() = 1
 		set @bIsOffHours = 0
@@ -81,10 +83,10 @@ begin
 
 	set @cServerNamePart = @cFriendlyName
 
-	if charindex(''\'', @cFriendlyName) > 0
-		set @cServerNamePart = left(@cFriendlyName, charindex(''\'', @cFriendlyName) - 1)
+	if charindex('\', @cFriendlyName) > 0
+		set @cServerNamePart = left(@cFriendlyName, charindex('\', @cFriendlyName) - 1)
 
-	set @cProcedureName = ''pr_notificationTemp_'' + replace(replace(replace(@cFriendlyName, ''\'', ''''), ''.'', ''''), ''-'', '''')
+	set @cProcedureName = 'pr_notificationTemp_' + replace(replace(replace(@cFriendlyName, '\', ''), '.', ''), '-', '')
 
 	--*******************************************************************************************************************
 	-- Decide if the server is online.
@@ -108,16 +110,16 @@ begin
 
 	if (select count(*) from #linkedServers where srv_dataSource = @cServerName) = 0
 	begin
-		exec sp_addlinkedserver @server=@cServerName, @srvproduct='''', @provider=''SQLOLEDB'', @datasrc=@cServerName
-		exec sp_serveroption @cServerName, ''rpc'', TRUE
-		exec sp_serveroption @cServerName, ''rpc out'', TRUE
+		exec sp_addlinkedserver @server=@cServerName, @srvproduct='', @provider='SQLOLEDB', @datasrc=@cServerName
+		exec sp_serveroption @cServerName, 'rpc', TRUE
+		exec sp_serveroption @cServerName, 'rpc out', TRUE
 
-		-- if there''s a local password we''re to use, map all users to it
-		if isnull(@cUserName, '''') <> ''''
-			exec sp_addlinkedsrvlogin @rmtsrvname = @cServerName, @useself = ''false'', @locallogin = null,
+		-- if there's a local password we're to use, map all users to it
+		if isnull(@cUserName, '') <> ''
+			exec sp_addlinkedsrvlogin @rmtsrvname = @cServerName, @useself = 'false', @locallogin = null,
 				@rmtuser = @cUserName, @rmtpassword = @cPassword
 		else
-			exec sp_addlinkedsrvlogin @rmtsrvname = @cServerName, @useself = ''true'', @locallogin = null
+			exec sp_addlinkedsrvlogin @rmtsrvname = @cServerName, @useself = 'true', @locallogin = null
 
 	end
 
@@ -176,18 +178,18 @@ begin
 	-- Trap the SQLServer version
 	--*********************************************************************************************************************
 
- 	set @cSQLString = ''
-		create procedure '' + @cProcedureName + ''
+ 	set @cSQLString = '
+		create procedure ' + @cProcedureName + '
 		as
 		begin
 			insert into #junkString (results)
-			select * from openquery(['' + @cServerName + ''], ''''select @@version'''')
-		end''
+			select * from openquery([' + @cServerName + '], ''select @@version'')
+		end'
 
 	if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
-		execute(''drop procedure '' + @cProcedureName)
+		execute('drop procedure ' + @cProcedureName)
 
-	insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, ''SQL Version'', @cSQLString, @nUkeyGroup)
+	insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'SQL Version', @cSQLString, @nUkeyGroup)
 
 	exec sp_executeSQL @cSQLString
 
@@ -204,36 +206,36 @@ begin
 	-- Performance counters
 	--*********************************************************************************************************************
 
-	set @cSQLString = ''
-		create procedure '' + @cProcedureName + ''
+	set @cSQLString = '
+		create procedure ' + @cProcedureName + '
 		as
 		begin
 
 			insert into performanceLog_stage (serverName, [objectName], [counterName], [instanceName], counterValue, counterType, runStamp)
-			select '''''' + @cServerName + '''''' as serverName,
+			select ''' + @cServerName + ''' as serverName,
 				[object_name], [counter_name], [instance_name], [cntr_value], [cntr_type],
-				'' + convert(varchar(20), @nRunStamp) + '' as runStamp
-				from ['' + @cServerName + ''].master.dbo.sysperfinfo
-				where object_name like ''''%Buffer Manager%''''
-					or object_name like ''''%Buffer Partition%''''
-					or object_name like ''''%Buffer Node%''''
-					or object_name like ''''%Latches%''''
-					or object_name like ''''%Access Methods%''''
-					or object_name like ''''%SQL Errors%''''
-					or object_name like ''''%SQL Statistics%''''
-					or object_name like ''''%Plan Cache%''''
-					or object_name like ''''%Memory Manager%''''
-					or object_name like ''''%Transactions%''''
-					or object_name like ''''%Wait Statistics%''''
-					or object_name like ''''%Exec Statistics%''''
-					or (object_name like ''''%Databases%'''' and counter_name in (''''Transactions/sec'''', ''''Log Cache Hit Ratio'''', ''''Log Cache Hit Ratio Base''''))
+				' + convert(varchar(20), @nRunStamp) + ' as runStamp
+				from [' + @cServerName + '].master.dbo.sysperfinfo
+				where object_name like ''%Buffer Manager%''
+					or object_name like ''%Buffer Partition%''
+					or object_name like ''%Buffer Node%''
+					or object_name like ''%Latches%''
+					or object_name like ''%Access Methods%''
+					or object_name like ''%SQL Errors%''
+					or object_name like ''%SQL Statistics%''
+					or object_name like ''%Plan Cache%''
+					or object_name like ''%Memory Manager%''
+					or object_name like ''%Transactions%''
+					or object_name like ''%Wait Statistics%''
+					or object_name like ''%Exec Statistics%''
+					or (object_name like ''%Databases%'' and counter_name in (''Transactions/sec'', ''Log Cache Hit Ratio'', ''Log Cache Hit Ratio Base''))
 
-		 end''
+		 end'
 
 	if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
-		execute(''drop procedure '' + @cProcedureName)
+		execute('drop procedure ' + @cProcedureName)
 
-	insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, ''Performance counters'', @cSQLString, @nUkeyGroup)
+	insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Performance counters', @cSQLString, @nUkeyGroup)
 	exec sp_executeSQL @cSQLString
 
 	if @bTesting = 1
@@ -247,7 +249,7 @@ begin
 	--*********************************************************************************************************************
 	--*********************************************************************************************************************
 	if (select top 1 isnull(isSQLAgentServiceRunning, 0) from dm_servers where serverName = @cServerName) = 0
-		insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, ''Job checks skipped. Agent is not running.'', @cSQLString, @nUkeyGroup)
+		insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Job checks skipped. Agent is not running.', @cSQLString, @nUkeyGroup)
 	else
 	begin
 		--*********************************************************************************************************************
@@ -256,45 +258,45 @@ begin
 
 		-- first, look through the history for runs at about this time of day
 		-- must be at least two past runs for a half-decent average
-		set @cSQLString = ''
-			create procedure '' + @cProcedureName + ''
+		set @cSQLString = '
+			create procedure ' + @cProcedureName + '
 			as
 			begin
 				insert into #jobAverageRuntimes (job_id, runtime_average, runtime_median, runtime_max, isTimeOfDaySpecific)
 				SELECT
 					a.job_id,
 					convert(decimal(10,2), avg(
-						convert(decimal(10,4), SUBSTRING(RIGHT(''''000000'''' + CAST(run_duration AS VARCHAR(10)),6),3,2)) + 1 +
-						convert(decimal(10,4), left(RIGHT(''''000000'''' + CAST(run_duration AS VARCHAR(10)),6),2)) * 60
+						convert(decimal(10,4), SUBSTRING(RIGHT(''000000'' + CAST(run_duration AS VARCHAR(10)),6),3,2)) + 1 +
+						convert(decimal(10,4), left(RIGHT(''000000'' + CAST(run_duration AS VARCHAR(10)),6),2)) * 60
 						)) as runtime_average,
 					convert(decimal(10,2),
 						(
 							max(
-								convert(decimal(10,4), SUBSTRING(RIGHT(''''000000'''' + CAST(run_duration AS VARCHAR(10)),6),3,2)) + 1 +
-								convert(decimal(10,4), left(RIGHT(''''000000'''' + CAST(run_duration AS VARCHAR(10)),6),2)) * 60
+								convert(decimal(10,4), SUBSTRING(RIGHT(''000000'' + CAST(run_duration AS VARCHAR(10)),6),3,2)) + 1 +
+								convert(decimal(10,4), left(RIGHT(''000000'' + CAST(run_duration AS VARCHAR(10)),6),2)) * 60
 								) +
 							min(
-								convert(decimal(10,4), SUBSTRING(RIGHT(''''000000'''' + CAST(run_duration AS VARCHAR(10)),6),3,2)) + 1 +
-								convert(decimal(10,4), left(RIGHT(''''000000'''' + CAST(run_duration AS VARCHAR(10)),6),2)) * 60
+								convert(decimal(10,4), SUBSTRING(RIGHT(''000000'' + CAST(run_duration AS VARCHAR(10)),6),3,2)) + 1 +
+								convert(decimal(10,4), left(RIGHT(''000000'' + CAST(run_duration AS VARCHAR(10)),6),2)) * 60
 								)
 							) / 2
 						) as runtime_median,
 					convert(decimal(10,2), max(
-						convert(decimal(10,4), SUBSTRING(RIGHT(''''000000'''' + CAST(run_duration AS VARCHAR(10)),6),3,2)) + 1 +
-						convert(decimal(10,4), left(RIGHT(''''000000'''' + CAST(run_duration AS VARCHAR(10)),6),2)) * 60
+						convert(decimal(10,4), SUBSTRING(RIGHT(''000000'' + CAST(run_duration AS VARCHAR(10)),6),3,2)) + 1 +
+						convert(decimal(10,4), left(RIGHT(''000000'' + CAST(run_duration AS VARCHAR(10)),6),2)) * 60
 						)) as runtime_max,
 					1 as isTimeOfDaySpecific
 
-					FROM ['' + @cServerName + ''].msdb.dbo.sysjobs a
-					JOIN ['' + @cServerName + ''].msdb.dbo.sysjobhistory b  ON a.job_id = b.job_id
+					FROM [' + @cServerName + '].msdb.dbo.sysjobs a
+					JOIN [' + @cServerName + '].msdb.dbo.sysjobhistory b  ON a.job_id = b.job_id
 						AND b.step_id = 0
 						AND b.run_status  = 1
 						and abs(dateDiff(minute, getDate(),
-							convert(dateTime, convert(varchar(10), getDate(), 120) + '''' '''' +
-								left(replicate(''''0'''', 6 - len(rtrim(run_time))) + rtrim(ltrim(run_time)), 2) + '''':'''' +
-									left(right(replicate(''''0'''', 6 - len(rtrim(run_time))) +
-									rtrim(ltrim(run_time)), 4), 2) + '''':'''' +
-									right(replicate(''''0'''', 6 - len(rtrim(run_time))) + rtrim(ltrim(run_time)), 2) + ''''.000'''')
+							convert(dateTime, convert(varchar(10), getDate(), 120) + '' '' +
+								left(replicate(''0'', 6 - len(rtrim(run_time))) + rtrim(ltrim(run_time)), 2) + '':'' +
+									left(right(replicate(''0'', 6 - len(rtrim(run_time))) +
+									rtrim(ltrim(run_time)), 4), 2) + '':'' +
+									right(replicate(''0'', 6 - len(rtrim(run_time))) + rtrim(ltrim(run_time)), 2) + ''.000'')
 							)) < 90
 					WHERE a.enabled = 1
 					group by a.job_id
@@ -304,42 +306,42 @@ begin
 				SELECT
 					a.job_id,
 					convert(decimal(10,2), avg(
-						convert(decimal(10,4), SUBSTRING(RIGHT(''''000000'''' + CAST(run_duration AS VARCHAR(10)),6),3,2)) + 1 +
-						convert(decimal(10,4), left(RIGHT(''''000000'''' + CAST(run_duration AS VARCHAR(10)),6),2)) * 60
+						convert(decimal(10,4), SUBSTRING(RIGHT(''000000'' + CAST(run_duration AS VARCHAR(10)),6),3,2)) + 1 +
+						convert(decimal(10,4), left(RIGHT(''000000'' + CAST(run_duration AS VARCHAR(10)),6),2)) * 60
 						)) as runtime_average,
 					convert(decimal(10,2),
 						(
 							max(
-								convert(decimal(10,4), SUBSTRING(RIGHT(''''000000'''' + CAST(run_duration AS VARCHAR(10)),6),3,2)) + 1 +
-								convert(decimal(10,4), left(RIGHT(''''000000'''' + CAST(run_duration AS VARCHAR(10)),6),2)) * 60
+								convert(decimal(10,4), SUBSTRING(RIGHT(''000000'' + CAST(run_duration AS VARCHAR(10)),6),3,2)) + 1 +
+								convert(decimal(10,4), left(RIGHT(''000000'' + CAST(run_duration AS VARCHAR(10)),6),2)) * 60
 								) +
 							min(
-								convert(decimal(10,4), SUBSTRING(RIGHT(''''000000'''' + CAST(run_duration AS VARCHAR(10)),6),3,2)) + 1 +
-								convert(decimal(10,4), left(RIGHT(''''000000'''' + CAST(run_duration AS VARCHAR(10)),6),2)) * 60
+								convert(decimal(10,4), SUBSTRING(RIGHT(''000000'' + CAST(run_duration AS VARCHAR(10)),6),3,2)) + 1 +
+								convert(decimal(10,4), left(RIGHT(''000000'' + CAST(run_duration AS VARCHAR(10)),6),2)) * 60
 								)
 							) / 2
 						) as runtime_median,
 					convert(decimal(10,2), max(
-						convert(decimal(10,4), SUBSTRING(RIGHT(''''000000'''' + CAST(run_duration AS VARCHAR(10)),6),3,2)) + 1 +
-						convert(decimal(10,4), left(RIGHT(''''000000'''' + CAST(run_duration AS VARCHAR(10)),6),2)) * 60
+						convert(decimal(10,4), SUBSTRING(RIGHT(''000000'' + CAST(run_duration AS VARCHAR(10)),6),3,2)) + 1 +
+						convert(decimal(10,4), left(RIGHT(''000000'' + CAST(run_duration AS VARCHAR(10)),6),2)) * 60
 						)) as runtime_max
-					FROM ['' + @cServerName + ''].msdb.dbo.sysjobs a
-					JOIN ['' + @cServerName + ''].msdb.dbo.sysjobhistory b  ON a.job_id = b.job_id
+					FROM [' + @cServerName + '].msdb.dbo.sysjobs a
+					JOIN [' + @cServerName + '].msdb.dbo.sysjobhistory b  ON a.job_id = b.job_id
 						AND b.step_id = 0
 						AND b.run_status  = 1
 						and convert(dateTime, SUBSTRING(CAST(b.run_date AS CHAR(8)),5,2)
-							+ ''''/'''' + RIGHT(CAST(b.run_date AS CHAR(8)),2)
-							+ ''''/'''' + LEFT(CAST(b.run_date AS CHAR(8)),4)) >= dateAdd(month, -2, getDate())
+							+ ''/'' + RIGHT(CAST(b.run_date AS CHAR(8)),2)
+							+ ''/'' + LEFT(CAST(b.run_date AS CHAR(8)),4)) >= dateAdd(month, -2, getDate())
 					WHERE a.enabled = 1
 						and a.job_id not in (select distinct job_id from #jobAverageRuntimes)
 					group by a.job_id
 
-			end''
+			end'
 
 		if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
-			execute(''drop procedure '' + @cProcedureName)
+			execute('drop procedure ' + @cProcedureName)
 
-		insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, ''Job average runtimes'', @cSQLString, @nUkeyGroup)
+		insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Job average runtimes', @cSQLString, @nUkeyGroup)
 		exec sp_executeSQL @cSQLString
 
 		if @bTesting = 1
@@ -361,42 +363,42 @@ begin
 		-- All jobs
 		--*********************************************************************************************************************
 
-		set @cSQLString = ''
-			create procedure '' + @cProcedureName + ''
+		set @cSQLString = '
+			create procedure ' + @cProcedureName + '
 			as
 			begin
 				insert into #allJobs (job_id, last_run_date, last_run_time, next_run_date, next_run_time, next_run_schedule_id, requested_to_run,
 					request_source, request_source_id, running, current_step, current_retry_attempt, state)
 				select *
-					from openquery(['' + @cServerName + ''],''''set fmtonly off; exec master.dbo.xp_sqlagent_enum_jobs 1, '''''''''''''''''''') a
+					from openquery([' + @cServerName + '],''set fmtonly off; exec master.dbo.xp_sqlagent_enum_jobs 1, '''''''''') a
 
 				update #allJobs
 					set last_run_outcome = b.last_run_outcome
 					from #allJobs a
-					join ['' + @cServerName + ''].msdb.dbo.sysjobservers b  on a.job_id = b.job_id
+					join [' + @cServerName + '].msdb.dbo.sysjobservers b  on a.job_id = b.job_id
 
 				update #allJobs
-					set jobName = isnull(left(rtrim(ltrim(b.name)), 200), '''''''')
+					set jobName = isnull(left(rtrim(ltrim(b.name)), 200), '''')
 					from #allJobs a
-					left outer join ['' + @cServerName + ''].msdb.dbo.sysjobs b  on a.job_id = b.job_id
+					left outer join [' + @cServerName + '].msdb.dbo.sysjobs b  on a.job_id = b.job_id
 
 				update #allJobs
 					set currentStepName = left(b.step_name, 200),
 						currentStepText = left(b.command, 1000)
 					from #allJobs a
-					join ['' + @cServerName + ''].msdb.dbo.sysjobsteps b on a.job_id = b.job_id
+					join [' + @cServerName + '].msdb.dbo.sysjobsteps b on a.job_id = b.job_id
 					where isnull(a.current_step, 0) > 0
 
 	-- 			delete #allJobs
 	-- 				from #allJobs a
-	-- 				join ['' + @cServerName + ''].msdb.dbo.sysjobschedules b  on a.job_id = b.job_id
+	-- 				join [' + @cServerName + '].msdb.dbo.sysjobschedules b  on a.job_id = b.job_id
 	-- 					and b.freq_interval = 64
-			end''
+			end'
 
 		if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
-			execute(''drop procedure '' + @cProcedureName)
+			execute('drop procedure ' + @cProcedureName)
 
-		insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, ''Snapshot of all jobs'', @cSQLString, @nUkeyGroup)
+		insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Snapshot of all jobs', @cSQLString, @nUkeyGroup)
 		exec sp_executeSQL @cSQLString
 
 		if @bTesting = 1
@@ -407,22 +409,22 @@ begin
 			set job_id_char = dbo.fn_hex_to_char(job_id,16)
 
 		update #allJobs
-			set Last_Run_Time = replicate(''0'', 6 - len(rtrim(Last_Run_Time))) + rtrim(ltrim(Last_Run_Time))
+			set Last_Run_Time = replicate('0', 6 - len(rtrim(Last_Run_Time))) + rtrim(ltrim(Last_Run_Time))
 			where len(rtrim(Last_Run_Time)) < 6
 		update #allJobs
-			set Next_Run_Time = replicate(''0'', 6 - len(rtrim(Next_Run_Time))) + rtrim(ltrim(Next_Run_Time))
+			set Next_Run_Time = replicate('0', 6 - len(rtrim(Next_Run_Time))) + rtrim(ltrim(Next_Run_Time))
 			where len(rtrim(Next_Run_Time)) < 6
 
 		update #allJobs
-			set ymd = convert(dateTime, left(last_run_date, 4) + ''-'' + left(right(last_run_date, 4), 2) + ''-'' + right(last_run_date, 2) + '' '' + left(last_run_time, 2) + '':'' + left(right(Last_Run_Time, 4), 2) + '':'' + right(Last_Run_Time, 2) + ''.000'')
-			where left(last_run_date, 2) = ''20''
+			set ymd = convert(dateTime, left(last_run_date, 4) + '-' + left(right(last_run_date, 4), 2) + '-' + right(last_run_date, 2) + ' ' + left(last_run_time, 2) + ':' + left(right(Last_Run_Time, 4), 2) + ':' + right(Last_Run_Time, 2) + '.000')
+			where left(last_run_date, 2) = '20'
 		update #allJobs
-			set nextRun = convert(dateTime, left(Next_run_date, 4) + ''-'' + left(right(Next_run_date, 4), 2) + ''-'' + right(Next_run_date, 2) + '' '' + left(Next_run_time, 2) + '':'' + left(right(Next_Run_Time, 4), 2) + '':'' + right(Next_Run_Time, 2) + ''.000'')
-			where left(Next_run_date, 2) = ''20''
+			set nextRun = convert(dateTime, left(Next_run_date, 4) + '-' + left(right(Next_run_date, 4), 2) + '-' + right(Next_run_date, 2) + ' ' + left(Next_run_time, 2) + ':' + left(right(Next_Run_Time, 4), 2) + ':' + right(Next_Run_Time, 2) + '.000')
+			where left(Next_run_date, 2) = '20'
 
 		-- For SP4, the JOBID is no longer in the programName field. Improvise.
-		set @cSQLString =''
-	create procedure '' + @cProcedureName + ''
+		set @cSQLString ='
+	create procedure ' + @cProcedureName + '
 	as
 	begin
 		update #allJobs
@@ -431,16 +433,16 @@ begin
 			join (
 				select a.job_id, min(isnull(c.login_time, isnull(c.last_batch, getDate()))) as spidStartTime
 					from #allJobs a
-					left outer join ['' + @cServerName + ''].master.dbo.sysprocesses c on c.program_name like ''''%'''' + a.job_id_char + ''''%''''
+					left outer join [' + @cServerName + '].master.dbo.sysprocesses c on c.program_name like ''%'' + a.job_id_char + ''%''
 					group by a.job_id
 				) b on a.job_id = b.job_id
 
-	end''
+	end'
 
 		if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
-			execute(''drop procedure '' + @cProcedureName)
+			execute('drop procedure ' + @cProcedureName)
 
-		insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, ''Job start times'', @cSQLString, @nUkeyGroup)
+		insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Job start times', @cSQLString, @nUkeyGroup)
 		exec sp_executeSQL @cSQLString
 
 		if @bTesting = 1
@@ -449,7 +451,7 @@ begin
 
 		update #allJobs
 			set startTime = case
-				-- kicked off by hand, we already know we didn''t match to a running SPID and are likely an SP4 box
+				-- kicked off by hand, we already know we didn't match to a running SPID and are likely an SP4 box
 				when request_source = 4
 					then getDate()
 
@@ -487,21 +489,21 @@ begin
 		-- jobs that we have a history for
 		insert into #results (message, severity, subject, isLongRunningJob)
 		select distinct left(
-				''Job ['' + a.jobName + ''], '' +
-				''which usually runs in '' + isnull(convert(varchar(20), d.runtime), '''') + '' minutes'' +
-					case when d.isTimeOfDaySpecific = 1 then '' at this time of day'' else '''' end + '', '' +
-				''has been running for '' + convert(varchar(20), minutesRunning) + '' minutes. '' + char(13) + char(13) +
-				''Start time: '' + convert(varchar(20), startTime) + char(13) +
-				''Current step: '' + a.currentStepName + char(13) +
-				''Current step text: '' + char(13) + a.currentStepText, 2000) as message,
-			-- if runtime > 2x, then it''s a critical alert
+				'Job [' + a.jobName + '], ' +
+				'which usually runs in ' + isnull(convert(varchar(20), d.runtime), '') + ' minutes' +
+					case when d.isTimeOfDaySpecific = 1 then ' at this time of day' else '' end + ', ' +
+				'has been running for ' + convert(varchar(20), minutesRunning) + ' minutes. ' + char(13) + char(13) +
+				'Start time: ' + convert(varchar(20), startTime) + char(13) +
+				'Current step: ' + a.currentStepName + char(13) +
+				'Current step text: ' + char(13) + a.currentStepText, 2000) as message,
+			-- if runtime > 2x, then it's a critical alert
 			-- otherwise, sit on it
 			case
 				when @bIsOffHours = 1 then 2
 				when minutesRunning > d.runtime * 2 then 1
 				else 2
 				end as severity,
-			''Job ['' + isnull(rtrim(ltrim(a.jobName)), '''') + ''] has been running for more than '' + convert(varchar(20), convert(int, (minutesRunning/10)) * 10) + '' minutes.'' as subject,
+			'Job [' + isnull(rtrim(ltrim(a.jobName)), '') + '] has been running for more than ' + convert(varchar(20), convert(int, (minutesRunning/10)) * 10) + ' minutes.' as subject,
 			1 as isLongRunningJob
 			from #allJobs a
 			join #jobAverageRuntimes d on a.job_id = d.job_id
@@ -509,8 +511,8 @@ begin
 					(
 						minutesRunning > d.runtime * 2 -- running 50% longer than average
 						and a.minutesRunning > case
-							when a.jobname like ''%Comms Polling%'' then 80
-							when a.jobname like ''%Com Polling%'' then 80
+							when a.jobname like '%Comms Polling%' then 80
+							when a.jobname like '%Com Polling%' then 80
 							else 45
 							end
 						)
@@ -520,8 +522,8 @@ begin
 				and datePart(year, a.startTime) <> 1900
 				-- we ignore log shipping errors between 1am and 4:59am
 				and not (
-					(a.jobName like ''%log shipping%''
-						or a.jobName like ''%transaction log%''
+					(a.jobName like '%log shipping%'
+						or a.jobName like '%transaction log%'
 						)
 					and datePart(hour, getDate()) between 0 and 6
 					)
@@ -530,27 +532,27 @@ begin
 		-- this should be a rare case, only for new jobs
 		insert into #results (message, severity, subject, isLongRunningJob)
 		select distinct left(
-				''Job ['' + a.jobName + ''], '' +
-				''which has no history, '' +
-				''has been running for more than '' + convert(varchar(20), minutesRunning) + '' minutes. '' + char(13) + char(13) +
-				''Start time: '' + convert(varchar(20), startTime) + char(13) +
-				''Current step: '' + a.currentStepName + char(13) +
-				''Current step text: '' + char(13) + a.currentStepText, 2000) as message,
+				'Job [' + a.jobName + '], ' +
+				'which has no history, ' +
+				'has been running for more than ' + convert(varchar(20), minutesRunning) + ' minutes. ' + char(13) + char(13) +
+				'Start time: ' + convert(varchar(20), startTime) + char(13) +
+				'Current step: ' + a.currentStepName + char(13) +
+				'Current step text: ' + char(13) + a.currentStepText, 2000) as message,
 			case
 				when minutesRunning >
-					case when a.jobName like ''%spBuildCube%'' then 60*5 else 180 end
+					case when a.jobName like '%spBuildCube%' then 60*5 else 180 end
 					then 1 else 2 end as severity,
-			''Job ['' + isnull(rtrim(ltrim(a.jobName)), '''') + ''] has been running for more than '' + convert(varchar(20), convert(int, (minutesRunning/10)) * 10) + '' minutes.'' as subject,
+			'Job [' + isnull(rtrim(ltrim(a.jobName)), '') + '] has been running for more than ' + convert(varchar(20), convert(int, (minutesRunning/10)) * 10) + ' minutes.' as subject,
 			1 as isLongRunningJob
 			from #allJobs a
 			left outer join  #jobAverageRuntimes d on a.job_id = d.job_id
 			where running = 1
 				and d.job_id is null
 				-- must have been running for more than 60 minutes before I care about it
-				and minutesRunning > case when a.jobName like ''%spBuildCube%'' then 60*5 else 60 end
+				and minutesRunning > case when a.jobName like '%spBuildCube%' then 60*5 else 60 end
 				and datePart(year, startTime) <> 1900
-				and a.jobName not like ''%standby restore%''
-				and a.jobName not like ''%standby backup%''
+				and a.jobName not like '%standby restore%'
+				and a.jobName not like '%standby backup%'
 
 		--***************************************************************************************************************
 		-- jobs that have failed (non log shipping)
@@ -560,61 +562,61 @@ begin
 		create table #failedSteps (job_id uniqueIdentifier, instance_id int, failureTime dateTime, stepName varchar(200),
 			message varchar(2000), step_id int, stepBody varchar(2000))
 
-		set @cSQLString = ''
-			create procedure '' + @cProcedureName + ''
+		set @cSQLString = '
+			create procedure ' + @cProcedureName + '
 			as
 			begin
 				insert into #jobHistory (job_id, startTime, failureTime, jobFailed, instanceEnd, message)
 				select job_id,
-					convert(dateTime, left(d.run_date, 4) + ''''-'''' +
-							left(right(d.run_date, 4), 2) + ''''-'''' +
-							right(d.run_date, 2) + '''' '''' +
-							left(replicate(''''0'''', 6 - len(rtrim(d.Run_Time))) +
-							rtrim(ltrim(d.Run_Time)), 2) + '''':'''' +
-							left(right(replicate(''''0'''', 6 - len(rtrim(d.Run_Time))) +
-							rtrim(ltrim(d.Run_Time)), 4), 2) + '''':'''' +
-							right(replicate(''''0'''', 6 - len(rtrim(d.Run_Time))) +
-							rtrim(ltrim(d.Run_Time)), 2) + ''''.000''''
+					convert(dateTime, left(d.run_date, 4) + ''-'' +
+							left(right(d.run_date, 4), 2) + ''-'' +
+							right(d.run_date, 2) + '' '' +
+							left(replicate(''0'', 6 - len(rtrim(d.Run_Time))) +
+							rtrim(ltrim(d.Run_Time)), 2) + '':'' +
+							left(right(replicate(''0'', 6 - len(rtrim(d.Run_Time))) +
+							rtrim(ltrim(d.Run_Time)), 4), 2) + '':'' +
+							right(replicate(''0'', 6 - len(rtrim(d.Run_Time))) +
+							rtrim(ltrim(d.Run_Time)), 2) + ''.000''
 						) as startTime,
 					dateAdd(minute,
-						left(right(right(''''000000'''' + convert(varchar(6), d.run_duration), 6), 4), 2) +
-						left(right(''''000000'''' + convert(varchar(6), d.run_duration), 6), 2) * 60,
-						convert(dateTime, left(d.run_date, 4) + ''''-'''' +
-							left(right(d.run_date, 4), 2) + ''''-'''' +
-							right(d.run_date, 2) + '''' '''' +
-							left(replicate(''''0'''', 6 - len(rtrim(d.Run_Time))) +
-							rtrim(ltrim(d.Run_Time)), 2) + '''':'''' +
-							left(right(replicate(''''0'''', 6 - len(rtrim(d.Run_Time))) +
-							rtrim(ltrim(d.Run_Time)), 4), 2) + '''':'''' +
-							right(replicate(''''0'''', 6 - len(rtrim(d.Run_Time))) +
-							rtrim(ltrim(d.Run_Time)), 2) + ''''.000''''
+						left(right(right(''000000'' + convert(varchar(6), d.run_duration), 6), 4), 2) +
+						left(right(''000000'' + convert(varchar(6), d.run_duration), 6), 2) * 60,
+						convert(dateTime, left(d.run_date, 4) + ''-'' +
+							left(right(d.run_date, 4), 2) + ''-'' +
+							right(d.run_date, 2) + '' '' +
+							left(replicate(''0'', 6 - len(rtrim(d.Run_Time))) +
+							rtrim(ltrim(d.Run_Time)), 2) + '':'' +
+							left(right(replicate(''0'', 6 - len(rtrim(d.Run_Time))) +
+							rtrim(ltrim(d.Run_Time)), 4), 2) + '':'' +
+							right(replicate(''0'', 6 - len(rtrim(d.Run_Time))) +
+							rtrim(ltrim(d.Run_Time)), 2) + ''.000''
 							)
 						) as failureTime,
 					case when run_status = 0 then 1 else 0 end as jobFailed,
 					instance_id as instanceEnd, message
 
-					from ['' + @cServerName + ''].msdb.dbo.sysjobhistory d
+					from [' + @cServerName + '].msdb.dbo.sysjobhistory d
 					where step_id = 0
 						and dateDiff(minute,
 							dateAdd(minute,
-								left(right(right(''''000000'''' + convert(varchar(6), d.run_duration), 6), 4), 2) +
-								left(right(''''000000'''' + convert(varchar(6), d.run_duration), 6), 2) * 60,
-								convert(dateTime, left(d.run_date, 4) + ''''-'''' +
-									left(right(d.run_date, 4), 2) + ''''-'''' +
-									right(d.run_date, 2) + '''' '''' +
-									left(replicate(''''0'''', 6 - len(rtrim(d.Run_Time))) +
-									rtrim(ltrim(d.Run_Time)), 2) + '''':'''' +
-									left(right(replicate(''''0'''', 6 - len(rtrim(d.Run_Time))) +
-									rtrim(ltrim(d.Run_Time)), 4), 2) + '''':'''' +
-									right(replicate(''''0'''', 6 - len(rtrim(d.Run_Time))) +
-									rtrim(ltrim(d.Run_Time)), 2) + ''''.000''''
+								left(right(right(''000000'' + convert(varchar(6), d.run_duration), 6), 4), 2) +
+								left(right(''000000'' + convert(varchar(6), d.run_duration), 6), 2) * 60,
+								convert(dateTime, left(d.run_date, 4) + ''-'' +
+									left(right(d.run_date, 4), 2) + ''-'' +
+									right(d.run_date, 2) + '' '' +
+									left(replicate(''0'', 6 - len(rtrim(d.Run_Time))) +
+									rtrim(ltrim(d.Run_Time)), 2) + '':'' +
+									left(right(replicate(''0'', 6 - len(rtrim(d.Run_Time))) +
+									rtrim(ltrim(d.Run_Time)), 4), 2) + '':'' +
+									right(replicate(''0'', 6 - len(rtrim(d.Run_Time))) +
+									rtrim(ltrim(d.Run_Time)), 2) + ''.000''
 									)
 								),
-							getDate()) < '' + convert(varchar(20), @nMinutesBackToLook) + ''
-			end''
+							getDate()) < ' + convert(varchar(20), @nMinutesBackToLook) + '
+			end'
 
 		if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
-			execute(''drop procedure '' + @cProcedureName)
+			execute('drop procedure ' + @cProcedureName)
 
 		exec sp_executeSQL @cSQLString
 
@@ -636,28 +638,28 @@ begin
 
 		update #jobHistory
 			set failureTime = isnull(failureTime, startTime),
-				message = ''Overall status: '' + char(13) + message + char(13)
+				message = 'Overall status: ' + char(13) + message + char(13)
 
 		--***********************************************************************************
 		-- regular old job step failures, with the error message from the usual place
-		set @cSQLString = ''
-			create procedure '' + @cProcedureName + ''
+		set @cSQLString = '
+			create procedure ' + @cProcedureName + '
 			as
 			begin
 				insert into #failedSteps (job_id, instance_id, failureTime, stepName, message, step_id, stepBody)
 				select d.job_id, d.instance_id,
 					dateAdd(minute,
-						left(right(right(''''000000'''' + convert(varchar(6), d.run_duration), 6), 4), 2) +
-						left(right(''''000000'''' + convert(varchar(6), d.run_duration), 6), 2) * 60,
-						convert(dateTime, left(d.run_date, 4) + ''''-'''' +
-							left(right(d.run_date, 4), 2) + ''''-'''' +
-							right(d.run_date, 2) + '''' '''' +
-							left(replicate(''''0'''', 6 - len(rtrim(d.Run_Time))) +
-							rtrim(ltrim(d.Run_Time)), 2) + '''':'''' +
-							left(right(replicate(''''0'''', 6 - len(rtrim(d.Run_Time))) +
-							rtrim(ltrim(d.Run_Time)), 4), 2) + '''':'''' +
-							right(replicate(''''0'''', 6 - len(rtrim(d.Run_Time))) +
-							rtrim(ltrim(d.Run_Time)), 2) + ''''.000''''
+						left(right(right(''000000'' + convert(varchar(6), d.run_duration), 6), 4), 2) +
+						left(right(''000000'' + convert(varchar(6), d.run_duration), 6), 2) * 60,
+						convert(dateTime, left(d.run_date, 4) + ''-'' +
+							left(right(d.run_date, 4), 2) + ''-'' +
+							right(d.run_date, 2) + '' '' +
+							left(replicate(''0'', 6 - len(rtrim(d.Run_Time))) +
+							rtrim(ltrim(d.Run_Time)), 2) + '':'' +
+							left(right(replicate(''0'', 6 - len(rtrim(d.Run_Time))) +
+							rtrim(ltrim(d.Run_Time)), 4), 2) + '':'' +
+							right(replicate(''0'', 6 - len(rtrim(d.Run_Time))) +
+							rtrim(ltrim(d.Run_Time)), 2) + ''.000''
 							)
 						) as failureTime,
 					d.step_name as stepname,
@@ -665,32 +667,32 @@ begin
 					d.step_id,
 					b.command as stepBody
 
-					from ['' + @cServerName + ''].msdb.dbo.sysjobhistory d
-					join ['' + @cServerName + ''].msdb.dbo.sysJobSteps b on d.job_id = b.job_id
+					from [' + @cServerName + '].msdb.dbo.sysjobhistory d
+					join [' + @cServerName + '].msdb.dbo.sysJobSteps b on d.job_id = b.job_id
 						and d.step_id = b.step_id
 
 					where d.run_status = 0
 						and d.step_id <> 0
 						and dateDiff(minute,
 							dateAdd(minute,
-								left(right(right(''''000000'''' + convert(varchar(6), d.run_duration), 6), 4), 2) +
-								left(right(''''000000'''' + convert(varchar(6), d.run_duration), 6), 2) * 60,
-								convert(dateTime, left(d.run_date, 4) + ''''-'''' +
-									left(right(d.run_date, 4), 2) + ''''-'''' +
-									right(d.run_date, 2) + '''' '''' +
-									left(replicate(''''0'''', 6 - len(rtrim(d.Run_Time))) +
-									rtrim(ltrim(d.Run_Time)), 2) + '''':'''' +
-									left(right(replicate(''''0'''', 6 - len(rtrim(d.Run_Time))) +
-									rtrim(ltrim(d.Run_Time)), 4), 2) + '''':'''' +
-									right(replicate(''''0'''', 6 - len(rtrim(d.Run_Time))) +
-									rtrim(ltrim(d.Run_Time)), 2) + ''''.000''''
+								left(right(right(''000000'' + convert(varchar(6), d.run_duration), 6), 4), 2) +
+								left(right(''000000'' + convert(varchar(6), d.run_duration), 6), 2) * 60,
+								convert(dateTime, left(d.run_date, 4) + ''-'' +
+									left(right(d.run_date, 4), 2) + ''-'' +
+									right(d.run_date, 2) + '' '' +
+									left(replicate(''0'', 6 - len(rtrim(d.Run_Time))) +
+									rtrim(ltrim(d.Run_Time)), 2) + '':'' +
+									left(right(replicate(''0'', 6 - len(rtrim(d.Run_Time))) +
+									rtrim(ltrim(d.Run_Time)), 4), 2) + '':'' +
+									right(replicate(''0'', 6 - len(rtrim(d.Run_Time))) +
+									rtrim(ltrim(d.Run_Time)), 2) + ''.000''
 									)
 								),
-							getDate()) < '' + convert(varchar(20), @nMinutesBackToLook) + ''
-			end''
+							getDate()) < ' + convert(varchar(20), @nMinutesBackToLook) + '
+			end'
 
 		if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
-			execute(''drop procedure '' + @cProcedureName)
+			execute('drop procedure ' + @cProcedureName)
 
 		exec sp_executeSQL @cSQLString
 
@@ -700,20 +702,20 @@ begin
 
 		--***********************************************************************************
 		-- maintenance plan failures, so we get the detailed message
-		set @cSQLString = ''
-			create procedure '' + @cProcedureName + ''
+		set @cSQLString = '
+			create procedure ' + @cProcedureName + '
 			as
 			begin
 				insert into #maintenancePlanFailures (job_id, activity, message, start_time, end_time, succeeded)
 				select 	b.job_id,
 					a.activity, a.message, a.start_time, a.end_time, a.succeeded
-					from ['' + @cServerName + ''].msdb.dbo.sysdbmaintplan_history a
-					join ['' + @cServerName + ''].msdb.dbo.sysdbmaintplan_jobs b on a.plan_id = b.plan_id
-					where dateDiff(minute, end_time, getDate()) < '' + convert(varchar(20), @nMinutesBackToLook) + ''
-			end''
+					from [' + @cServerName + '].msdb.dbo.sysdbmaintplan_history a
+					join [' + @cServerName + '].msdb.dbo.sysdbmaintplan_jobs b on a.plan_id = b.plan_id
+					where dateDiff(minute, end_time, getDate()) < ' + convert(varchar(20), @nMinutesBackToLook) + '
+			end'
 
 		if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
-			execute(''drop procedure '' + @cProcedureName)
+			execute('drop procedure ' + @cProcedureName)
 
 		exec sp_executeSQL @cSQLString
 
@@ -727,8 +729,8 @@ begin
 			set a.stepFailed = 1,
 				a.message = left(
 					a.message + char(13) +
-					''Step '' + convert(varchar(10), step_id) + '' failed: '' + char(13) + b.message + char(13) + char(13) +
-					''Step '' + convert(varchar(10), step_id) + '' body: '' + char(13) + b.stepBody + char(13) + char(13)
+					'Step ' + convert(varchar(10), step_id) + ' failed: ' + char(13) + b.message + char(13) + char(13) +
+					'Step ' + convert(varchar(10), step_id) + ' body: ' + char(13) + b.stepBody + char(13) + char(13)
 					, 2000)
 			from #jobHistory a
 			join #failedSteps b on a.job_id = b.job_id
@@ -739,7 +741,7 @@ begin
 		update a
 			set a.message = left(
 					a.message + char(13) +
-					''Step "'' + isnull(c.activity, ''N/A'') + ''" '' + case when c.succeeded <> 1 then ''failed'' else ''succeeded'' end + '': '' + char(13) + c.message + char(13) + char(13)
+					'Step "' + isnull(c.activity, 'N/A') + '" ' + case when c.succeeded <> 1 then 'failed' else 'succeeded' end + ': ' + char(13) + c.message + char(13) + char(13)
 					, 2000)
 			from #jobHistory a
 			join #maintenancePlanFailures c on a.job_id = c.job_id
@@ -750,85 +752,85 @@ begin
 		-- now, output the results
 		insert into #results (message, severity, subject, isJobFailure)
 		select left(
-				''Job ['' + a.jobName + ''] '' +
-				''failed at '' + isnull(convert(varchar(40), b.startTime, 120), '''') + char(13) + char(13) +
-				isnull(b.message, ''No further detail available.'')
+				'Job [' + a.jobName + '] ' +
+				'failed at ' + isnull(convert(varchar(40), b.startTime, 120), '') + char(13) + char(13) +
+				isnull(b.message, 'No further detail available.')
 				,2000) as message,
 
-				case when a.jobName like ''%maintenance plan%''  then 2 else 1 end as severity,
+				case when a.jobName like '%maintenance plan%'  then 2 else 1 end as severity,
 
-				''Job ['' + a.jobName + ''] failed at '' + isnull(right(convert(varchar(40), b.startTime, 120), 8), '''') + ''.'' as subject,
+				'Job [' + a.jobName + '] failed at ' + isnull(right(convert(varchar(40), b.startTime, 120), 8), '') + '.' as subject,
 
 				1 as isJobFailure
 			from #allJobs a
 			join #jobHistory b on a.job_id = b.job_id
 				and (b.stepFailed = 1 or b.jobFailed = 1)
-			where a.jobName not like ''%alert job%''
-				and not a.jobName like ''%log shipping%''
-				and not a.jobName like ''%log backup%''
-				and not a.jobName like ''%log restore%''
-				and not (a.jobName like ''%maintenance plan%'' and a.jobName like ''transaction'')
+			where a.jobName not like '%alert job%'
+				and not a.jobName like '%log shipping%'
+				and not a.jobName like '%log backup%'
+				and not a.jobName like '%log restore%'
+				and not (a.jobName like '%maintenance plan%' and a.jobName like 'transaction')
 
 		drop table #jobHistory
 		drop table #failedSteps
 
 		--***********************************************************************************
 		-- log shipping jobs that have failed
-		set @cSQLString = ''
-			create procedure '' + @cProcedureName + ''
+		set @cSQLString = '
+			create procedure ' + @cProcedureName + '
 			as
 			begin
 				insert into #results (message, severity, subject, isJobFailure)
 
-				select left(''''Job ['''' + a.jobName + ''''] '''' +
-						''''failed for at least the last '' + convert(varchar(20), @nMinutesBackToLook) + '' minutes '''' + isnull(convert(varchar(20), d.run_date), '''''''') +
-						'''' at '''' + isnull(convert(varchar(20), d.run_time, 101), '''''''') + char(13) + char(13) +
-						''''Step: ('''' + isnull(convert(varchar(20), d.step_id), ''''-'''') + '''') '''' + isnull(d.step_name, ''''N/A'''') + char(13) +
-						''''Error message: '''' + isnull(d.message, ''''N/A''''),
+				select left(''Job ['' + a.jobName + ''] '' +
+						''failed for at least the last ' + convert(varchar(20), @nMinutesBackToLook) + ' minutes '' + isnull(convert(varchar(20), d.run_date), '''') +
+						'' at '' + isnull(convert(varchar(20), d.run_time, 101), '''') + char(13) + char(13) +
+						''Step: ('' + isnull(convert(varchar(20), d.step_id), ''-'') + '') '' + isnull(d.step_name, ''N/A'') + char(13) +
+						''Error message: '' + isnull(d.message, ''N/A''),
 						2000) as message,
 						1 as severity,
-						''''Job ['''' + a.jobName + ''''] has failed for at least the last '' + convert(varchar(20), @nMinutesBackToLook) + '' minutes.'''' as subject,
+						''Job ['' + a.jobName + ''] has failed for at least the last ' + convert(varchar(20), @nMinutesBackToLook) + ' minutes.'' as subject,
 						1 as isLogShippingJobFailure
 					from #allJobs a
 					join (
 						select a.job_id,
 
-							max(case when isnull(c.run_status, 0) = 0 then c.instance_id else '''''''' end) as instance_id
+							max(case when isnull(c.run_status, 0) = 0 then c.instance_id else '''' end) as instance_id
 							from #allJobs a
-							join ['' + @cServerName + ''].msdb.dbo.sysJobHistory c  on a.job_id = c.job_id
+							join [' + @cServerName + '].msdb.dbo.sysJobHistory c  on a.job_id = c.job_id
 								and c.step_id <> 0
-								and left(c.run_date, 2) = ''''20''''
+								and left(c.run_date, 2) = ''20''
 								and dateDiff(minute,
-									convert(dateTime, left(c.run_date, 4) + ''''-'''' +
-										left(right(c.run_date, 4), 2) + ''''-'''' +
-										right(c.run_date, 2) + '''' '''' +
-										left(replicate(''''0'''', 6 - len(rtrim(c.Run_Time))) +
-										rtrim(ltrim(c.Run_Time)), 2) + '''':'''' +
-										left(right(replicate(''''0'''', 6 - len(rtrim(c.Run_Time))) +
-										rtrim(ltrim(c.Run_Time)), 4), 2) + '''':'''' +
-										right(rtrim(ltrim(c.Run_Time)), 2) + ''''.000''''),
-									getDate()) < '' + convert(varchar(20), @nMinutesBackToLook) + ''
+									convert(dateTime, left(c.run_date, 4) + ''-'' +
+										left(right(c.run_date, 4), 2) + ''-'' +
+										right(c.run_date, 2) + '' '' +
+										left(replicate(''0'', 6 - len(rtrim(c.Run_Time))) +
+										rtrim(ltrim(c.Run_Time)), 2) + '':'' +
+										left(right(replicate(''0'', 6 - len(rtrim(c.Run_Time))) +
+										rtrim(ltrim(c.Run_Time)), 4), 2) + '':'' +
+										right(rtrim(ltrim(c.Run_Time)), 2) + ''.000''),
+									getDate()) < ' + convert(varchar(20), @nMinutesBackToLook) + '
 							group by a.job_id
 							having sum(case when isnull(c.run_status, 0) <> 0 then 1 else 0 end) = 0
 						) c on a.job_id = c.job_id
-					left outer join ['' + @cServerName + ''].msdb.dbo.sysjobhistory d  on a.job_id = d.job_id
+					left outer join [' + @cServerName + '].msdb.dbo.sysjobhistory d  on a.job_id = d.job_id
 						and c.instance_id = d.instance_id
 						and d.run_status = 0
 					where (
-							a.jobName like ''''%log shipping%''''
-							or a.jobName like ''''%log backup%''''
-							or a.jobName like ''''%log restore%''''
-							or (a.jobName like ''''%maintenance plan%'''' and a.jobName like ''''transaction'''')
+							a.jobName like ''%log shipping%''
+							or a.jobName like ''%log backup%''
+							or a.jobName like ''%log restore%''
+							or (a.jobName like ''%maintenance plan%'' and a.jobName like ''transaction'')
 							)
 						and not datePart(hour, getDate()) between 0 and 7
 						and not datePart(hour, getDate()) between 22 and 23
-						and not a.jobName like ''''%alert job%''''
-			end''
+						and not a.jobName like ''%alert job%''
+			end'
 
 		if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
-			execute(''drop procedure '' + @cProcedureName)
+			execute('drop procedure ' + @cProcedureName)
 
-		insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, ''Failed jobs'', @cSQLString, @nUkeyGroup)
+		insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Failed jobs', @cSQLString, @nUkeyGroup)
 
 		exec sp_executeSQL @cSQLString
 
@@ -840,24 +842,24 @@ begin
 	--*********************************************************************************************************************
 	-- Orphaned Users
 	--*********************************************************************************************************************
-	set @cSQLString = ''
-		create procedure '' + @cProcedureName + ''
+	set @cSQLString = '
+		create procedure ' + @cProcedureName + '
 		as
 		begin
 			declare @cDatabaseName varchar(200)
 			declare @cSQLString nvarchar(4000)
 
-			SET @cSQLString = ''''
-			SET @cDatabaseName = ''''
+			SET @cSQLString = ''
+			SET @cDatabaseName = ''
 
 			WHILE @cDatabaseName IS NOT NULL
 			BEGIN
 				select @cDatabaseName = MIN(name)
-					FROM ['' + @cServerName + ''].master.dbo.sysdatabases
-					WHERE name NOT IN (''''master'''', ''''model'''', ''''tempdb'''', ''''msdb'''', ''''distribution'''', ''''pubs'''', ''''northwind'''')
-						AND DATABASEPROPERTY(name, ''''IsOffline'''') = 0
-						AND DATABASEPROPERTY(name, ''''IsSuspect'''') = 0
-						AND DATABASEPROPERTY(name, ''''IsReadOnly'''') = 0
+					FROM [' + @cServerName + '].master.dbo.sysdatabases
+					WHERE name NOT IN (''master'', ''model'', ''tempdb'', ''msdb'', ''distribution'', ''pubs'', ''northwind'')
+						AND DATABASEPROPERTY(name, ''IsOffline'') = 0
+						AND DATABASEPROPERTY(name, ''IsSuspect'') = 0
+						AND DATABASEPROPERTY(name, ''IsReadOnly'') = 0
 						and (status & 32) <> 32 -- loading
 						and (status & 64) <> 64 -- prerecovery
 						and (status & 128) <> 128 -- recovery
@@ -867,26 +869,26 @@ begin
 
 				IF @cDatabaseName IS NULL BREAK
 
-				SET @cSQLString = ''''
-			SELECT '''''''''''' + @cDatabaseName + '''''''''''' AS dbName,
+				SET @cSQLString = ''
+			SELECT '''''' + @cDatabaseName + '''''' AS dbName,
 				a.[name] AS userName
 
-				FROM ['' + @cServerName + ''].'''' + QUOTENAME(@cDatabaseName) + ''''.dbo.sysusers a
-				left outer join ['' + @cServerName + ''].master.dbo.syslogins b on a.sid = b.sid
+				FROM [' + @cServerName + '].'' + QUOTENAME(@cDatabaseName) + ''.dbo.sysusers a
+				left outer join [' + @cServerName + '].master.dbo.syslogins b on a.sid = b.sid
 
 				WHERE a.islogin = 1
-					AND a.name not in (''''''''guest'''''''', ''''''''sys'''''''', ''''''''information_schema'''''''')
-					AND b.sid is null''''
+					AND a.name not in (''''guest'''', ''''sys'''', ''''information_schema'''')
+					AND b.sid is null''
 
 				insert into #orphanedUsers (dbName, userName)
 				EXEC sp_executeSQL @cSQLString
 			END
-		 end''
+		 end'
 
 	if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
-		execute(''drop procedure '' + @cProcedureName)
+		execute('drop procedure ' + @cProcedureName)
 
-	insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, ''Orphaned Users'', @cSQLString, @nUkeyGroup)
+	insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Orphaned Users', @cSQLString, @nUkeyGroup)
 
 	exec sp_executeSQL @cSQLString
 
@@ -896,9 +898,9 @@ begin
 
 	insert into #results (message, severity, subject)
 	select
-		''User '' + isnull(userName, ''N/A'') + '' is orphaned within ['' + isnull(dbName, ''N/A'') + ''].'' as message,
+		'User ' + isnull(userName, 'N/A') + ' is orphaned within [' + isnull(dbName, 'N/A') + '].' as message,
 		2 as severity,
-		''User '' + isnull(userName, ''N/A'') + '' is orphaned within ['' + isnull(dbName, ''N/A'') + ''].'' as subject
+		'User ' + isnull(userName, 'N/A') + ' is orphaned within [' + isnull(dbName, 'N/A') + '].' as subject
 		from #orphanedUsers
 
 	--*********************************************************************************************************************
@@ -907,32 +909,32 @@ begin
 
 	-- declare @cSQLString nvarchar(4000)
 	--
-	-- set @cSQlString = ''[sqlserver\instance1].master.dbo.xp_readerrorlog''
+	-- set @cSQlString = '[sqlserver\instance1].master.dbo.xp_readerrorlog'
 	--
 	-- insert into sqlErrorLog (errorMessage, continuationRow)
 	-- exec sp_executeSQL @cSQlString
 	--
 	-- update sqlErrorLog
-	-- 	set serverName = ''[sqlserver\instance1]''
+	-- 	set serverName = '[sqlserver\instance1]'
 	-- 	where serverName is null
 	--
-	-- select * from sqlErrorLog where errorMessage like ''%fail%'' or errorMessage like ''%error:%''
+	-- select * from sqlErrorLog where errorMessage like '%fail%' or errorMessage like '%error:%'
 
 --	--*********************************************************************************************************************
 --	-- Blocked processes
 --	--*********************************************************************************************************************
 --
---	if @cServername not like ''%newsql%''
---		and @cServerName not in (''rt-pricebook2'', ''chronicle2'')
+--	if @cServername not like '%newsql%'
+--		and @cServerName not in ('rt-pricebook2', 'chronicle2')
 --		and not (@bIsOffHours = 1 and (
---			@cServerName like ''%test%''
---			or @cServerName like ''%stby%''
---			or @cServerName like ''%dev%''
---			or @cServerName like ''%deploy%''
+--			@cServerName like '%test%'
+--			or @cServerName like '%stby%'
+--			or @cServerName like '%dev%'
+--			or @cServerName like '%deploy%'
 --			))
 --	begin
 
-		set @cSQLString = ''select * from openQuery(['' + @cServerName + ''], ''''
+		set @cSQLString = 'select * from openQuery([' + @cServerName + '], ''
 			SELECT a.spid, a.status, convert(sysname, rtrim(a.loginame)) as login, a.hostname,
 					case when a.blocked = 0 Then space(0) else convert(varchar(5), a.blocked) end as blkBy,
 					b.[name] as DBName, a.cmd as command, a.cpu as cputime, a.physical_io as diskio,
@@ -941,9 +943,9 @@ begin
 					getDate() as ymd
 					from master.dbo.sysprocesses a
 					left outer join master.dbo.sysdatabases b on a.dbid = b.dbid
-					where a.spid > 50'''')''
+					where a.spid > 50'')'
 
-		insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, ''Running processes'', @cSQLString, @nUkeyGroup)
+		insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Running processes', @cSQLString, @nUkeyGroup)
 
 		insert into #processes (spid, status, login, hostname, blockedby, dbname, command, cputime, diskio,
 			lastbatch, programName, lastWaitType, login_time, net_address, lastBatchTime, waitType, waitTime,
@@ -954,7 +956,7 @@ begin
 		declare @dLastProcessCheck dateTime
 		set @dLastProcessCheck = (select max(ymd) from processLog where serverName = @cServerName)
 
-		if isnull(@dLastProcessCheck, '''') <> ''''
+		if isnull(@dLastProcessCheck, '') <> ''
 			update #processes
 				set lastCPU = b.cpuTime,
 					lastDisk = b.diskIO,
@@ -963,12 +965,12 @@ begin
 				join processLog b on a.spid = b.spid
 					and b.serverName = @cServerName
 					and b.ymd = @dLastProcessCheck
-					and isnull(a.programName, '''') = isnull(b.programName, '''')
-					and isnull(a.hostname, '''') = isnull(b.hostname, '''')
-					and isnull(a.login, '''') = isnull(b.login, '''')
+					and isnull(a.programName, '') = isnull(b.programName, '')
+					and isnull(a.hostname, '') = isnull(b.hostname, '')
+					and isnull(a.login, '') = isnull(b.login, '')
 
---		set @cSQLString = ''
---			create procedure '' + @cProcedureName + ''
+--		set @cSQLString = '
+--			create procedure ' + @cProcedureName + '
 --			as
 --			begin
 --				declare @cSQLString nvarchar(4000)
@@ -976,20 +978,20 @@ begin
 --				insert into #processes (spid, status, login, hostname, blockedby, dbname, command, cputime, diskio,
 --					lastbatch, programName, lastWaitType, login_time, net_address, lastBatchTime, waitType, waitTime, waitResource)
 --
---				set @cSQLString = ''''select * from openQuery(['' + @cServerName + ''], ''''
+--				set @cSQLString = ''select * from openQuery([' + @cServerName + '], ''
 --				SELECT
 --					a.spid,
 --					a.status,
 --					convert(sysname, rtrim(a.loginame)) as login,
 --					a.hostname,
---					case when a.blocked = 0 Then ''''  .''''
+--					case when a.blocked = 0 Then ''  .''
 --						else convert(varchar(5), a.blocked)
 --						end as blkBy,
 --					b.[name] as DBName,
 --					a.cmd as command,
 --					a.cpu as cputime,
 --					a.physical_io as diskio,
---					substring( convert(varchar,a.last_batch,111) ,6  ,5 ) + '''' '''' + substring( convert(varchar,a.last_batch,113) ,13 ,8 ) as LastBatch,
+--					substring( convert(varchar,a.last_batch,111) ,6  ,5 ) + '' '' + substring( convert(varchar,a.last_batch,113) ,13 ,8 ) as LastBatch,
 --					a.program_name,
 --					a.lastWaitType,
 --					a.login_time,
@@ -999,26 +1001,26 @@ begin
 --					a.waitTime,
 --					a.waitResource
 --
---					from ['' + @cServerName + ''].master.dbo.sysprocesses a
---					left outer join ['' + @cServerName + ''].master.dbo.sysdatabases b on a.dbid = b.dbid
+--					from [' + @cServerName + '].master.dbo.sysprocesses a
+--					left outer join [' + @cServerName + '].master.dbo.sysdatabases b on a.dbid = b.dbid
 --					where a.spid > 50
---			end''
+--			end'
 --
 --		if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
---			execute(''drop procedure '' + @cProcedureName)
+--			execute('drop procedure ' + @cProcedureName)
 --
---		insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, ''Running processes'', @cSQLString, @nUkeyGroup)
+--		insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Running processes', @cSQLString, @nUkeyGroup)
 --		exec sp_executeSQL @cSQLString
 
 		update #processes
-			set blockedBy = rtrim(ltrim(replace(blockedBy, ''.'', '''')))
+			set blockedBy = rtrim(ltrim(replace(blockedBy, '.', '')))
 
-		-- get rid of any system processes that we don''t so much care about
+		-- get rid of any system processes that we don't so much care about
 		update #processes
 			set ignoreSPID = 1
-			where rtrim(command) in (''LOG WRITER'', ''CHECKPOINT SLEEP'', ''TASK MANAGER'',
-					''AWAITING COMMAND'', ''GHOST CLEANUP'', ''DBCC'', ''BACKUP'', ''SIGNAL HANDLER'', ''LOCK MONITOR'')
-				or rtrim(ltrim(hostName)) = ''.''
+			where rtrim(command) in ('LOG WRITER', 'CHECKPOINT SLEEP', 'TASK MANAGER',
+					'AWAITING COMMAND', 'GHOST CLEANUP', 'DBCC', 'BACKUP', 'SIGNAL HANDLER', 'LOCK MONITOR')
+				or rtrim(ltrim(hostName)) = '.'
 				or rtrim(ltrim(hostname)) = @@servername
 
 		-- blocked
@@ -1029,18 +1031,18 @@ begin
 				select a.spid
 					from #processes a
 					left outer join #processes b on a.blockedBy = b.spid
-					where a.blockedBy <> ''''
-						-- we don''t care if both SPIDs are restoring logs because there isn''t really much we can do about it
-						and isnull(a.command, '''') not like ''%RESTORE LOG%''
-						and isnull(b.command, '''') not like ''%RESTORE LOG%''
+					where a.blockedBy <> ''
+						-- we don't care if both SPIDs are restoring logs because there isn't really much we can do about it
+						and isnull(a.command, '') not like '%RESTORE LOG%'
+						and isnull(b.command, '') not like '%RESTORE LOG%'
 						and a.spid <> b.spid
-						and not (isnull(a.login, '''') = ''CORP\SQLADMIN'' and isnull(b.login, '''') = ''CORP\SQLADMIN'')
-						and not (isnull(b.login, '''') = '''' and isnull(rtrim(b.command), '''') = '''')
+						and not (isnull(a.login, '') = 'CORP\SQLADMIN' and isnull(b.login, '') = 'CORP\SQLADMIN')
+						and not (isnull(b.login, '') = '' and isnull(rtrim(b.command), '') = '')
 				) b on a.spid = b.spid
 
 		update #processes
 			set isBlocker = 1
-			where spid in (select distinct blockedBy from #processes where blockedBy <> '''')
+			where spid in (select distinct blockedBy from #processes where blockedBy <> '')
 
 		-- wild, because of CPU or Disk utilization
 		update #processes
@@ -1048,15 +1050,15 @@ begin
 			from #processes
 			where (cpuTime - lastCPU > @nCPUThreshold or diskIO - lastDisk > @nDiskThreshold)
 
---				and command <> ''AWAITING COMMAND''
-				and programName <> ''SQLAgent - Alert Engine''
-				and rtrim(command) not in (''LOG WRITER'', ''CHECKPOINT SLEEP'', ''TASK MANAGER'',
-					''GHOST CLEANUP'', ''DBCC'', ''RESTORE LOG'', ''KILLED/ROLLBACK'')
-				and rtrim(command) not like ''%backup%''
-				and rtrim(command) not like ''%restore%''
+--				and command <> 'AWAITING COMMAND'
+				and programName <> 'SQLAgent - Alert Engine'
+				and rtrim(command) not in ('LOG WRITER', 'CHECKPOINT SLEEP', 'TASK MANAGER',
+					'GHOST CLEANUP', 'DBCC', 'RESTORE LOG', 'KILLED/ROLLBACK')
+				and rtrim(command) not like '%backup%'
+				and rtrim(command) not like '%restore%'
 
-				-- this is a job, and we''ll catch it elsewhere
-				and programName not like ''%SQLAGENT%''
+				-- this is a job, and we'll catch it elsewhere
+				and programName not like '%SQLAGENT%'
 				and (
 					abs(dateDiff(minute, lastBatchTime, getDate())) >= 5 --between 5 and @nMinutesBackToLook*3
 					or datePart(year, lastbatchTime) = 1900
@@ -1067,15 +1069,15 @@ begin
 			set isWild = 1
 			from #processes
 			where dateDiff(minute, lastBatchTime, getDate()) > @nRunningMinutesThreshold
-				and command <> ''AWAITING COMMAND''
-				and programName <> ''SQLAgent - Alert Engine''
-				and rtrim(command) not in (''LOG WRITER'', ''CHECKPOINT SLEEP'', ''TASK MANAGER'',
-					''GHOST CLEANUP'', ''DBCC'', ''RESTORE LOG'', ''KILLED/ROLLBACK'')
-				and rtrim(command) not like ''%backup%''
-				and rtrim(command) not like ''%restore%''
+				and command <> 'AWAITING COMMAND'
+				and programName <> 'SQLAgent - Alert Engine'
+				and rtrim(command) not in ('LOG WRITER', 'CHECKPOINT SLEEP', 'TASK MANAGER',
+					'GHOST CLEANUP', 'DBCC', 'RESTORE LOG', 'KILLED/ROLLBACK')
+				and rtrim(command) not like '%backup%'
+				and rtrim(command) not like '%restore%'
 
-				-- this is a job, and we''ll catch it elsewhere
-				and programName not like ''%SQLAGENT%''
+				-- this is a job, and we'll catch it elsewhere
+				and programName not like '%SQLAGENT%'
 
 		update #processes
 			set hostname = b.hostname,
@@ -1086,8 +1088,8 @@ begin
 					from #processes
 					group by spid
 				) b on a.spid = b.spid
-			where isnull(a.hostname, '''') = ''''
-				or isnull(a.login, '''') = ''''
+			where isnull(a.hostname, '') = ''
+				or isnull(a.login, '') = ''
 
 		--*********************************************************************************************************************
 		-- begin INPUTBUFFER: for each SPID, figure out what the last command they sent over is
@@ -1095,26 +1097,26 @@ begin
 		if @cUserName is not null
 		begin
 			-- with password, for stores
-			set @cSQLString = ''osql -S'' + @cServerName + '' -Usa -P -n -h-1 -w300 -dmaster -i"\\'' + @cThisServerName + ''\shared\all_user_activity.SQL"''
+			set @cSQLString = 'osql -S' + @cServerName + ' -Usa -P -n -h-1 -w300 -dmaster -i"\\' + @cThisServerName + '\shared\all_user_activity.SQL"'
 		end
 		else
 		begin
-			-- without password, for local boxes that''ll accept sqladmin under windows authentication
-			set @cSQLString = ''osql -S'' + @cServerName + '' -E -n -h-1 -w300 -dmaster -i"\\'' + @cThisServerName + ''\shared\all_user_activity.SQL"''
+			-- without password, for local boxes that'll accept sqladmin under windows authentication
+			set @cSQLString = 'osql -S' + @cServerName + ' -E -n -h-1 -w300 -dmaster -i"\\' + @cThisServerName + '\shared\all_user_activity.SQL"'
 		end
 
 		insert into #userActivity (nastyLine)
 		exec master..xp_cmdShell @cSQLString
 
-		update #userActivity set nastyLine = rtrim(ltrim(replace(replace(replace(nastyLine, char(9), ''''), char(13), ''''), ''  '', '' '')))
+		update #userActivity set nastyLine = rtrim(ltrim(replace(replace(replace(nastyLine, char(9), ''), char(13), ''), '  ', ' ')))
 
-		delete from #userActivity where nastyLine = ''''or nastyLine = ''null''
+		delete from #userActivity where nastyLine = ''or nastyLine = 'null'
 
 		update #userActivity
-			set spid = dbo.fn_returnListItem(nastyLine, 1, ''||''),
-				macAddress = dbo.fn_returnListItem(nastyLine, 2, ''||''),
-				bufferContents = dbo.fn_returnListItem(nastyLine, 3, ''||'')
-			where left(nastyLine, 2) = ''||''
+			set spid = dbo.fn_returnListItem(nastyLine, 1, '||'),
+				macAddress = dbo.fn_returnListItem(nastyLine, 2, '||'),
+				bufferContents = dbo.fn_returnListItem(nastyLine, 3, '||')
+			where left(nastyLine, 2) = '||'
 
 		update #userActivity
 			set bufferContents = nastyLine
@@ -1123,10 +1125,10 @@ begin
 		update #userActivity
 			set nastyLine = null
 
-		set @cBuffer = ''''
+		set @cBuffer = ''
 
 		update #userActivity
-			set @cBuffer = bufferContents = left(case when spid is null then @cBuffer else '''' end + isnull(bufferContents, '''') + char(13), 3000),
+			set @cBuffer = bufferContents = left(case when spid is null then @cBuffer else '' end + isnull(bufferContents, '') + char(13), 3000),
 				@cMacAddress = macAddress = case when macAddress is null then @cMacAddress else macAddress end,
 				@nSPID = spid = case when spid is null then @nSPID else spid end
 
@@ -1146,13 +1148,13 @@ begin
 				) b on a.spid = b.spid
 				and a.net_address = b.macAddress
 
-		-- if the SPID''s last command includes a single quote, incorporating it into the string causes all sorts of problems
+		-- if the SPID's last command includes a single quote, incorporating it into the string causes all sorts of problems
 		update #processes
-			set command = replace(command, '''''''', ''"''),
-				buffercontents = replace(replace(replace(replace(buffercontents, '''''''', ''"''), ''**'', ''*''), ''**'', ''*''), ''**'', ''*''),
-				hostname = rtrim(ltrim(replace(hostname, ''  '', '' '')))
+			set command = replace(command, '''', '"'),
+				buffercontents = replace(replace(replace(replace(buffercontents, '''', '"'), '**', '*'), '**', '*'), '**', '*'),
+				hostname = rtrim(ltrim(replace(hostname, '  ', ' ')))
 
-		insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, ''Input buffer for running SPIDs'', @cSQLString, @nUkeyGroup)
+		insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Input buffer for running SPIDs', @cSQLString, @nUkeyGroup)
 
 		-- end INPUTBUFFER
 		--*********************************************************************************************************************
@@ -1188,19 +1190,19 @@ begin
 					and spid > @nSPID
 				order by spid
 
-			set @cSQLString = ''
-				create procedure '' + @cProcedureName + ''
+			set @cSQLString = '
+				create procedure ' + @cProcedureName + '
 				as
 				begin
 					insert into #locks
 					select *
-						from openquery(['' + @cServerName + ''],''''set fmtonly off; exec master.dbo.sp_lock '' + convert(varchar(20), @nSPID) + '''''')
+						from openquery([' + @cServerName + '],''set fmtonly off; exec master.dbo.sp_lock ' + convert(varchar(20), @nSPID) + ''')
 
 					insert into #lockSummary
 					select isnull(dbid, 0) as dbid,
 						isnull(objid, 0) as objid,
-						isnull(type, '''''''') as type,
-						isnull(mode, '''''''') as mode,
+						isnull(type, '''') as type,
+						isnull(mode, '''') as mode,
 						count(*) as locks
 						from #locks
 						where objid <> 0
@@ -1209,35 +1211,35 @@ begin
 					insert into #lockSummary
 					select isnull(rsc_dbid, 0) as rsc_dbid,
 						isnull(rsc_objid, 0) as rsc_objid,
-						case when isnull(req_status, 0) = 1 then ''''Granted''''
-							when isnull(req_status, 0) = 2 then ''''Converting''''
-							when isnull(req_status, 0) = 3 then ''''Waiting''''
-							else ''''Unknown''''
+						case when isnull(req_status, 0) = 1 then ''Granted''
+							when isnull(req_status, 0) = 2 then ''Converting''
+							when isnull(req_status, 0) = 3 then ''Waiting''
+							else ''Unknown''
 							end as type,
-						'''''''' as mode,
+						'''' as mode,
 						count(*)
-						from ['' + @cServerName + ''].master.dbo.syslockinfo
-						where req_spid = '' + convert(varchar(20), @nSPID) + ''
+						from [' + @cServerName + '].master.dbo.syslockinfo
+						where req_spid = ' + convert(varchar(20), @nSPID) + '
 							and rsc_objid <> 0
 						group by rsc_dbid, rsc_objid,
-							case when isnull(req_status, 0) = 1 then ''''Granted''''
-								when isnull(req_status, 0) = 2 then ''''Converting''''
-								when isnull(req_status, 0) = 3 then ''''Waiting''''
-								else ''''Unknown''''
+							case when isnull(req_status, 0) = 1 then ''Granted''
+								when isnull(req_status, 0) = 2 then ''Converting''
+								when isnull(req_status, 0) = 3 then ''Waiting''
+								else ''Unknown''
 								end
-				end''
+				end'
 
 			if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
-				execute(''drop procedure '' + @cProcedureName)
+				execute('drop procedure ' + @cProcedureName)
 
-			insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, ''Locks held'', @cSQLString, @nUkeyGroup)
+			insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Locks held', @cSQLString, @nUkeyGroup)
 			exec sp_executeSQL @cSQLString
 
 			if @bTesting = 1
 				print @cSQLString
 			EXECUTE(@cProcedureName)
 
-			set @cLocks = ''''
+			set @cLocks = ''
 
 			while exists (select top 1 * from #lockSummary)
 			begin
@@ -1245,30 +1247,30 @@ begin
 
 				if @nObjID is null or @nDBID is null
 				begin
-					insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, ''Locks: Database names'', ''Database or Object ID was null!'', @nUkeyGroup)
+					insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Locks: Database names', 'Database or Object ID was null!', @nUkeyGroup)
 					delete from #lockSummary where isnull(dbid, 0) = isnull(@nDBID, 0) and isnull(objid, 0) = isnull(@nObjID, 0) and type = @cLockType
 					continue
 				end
 
-				set @cSQLString = ''
-					create procedure '' + @cProcedureName + ''
+				set @cSQLString = '
+					create procedure ' + @cProcedureName + '
 					as
 					begin
 						insert into #junkString
 						select name
-							from ['' + @cServerName + ''].master.dbo.sysdatabases
-							where dbid = '' + convert(varchar(20), @nDBID) + ''
+							from [' + @cServerName + '].master.dbo.sysdatabases
+							where dbid = ' + convert(varchar(20), @nDBID) + '
 								and (status & 32) <> 32 -- loading
 								and (status & 64) <> 64 -- prerecovery
 								and (status & 128) <> 128 -- recovery
 								and (status & 512) <> 512 -- offline
 								and (status & 4096) <> 4096 -- single user
-					end''
+					end'
 
 				if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
-					execute(''drop procedure '' + @cProcedureName)
+					execute('drop procedure ' + @cProcedureName)
 
-				insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, ''Locks: Database names'', @cSQLString, @nUkeyGroup)
+				insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Locks: Database names', @cSQLString, @nUkeyGroup)
 				exec sp_executeSQL @cSQLString
 
 				if @bTesting = 1
@@ -1280,25 +1282,25 @@ begin
 
 				if @cDatabaseName is null
 				begin
-					insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, ''Locks: Database names'', ''Database name was null!'', @nUkeyGroup)
+					insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Locks: Database names', 'Database name was null!', @nUkeyGroup)
 					delete from #lockSummary where isnull(dbid, 0) = isnull(@nDBID, 0) and isnull(objid, 0) = isnull(@nObjID, 0) and type = @cLockType
 					continue
 				end
 
-				set @cSQLString = ''
-					create procedure '' + @cProcedureName + ''
+				set @cSQLString = '
+					create procedure ' + @cProcedureName + '
 					as
 					begin
 						insert into #lockresults
 						select name
-							from ['' + @cServerName + ''].['' + @cDatabaseName + ''].dbo.sysobjects
-							where id = '' + convert(varchar(20), @nObjID) + ''
-					end''
+							from [' + @cServerName + '].[' + @cDatabaseName + '].dbo.sysobjects
+							where id = ' + convert(varchar(20), @nObjID) + '
+					end'
 
 				if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
-					execute(''drop procedure '' + @cProcedureName)
+					execute('drop procedure ' + @cProcedureName)
 
-				insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, ''Locks: Object names'', @cSQLString, @nUkeyGroup)
+				insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Locks: Object names', @cSQLString, @nUkeyGroup)
 				exec sp_executeSQL @cSQLString
 
 				if @bTesting = 1
@@ -1308,15 +1310,15 @@ begin
 				set @cTableName = (select top 1 tableName from #lockResults)
 				truncate table #lockResults
 
-				set @cLocks = left(@cLocks + isnull(rtrim(ltrim(@cDatabaseName)), '''') + ''.'' +
-					isnull(rtrim(ltrim(@cTableName)), '''') + '': '' +
-					isnull(@cLocktype, '''') + '', '' +
-					isnull(@cMode, '''') +
-					isnull(''('' + convert(varchar(20), @nLocks) + '')'', '''') +
+				set @cLocks = left(@cLocks + isnull(rtrim(ltrim(@cDatabaseName)), '') + '.' +
+					isnull(rtrim(ltrim(@cTableName)), '') + ': ' +
+					isnull(@cLocktype, '') + ', ' +
+					isnull(@cMode, '') +
+					isnull('(' + convert(varchar(20), @nLocks) + ')', '') +
 					char(13), 4000)
 
-				while charindex(''__'', @cLocks) > 0
-					set @cLocks = replace(@cLocks, ''__'', ''_'')
+				while charindex('__', @cLocks) > 0
+					set @cLocks = replace(@cLocks, '__', '_')
 
 				delete from #lockSummary where dbid = @nDBID and objid = @nObjID and type = @cLockType
 			end
@@ -1343,87 +1345,123 @@ begin
 		-- lots of blocking
 		insert into #results (message, severity, subject, isBlocking)
 		select
-			convert(varchar(20), count(distinct spid)) + '' SPIDs '' +
-				''and '' + convert(varchar(20), count(*)) + '' threads '' +
-				''blocked in '' + isnull(dbName, '''') + '' '' +
-				''at '' + convert(varchar(20), getDate(), 120) + ''.'' as message,
+			convert(varchar(20), count(distinct spid)) + ' SPIDs ' +
+				'and ' + convert(varchar(20), count(*)) + ' threads ' +
+				'blocked in ' + isnull(dbName, '') + ' ' +
+				'at ' + convert(varchar(20), getDate(), 120) + '.' as message,
 			1 as severity,
-			convert(varchar(20), count(distinct spid)) + '' SPIDs '' +
-				''blocked in '' + isnull(dbName, '''') + ''.'' as subject,
+			convert(varchar(20), count(distinct spid)) + ' SPIDs ' +
+				'blocked in ' + isnull(dbName, '') + '.' as subject,
 			1 as isBlocking
 			from #processes
 			where isBlocked = 1
-				and isnull(dbName, '''') not in (''distribution'')
+				and isnull(dbName, '') not in ('distribution')
 			group by dbName
 			having count(*) >= @nMultipleBlockAlert
 
 		-- blocked
 		insert into #results (message, severity, subject, isBlocking)
-		select distinct left(''A process which belongs to SPID '' + isnull(convert(varchar(20), a.spid), ''A'') + ''('' + isnull(a.hostname, '''') + '':'' + isnull(a.login, '''') + '') '' +
-			''is being blocked in the '' + isnull(a.dbName, '''') + '' database '' +
-			''by SPID '' + isnull(convert(varchar(20), b.spid), ''B'') + ''('' + isnull(b.hostname, '''') + '':'' + isnull(b.login, '''') + ''). '' + char(13) + char(13) +
-			''********************************************'' + char(13) +
-			''Blockee Code ('' + isnull(rtrim(a.command), '''') + ''): '' + char(13) +
-			''Batch Start: '' + convert(varchar(20), a.lastBatchTime, 120) + char(13) +
-			''********************************************'' + char(13) +
-				left(isnull(a.buffercontents, ''''), 500) + char(13) + char(13) +
-			''********************************************'' + char(13) +
-			''Blocker Code ('' + isnull(rtrim(b.command), '''') + ''): '' + char(13) +
-			''Batch Start: '' + convert(varchar(20), b.lastBatchTime, 120) + char(13) +
-			''********************************************'' + char(13) +
-				left(isnull(b.bufferContents, ''''), 500) + char(13) + char(13) +
-			''********************************************'' + char(13) +
-			''Blockee locks: '' + char(13) +
-			''********************************************'' + char(13) +
-				isnull(a.locks, '''') + char(13) +
-			''********************************************'' + char(13) +
-			''Blocker locks: '' + char(13) +
-			''********************************************'' + char(13) +
-				isnull(b.locks, '''')
+		select distinct left('A process which belongs to SPID ' + isnull(convert(varchar(20), a.spid), 'A') + '(' + isnull(a.hostname, '') + ':' + isnull(a.login, '') + ') ' +
+			'is being blocked in the ' + isnull(a.dbName, '') + ' database ' +
+			'by SPID ' + isnull(convert(varchar(20), b.spid), 'B') + '(' + isnull(b.hostname, '') + ':' + isnull(b.login, '') + '). ' + char(13) + char(13) +
+			'********************************************' + char(13) +
+			'Blockee Code (' + isnull(rtrim(a.command), '') + '): ' + char(13) +
+			'Batch Start: ' + convert(varchar(20), a.lastBatchTime, 120) + char(13) +
+			'********************************************' + char(13) +
+				left(isnull(a.buffercontents, ''), 500) + char(13) + char(13) +
+			'********************************************' + char(13) +
+			'Blocker Code (' + isnull(rtrim(b.command), '') + '): ' + char(13) +
+			'Batch Start: ' + convert(varchar(20), b.lastBatchTime, 120) + char(13) +
+			'********************************************' + char(13) +
+				left(isnull(b.bufferContents, ''), 500) + char(13) + char(13) +
+			'********************************************' + char(13) +
+			'Blockee locks: ' + char(13) +
+			'********************************************' + char(13) +
+				isnull(a.locks, '') + char(13) +
+			'********************************************' + char(13) +
+			'Blocker locks: ' + char(13) +
+			'********************************************' + char(13) +
+				isnull(b.locks, '')
 			, 2000),
 			2 as severity,
-			''User '' + isnull(b.login, '''') + '' ('' + isnull(convert(varchar(20), b.spid), ''B'') + '') '' +
-				''began blocking in '' + isnull(a.dbName, '''') + '' '' +
-				''at '' + right(convert(varchar(20), isnull(b.lastBatchTime, ''''), 120), 8) + ''. '' as subject,
+			'User ' + isnull(b.login, '') + ' (' + isnull(convert(varchar(20), b.spid), 'B') + ') ' +
+				'began blocking in ' + isnull(a.dbName, '') + ' ' +
+				'at ' + right(convert(varchar(20), isnull(b.lastBatchTime, ''), 120), 8) + '. ' as subject,
 			1 as isBlocking
 			from #processes a
 			left outer join #processes b on a.blockedBy = b.spid
 			where a.isBlocked = 1
-				and not (isnull(a.locks, '''') = '''' and isnull(b.locks, '''') = '''')
---				and not (isnull(a.locks, '''') not like ''%waiting%'' and isnull(b.locks, '''') not like ''%waiting%'')
-				and a.blockedBy <> ''''
+				and not (isnull(a.locks, '') = '' and isnull(b.locks, '') = '')
+--				and not (isnull(a.locks, '') not like '%waiting%' and isnull(b.locks, '') not like '%waiting%')
+				and a.blockedBy <> ''
 				and a.ignoreSPID = 0
 				and abs(dateDiff(second, b.lastBatchTime, a.lastBatchTime)) >= @nBlockingSecondsThreshold
 
 		-- wild
 		insert into #results (message, severity, subject, isLongRunningProcess)
-		select left(''A process which belongs to '' + isnull(login, ''N/A'') + '' '' +
-				''('' + rtrim(isnull(hostname, '''')) + '') '' +
-				''is running wicked long in the '' + isnull(dbName, ''N/A'') + '' database.'' + char(13) + char(13) +
-				''Current CPU: '' + convert(varchar(20), sum(isnull(cpuTime, 0))) + char(13) +
-				''Current DISK: '' + convert(varchar(20), sum(isnull(diskio, 0))) + char(13) +
+		select left('A process which belongs to ' + isnull(login, 'N/A') + ' ' +
+				'(' + rtrim(isnull(hostname, '')) + ') ' +
+				'is running wicked long in the ' + isnull(dbName, 'N/A') + ' database.' + char(13) + char(13) +
+				'Current CPU: ' + convert(varchar(20), sum(isnull(cpuTime, 0))) + char(13) +
+				'Current DISK: ' + convert(varchar(20), sum(isnull(diskio, 0))) + char(13) +
 
-				''CPU Delta (over last '' + convert(varchar(20), dateDiff(minute, min(isnull(case when datePart(year, lastData) = 1900 then lastBatchTime else lastData end, '''')), getDate())) + '' mins): '' + convert(varchar(20), sum(isnull(cpuTime, 0)) - sum(isnull(lastCPU, 0))) + char(13) +
-				''DISK Delta (over last '' + convert(varchar(20), dateDiff(minute, min(isnull(case when datePart(year, lastData) = 1900 then lastBatchTime else lastData end, '''')), getDate())) + '' mins): '' + convert(varchar(20), sum(isnull(diskio, 0)) - sum(isnull(lastDisk, 0))) + char(13) +
-				''Runtime of this batch: '' + convert(varchar(20), dateDiff(minute, isnull(lastBatchTime, getDate()), getDate())) + ''mins'' + char(13) +
+				'CPU Delta: ' +
+					convert(varchar(20),
+						convert(decimal(10,2),
+							(
+								convert(decimal(10,2), sum(isnull(cpuTime, 0)) - sum(isnull(lastCPU, 0))) /
+								convert(decimal(10,2),
+									dateDiff(second,
+										min(isnull(case when datePart(year, lastData) = 1900 or isnull(lastData, '') = '' then lastBatchTime else lastData end, '')),
+										getDate()
+										)
+									)
+								) / 60.00
+							)
+						) + '/min' + char(13) +
 
-				''Current Batch: '' + convert(varchar(20), isnull(lastBatchTime, ''''), 120) + char(13) +
+				'DISK Delta: ' +
+					convert(varchar(20),
+						convert(decimal(10,2),
+							(
+								convert(decimal(10,2), sum(isnull(diskio, 0)) - sum(isnull(lastDisk, 0))) /
+								convert(decimal(10,2),
+									dateDiff(second,
+										min(isnull(case when datePart(year, lastData) = 1900 or isnull(lastData, '') = '' then lastBatchTime else lastData end, '')),
+										getDate()
+										)
+									)
+								) / 60.00
+							)
+						) + '/min' + char(13) +
 
-				''********************************************'' + char(13) +
-				''SPID '' + convert(varchar(20), isnull(SPID, 0)) + '' locks: '' + char(13) +
-				''********************************************'' + char(13) +
-					isnull(locks, '''') + char(13) +
-				''********************************************'' + char(13) +
-				''Executing ('' + rtrim(isnull(command, '''')) + '') : '' + char(13) +
-				''********************************************'' + char(13) +
-					isnull(buffercontents, '''')
+				'Runtime of this batch: ' +
+					convert(varchar(20),
+						convert(decimal(10,2),
+							convert(decimal(10,2),
+								dateDiff(second, isnull(lastBatchTime, getDate()), getDate())
+								) / 60
+							)
+						) + 'mins' + char(13) +
+
+				'Current Batch: ' + convert(varchar(20), isnull(lastBatchTime, ''), 120) + char(13) +
+				'Last Snap: ' + case when isnull(min(lastData), '') = '' then 'N/A' else convert(varchar(20), isnull(min(lastData), ''), 120) end + char(13) +
+
+				'********************************************' + char(13) +
+				'SPID ' + convert(varchar(20), isnull(SPID, 0)) + ' locks: ' + char(13) +
+				'********************************************' + char(13) +
+					isnull(locks, '') + char(13) +
+				'********************************************' + char(13) +
+				'Executing (' + rtrim(isnull(command, '')) + ') : ' + char(13) +
+				'********************************************' + char(13) +
+					isnull(buffercontents, '')
 				, 2000) as message,
 			2 as severity,
-			''User '' + isnull(login, ''N/A'') + '' '' +
-				''('' + convert(varchar(20), isnull(SPID, 0)) + '') '' +
-				''started a wild process '' +
-				''in '' + isnull(dbName, '''') + '' '' +
-				''at '' + right(convert(varchar(20), isnull(lastBatchTime, ''''), 120), 8) + ''.'' as subject,
+			'User ' + isnull(login, 'N/A') + ' ' +
+				'(' + convert(varchar(20), isnull(SPID, 0)) + ') ' +
+				'started a wild process ' +
+				'in ' + isnull(dbName, '') + ' ' +
+				'at ' + right(convert(varchar(20), isnull(lastBatchTime, ''), 120), 8) + '.' as subject,
 			1 as isLongRunningProcess
 			from #processes
 			where isWild = 1
@@ -1436,30 +1474,32 @@ begin
 				hostname,
 				SPID,
 				locks
+			having sum(isnull(cpuTime, 0)) - sum(isnull(lastCPU, 0)) > 0
+				or sum(isnull(diskio, 0)) - sum(isnull(lastDisk, 0)) > 0
 
 -- 		-- serial blocking offenses
  		insert into #results (message, severity, subject, isBlocking)
 		select left(
-				''User '' + isnull(blockingUser, ''N/A'') + '' ('' + convert(varchar(20), isnull(blockingSPID, '''')) + '') '' +
-				''has been blocking in the last ('' + convert(varchar(20), count(distinct ymd)) + '') polls.''
+				'User ' + isnull(blockingUser, 'N/A') + ' (' + convert(varchar(20), isnull(blockingSPID, '')) + ') ' +
+				'has been blocking in the last (' + convert(varchar(20), count(distinct ymd)) + ') polls.'
 				, 2000) as message,
 			case when @nOffHoursPriority = 1 then 1 else 2 end as severity,
-			''SPID '' + convert(varchar(20), isnull(blockingSPID, '''')) + '' '' +
-			''is blocking '' + convert(varchar(20), count(distinct blockedSPID)) + '' SPIDs '' +
-			''in '' + isnull(databaseName, ''N/A'') + '' '' +
-			''at '' + right(convert(varchar(20), max(ymd), 120), 8) + ''.'' as subject,
+			'SPID ' + convert(varchar(20), isnull(blockingSPID, '')) + ' ' +
+			'is blocking ' + convert(varchar(20), count(distinct blockedSPID)) + ' SPIDs ' +
+			'in ' + isnull(databaseName, 'N/A') + ' ' +
+			'at ' + right(convert(varchar(20), max(ymd), 120), 8) + '.' as subject,
 			1 as isBlocking
 			from (
-				select rtrim(ltrim(substring(blockingSPID, charindex(''('', blockingSpid) + 1, 99))) as blockingSPID,
-					rtrim(ltrim(substring(blockingUser, charindex('' '', blockingUser), 99))) as blockingUser,
-					rtrim(ltrim(left(databaseName, charindex('' '', databaseName)))) as databaseName,
+				select rtrim(ltrim(substring(blockingSPID, charindex('(', blockingSpid) + 1, 99))) as blockingSPID,
+					rtrim(ltrim(substring(blockingUser, charindex(' ', blockingUser), 99))) as blockingUser,
+					rtrim(ltrim(left(databaseName, charindex(' ', databaseName)))) as databaseName,
 					blockedSPID, ymd
 					from (
 						select
-							rtrim(ltrim(left(subject, charindex('')'', subject) - 1))) as blockingSPID,
-							rtrim(ltrim(left(subject, charindex(''('', subject) - 1))) as blockingUser,
-							rtrim(ltrim(substring(subject, charindex(''process in'', subject) + 10, 50))) as databaseName,
-							rtrim(ltrim(substring(subject, charindex(''blocking spid'', subject) + 14, 3))) as blockedSPID,
+							rtrim(ltrim(left(subject, charindex(')', subject) - 1))) as blockingSPID,
+							rtrim(ltrim(left(subject, charindex('(', subject) - 1))) as blockingUser,
+							rtrim(ltrim(substring(subject, charindex('process in', subject) + 10, 50))) as databaseName,
+							rtrim(ltrim(substring(subject, charindex('blocking spid', subject) + 14, 3))) as blockedSPID,
 							ymd
 							from (
 								select subject, ymd
@@ -1467,16 +1507,16 @@ begin
 									where isBlocking = 1
 										and ymd >= dateAdd(hour, -1, getDate())
 										and serverName = @cServerName
-										and message not like ''%has been blocking%''
-										and subject like ''%and is blocking spid%''
+										and message not like '%has been blocking%'
+										and subject like '%and is blocking spid%'
 								union
 								select subject, ymd
 									from notificationLog_stage
 									where isBlocking = 1
 										and ymd >= dateAdd(hour, -1, getDate())
 										and serverName = @cServerName
-										and message not like ''%has been blocking%''
-										and subject like ''%and is blocking spid%''
+										and message not like '%has been blocking%'
+										and subject like '%and is blocking spid%'
 								) a
 						) a
 				) a
@@ -1490,20 +1530,20 @@ begin
 	-- Drive space
 	--*********************************************************************************************************************
 
-	set @cSQLString = ''
-		create procedure '' + @cProcedureName + ''
+	set @cSQLString = '
+		create procedure ' + @cProcedureName + '
 		as
 		begin
 			INSERT #drives (driveLetter, freeSpace)
 			select *
-				from openQuery(['' + @cServerName + ''], ''''SET FMTONLY OFF EXEC master.dbo.xp_fixeddrives '''')
+				from openQuery([' + @cServerName + '], ''SET FMTONLY OFF EXEC master.dbo.xp_fixeddrives '')
 
-		end''
+		end'
 
 	if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
-		execute(''drop procedure '' + @cProcedureName)
+		execute('drop procedure ' + @cProcedureName)
 
-	insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, ''Drive space'', @cSQLString, @nUkeyGroup)
+	insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Drive space', @cSQLString, @nUkeyGroup)
 	exec sp_executeSQL @cSQLString
 
 	if @bTesting = 1
@@ -1514,9 +1554,9 @@ begin
 		set freeSpace = (freeSpace / 10) * 10
 
 	insert into #results (message, severity, subject, isDriveSpace)
-	select ''Drive '' + driveLetter + '' is down to '' + convert(varchar(100), freeSpace) + ''mb free.'',
+	select 'Drive ' + driveLetter + ' is down to ' + convert(varchar(100), freeSpace) + 'mb free.',
 		1 as severity,
-		''Drive '' + driveLetter + '' is down to '' + convert(varchar(100), freeSpace) + ''mb free.'' as subject,
+		'Drive ' + driveLetter + ' is down to ' + convert(varchar(100), freeSpace) + 'mb free.' as subject,
 		1 as isDriveSpace
 		from #drives
 		where freeSpace < @nLowSpaceThreshold
@@ -1531,19 +1571,19 @@ begin
 
 	truncate table #junkString
 
-	set @cSQLString = ''
-		create procedure '' + @cProcedureName + ''
+	set @cSQLString = '
+		create procedure ' + @cProcedureName + '
 		as
 		begin
 
-			if exists (select [name] from ['' + @cServerName + ''].master.dbo.sysdatabases where [name] = ''''distribution'''')
-				select ''''YES''''
+			if exists (select [name] from [' + @cServerName + '].master.dbo.sysdatabases where [name] = ''distribution'')
+				select ''YES''
 			else
-				select ''''NO''''
-		end''
+				select ''NO''
+		end'
 
 	if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
-		execute(''drop procedure '' + @cProcedureName)
+		execute('drop procedure ' + @cProcedureName)
 
 	if @bTesting = 1
 		print @cSQLString
@@ -1553,41 +1593,41 @@ begin
 	insert into #junkString (results)
 	EXECUTE(@cProcedureName)
 
-	if (select count(*) from #junkString where results = ''YES'') = 1
+	if (select count(*) from #junkString where results = 'YES') = 1
 	begin
 
-		set @cSQLString = ''
-			create procedure '' + @cProcedureName + ''
+		set @cSQLString = '
+			create procedure ' + @cProcedureName + '
 			as
 			begin
 
-				if exists (select [name] from ['' + @cServerName + ''].master.dbo.sysdatabases where [name] = ''''distribution'''')
+				if exists (select [name] from [' + @cServerName + '].master.dbo.sysdatabases where [name] = ''distribution'')
 				begin
 					select 1,
-						''''Replication error #'''' + isnull(convert(varchar(20), error_id), ''''N/A'''') + '''' occured at '''' + convert(varchar(20), [time], 120) as subject,
-						''''Replication error #'''' + isnull(convert(varchar(20), error_id), ''''N/A'''') + '''' occured at '''' + convert(varchar(20), [time], 120) + '''': '''' + char(13) +
-							''''Publication  : '''' + b.publication + char(13) +
-							''''Publisher DB : '''' + b.publisher_db + char(13) +
-							''''Subscrber DB : '''' + b.subscriber_db + char(13) +
-							''''Message      : '''' + isnull(comments, ''''N/A'''')
+						''Replication error #'' + isnull(convert(varchar(20), error_id), ''N/A'') + '' occured at '' + convert(varchar(20), [time], 120) as subject,
+						''Replication error #'' + isnull(convert(varchar(20), error_id), ''N/A'') + '' occured at '' + convert(varchar(20), [time], 120) + '': '' + char(13) +
+							''Publication  : '' + b.publication + char(13) +
+							''Publisher DB : '' + b.publisher_db + char(13) +
+							''Subscrber DB : '' + b.subscriber_db + char(13) +
+							''Message      : '' + isnull(comments, ''N/A'')
 							as message
-						from ['' + @cServerName + ''].distribution.dbo.msdistribution_history a
-						join ['' + @cServerName + ''].distribution.dbo.msdistribution_agents b on a.agent_id = b.id
+						from [' + @cServerName + '].distribution.dbo.msdistribution_history a
+						join [' + @cServerName + '].distribution.dbo.msdistribution_agents b on a.agent_id = b.id
 						where [time] >= dateAdd(hour, -1, getDate())
 							and error_id <> 0
 					union
 					select 1,
-						''''Replication error #'''' + isnull(convert(varchar(20), error_code), ''''N/A'''') + '''' occured at '''' + convert(varchar(20), [time], 120) as subject,
-						''''Replication error #'''' + isnull(convert(varchar(20), error_code), ''''N/A'''') + '''' occured at '''' + convert(varchar(20), [time], 120) + '''': '''' + char(13) + convert(varchar(1000), error_text) as message
-						from ['' + @cServerName + ''].distribution.dbo.msrepl_errors a
+						''Replication error #'' + isnull(convert(varchar(20), error_code), ''N/A'') + '' occured at '' + convert(varchar(20), [time], 120) as subject,
+						''Replication error #'' + isnull(convert(varchar(20), error_code), ''N/A'') + '' occured at '' + convert(varchar(20), [time], 120) + '': '' + char(13) + convert(varchar(1000), error_text) as message
+						from [' + @cServerName + '].distribution.dbo.msrepl_errors a
 						where [time] >= dateAdd(hour, -1, getDate())
 				end
-			end''
+			end'
 
-		insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, ''Replication errors'', @cSQLString, @nUkeyGroup)
+		insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Replication errors', @cSQLString, @nUkeyGroup)
 
 		if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
-			execute(''drop procedure '' + @cProcedureName)
+			execute('drop procedure ' + @cProcedureName)
 
 		if @bTesting = 1
 			print @cSQLString
@@ -1598,7 +1638,7 @@ begin
 		EXECUTE(@cProcedureName)
 	end
 	else
-		insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, ''No replication found'', @cSQLString, @nUkeyGroup)
+		insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'No replication found', @cSQLString, @nUkeyGroup)
 
 	--*********************************************************************************************************************
 	-- Log file size
@@ -1606,22 +1646,22 @@ begin
 
 	declare @cStringToAdd varchar(2000)
 
-	-- on the standby server we don''t have any control over the log size, so don''t bother telling me about it
-	-- and, let''s be honest, we don''t really care about this in off-hours
-	if charindex(''stby'', @cServerName) = 0
+	-- on the standby server we don't have any control over the log size, so don't bother telling me about it
+	-- and, let's be honest, we don't really care about this in off-hours
+	if charindex('stby', @cServerName) = 0
 	begin
 
 		declare @cThisDatabase varchar(100)
 		truncate table #databaseNames
 
-		set @cSQLString = ''
-			create procedure '' + @cProcedureName + ''
+		set @cSQLString = '
+			create procedure ' + @cProcedureName + '
 			as
 			begin
 				insert into #databaseNames
 				select [name]
-					from ['' + @cServerName + ''].master.dbo.sysdatabases
-					where [name] not in (''''master'''', ''''model'''', ''''msdb'''', ''''northwind'''')
+					from [' + @cServerName + '].master.dbo.sysdatabases
+					where [name] not in (''master'', ''model'', ''msdb'', ''northwind'')
 						and (
 							(status & 32) <> 32 -- loading
 							and (status & 64) <> 64 -- prerecovery
@@ -1629,79 +1669,79 @@ begin
 							and (status & 512) <> 512 -- offline
 							and (status & 4096) <> 4096 -- single user
 							)
-			end''
+			end'
 
 		if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
-			execute(''drop procedure '' + @cProcedureName)
+			execute('drop procedure ' + @cProcedureName)
 
-		insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, ''Log size: Database names'', @cSQLString, @nUkeyGroup)
+		insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Log size: Database names', @cSQLString, @nUkeyGroup)
 		exec sp_executeSQL @cSQLString
 
 		if @bTesting = 1
 			print @cSQLString
 		EXECUTE(@cProcedureName)
 
-		set @cSQLString = ''
-				create procedure '' + @cProcedureName + ''
+		set @cSQLString = '
+				create procedure ' + @cProcedureName + '
 				as
 				begin
 						insert into #fileSizes (dbname, objectName, fileName, size)
-				''
+				'
 
-		-- at times, especially on LS destination servers we hit a "in the middle of a restore" error, but there doesn''t
+		-- at times, especially on LS destination servers we hit a "in the middle of a restore" error, but there doesn't
 		-- seem to be a way to non-destructively lock a DB
-		set @cThisDatabase = ''''
+		set @cThisDatabase = ''
 		while exists (select top 1 * from #databaseNames where dbName > @cThisDatabase)
 		begin
 			select top 1 @cThisDatabase = dbName from #databaseNames where dbName > @cThisDatabase order by dbName
 
-			if @cSQLString = ''''
-				set @cSQLString = ''
-						create procedure '' + @cProcedureName + ''
+			if @cSQLString = ''
+				set @cSQLString = '
+						create procedure ' + @cProcedureName + '
 						as
 						begin
 								insert into #fileSizes (dbname, objectName, fileName, size)
-						''
+						'
 
-			set @cSQLString = @cSQLString + ''
-SELECT '''''' + @cThisDatabase + '''''', left(name, 100) collate SQL_Latin1_General_CP1_CI_AS , left(fileName, 100) collate SQL_Latin1_General_CP1_CI_AS , ([size]*8)/1024
-	FROM ['' + @cServerName + ''].['' + @cThisDatabase + ''].dbo.sysfiles
-union''
+			set @cSQLString = @cSQLString + '
+SELECT ''' + @cThisDatabase + ''', left(name, 100) collate SQL_Latin1_General_CP1_CI_AS , left(fileName, 100) collate SQL_Latin1_General_CP1_CI_AS , ([size]*8)/1024
+	FROM [' + @cServerName + '].[' + @cThisDatabase + '].dbo.sysfiles
+union'
 
 			if len(@cSQLString) > 3500
 			begin
-				if right(@cSQLString, 5) = ''union''
+				if right(@cSQLString, 5) = 'union'
 					set @cSQLString = left(@cSQLString, len(@cSQLString) - 5)
 
-				set @cSQLString = @cSQLString + ''
-		end''
+				set @cSQLString = @cSQLString + '
+		end'
 
 				if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
-					execute(''drop procedure '' + @cProcedureName)
+					execute('drop procedure ' + @cProcedureName)
 
-				insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, ''Log size: File sizes'', @cSQLString, @nUkeyGroup)
+				insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Log size: File sizes', @cSQLString, @nUkeyGroup)
 
 				exec sp_executeSQL @cSQLString
 				if @bTesting = 1
 					print @cSQLString
 				EXECUTE(@cProcedureName)
 
-				set @cSQLString = ''''
+				set @cSQLString = ''
 			end
 		end
 
-		if @cSQLString <> ''''
+		if @cSQLString <> ''
 		begin
-			if right(@cSQLString, 5) = ''union''
+			if right(@cSQLString, 5) = 'union'
 				set @cSQLString = left(@cSQLString, len(@cSQLString) - 5)
 
-			set @cSQLString = @cSQLString + ''
-	end''
+			set @cSQLString = @cSQLString + '
+	end'
 
 			if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
-				execute(''drop procedure '' + @cProcedureName)
+				execute('drop procedure ' + @cProcedureName)
 
-			insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, ''Log size: File sizes'', @cSQLString, @nUkeyGroup)
+			insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Log size: File sizes', @cSQLString, @nUkeyGroup)
 
 			exec sp_executeSQL @cSQLString
 			if @bTesting = 1
@@ -1711,21 +1751,21 @@ union''
 
 		update #fileSizes
 			set isLog = 1
-			where objectName like ''%.ldf%'' or fileName like ''%.ldf%''
+			where objectName like '%.ldf%' or fileName like '%.ldf%'
 
 		insert into databaseFileSizeLog (serverName, dbname, objectname, [fileName], [size], isLog)
 		select @cServername, dbName, objectName, [fileName], [size], isLog
 			from #fileSizes
 
 		insert into #results (message, severity, subject, isLogSize)
-		select ''Database '' + isnull(rtrim(dbName), '''' ) + '' '' +
-				''log file size ('' + convert(varchar(20), logSize) + ''mb) '' +
-				''has grown beyond the data file size ('' + convert(varchar(20), dataSize) + ''mb)'',
+		select 'Database ' + isnull(rtrim(dbName), '' ) + ' ' +
+				'log file size (' + convert(varchar(20), logSize) + 'mb) ' +
+				'has grown beyond the data file size (' + convert(varchar(20), dataSize) + 'mb)',
 			2 as severity,
-			''Log file size in '' + isnull(rtrim(dbName), '''' ) + ''.'',
+			'Log file size in ' + isnull(rtrim(dbName), '' ) + '.',
 			1 as isLogSize
 			from (
-				select isnull(dbName, ''N/A'') as dbName,
+				select isnull(dbName, 'N/A') as dbName,
 					convert(decimal(10,2), sum(case when isLog = 0 then size else 0 end)) as dataSize,
 					convert(decimal(10,2), sum(case when isLog = 1 then size else 0 end)) as logSize
 					from #fileSizes
@@ -1736,11 +1776,11 @@ union''
 
 		-- for MSDE, watch the 2gb file size limit
 		insert into #results (message, severity, subject, isLogSize)
-		select ''Database '' + isnull(rtrim(dbName), '''' ) + '' '' +
-				''size ('' + convert(varchar(20), totalSize) + ''mb) '' +
-				''is about to reach the MSDE cap of 2000mb.'',
+		select 'Database ' + isnull(rtrim(dbName), '' ) + ' ' +
+				'size (' + convert(varchar(20), totalSize) + 'mb) ' +
+				'is about to reach the MSDE cap of 2000mb.',
 			1 as severity,
-			''Database '' + isnull(rtrim(dbName), '''' ) + '' is about to reach MSDE limits.'',
+			'Database ' + isnull(rtrim(dbName), '' ) + ' is about to reach MSDE limits.',
 			1 as isLogSize
 			from (
 				select dbName,
@@ -1750,7 +1790,7 @@ union''
 					group by dbname
 				) a
 			where totalSize >= 1800
-				and @cVersion like ''%desktop engine%''
+				and @cVersion like '%desktop engine%'
 
 	end
 
@@ -1758,7 +1798,7 @@ union''
 	-- Send output to the notification system
 	--*********************************************************************************************************************
 
-	insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, ''Calculating results'', '''', @nUkeyGroup)
+	insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Calculating results', '', @nUkeyGroup)
 
 	-- automatically deprioritize all issues from test boxen
 	insert into notificationLog_stage (message, severity, subject,
@@ -1794,128 +1834,8 @@ union''
 	drop table #orphanedUsers
 
 	if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
-		execute(''drop procedure '' + @cProcedureName)
+		execute('drop procedure ' + @cProcedureName)
 end
 -- select top 100 * from notificationLog order by ukey desc
 -- select top 100 * from notificationLog_history order by ukey desc
 -- delete from notificationLog where ukey >= 50239
-
-
-
-
-'
-END
-GO
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[pr_checkDisabledServers]') AND type in (N'P', N'PC'))
-BEGIN
-EXEC dbo.sp_executesql @statement = N'CREATE procedure [pr_checkDisabledServers]
-as
-begin
-	declare @cServerName varchar(100)
-
-	set @cServerName = ''''
-
-	-- servers that have gone offline need to be disabled
-	update dm_servers with (rowlock)
-		set isEnabled = 0
-		from dm_servers a
-		join (
-			select serverName,
-				sum(case when isServerPingable = 1 then 1 else 0 end) as pingable,
-				sum(case when isServerPingable = 0 then 1 else 0 end) as notpingable
-				from pingLog (nolock)
-				where ymd > dateAdd(minute, -15, getDate())
-				group by serverName
-			) b on a.serverName = b.serverName
-		where a.isServerPingable = 0
-			and a.pingCheck = 1
-			and a.isEnabled = 1
-			and b.pingable = 0
-			and b.notpingable > 0
-
-	-- and offline servers need to be ping checked periodically to see if they''re back online
-	while exists (select top 1 serverName from dm_servers where isEnabled = 0 and serverName > @cServerName)
-	begin
-		select top 1 @cServerName = serverName
-			from dm_servers
-			where isEnabled = 0
-				and serverName > @cServerName
-			order by serverName
-
-		exec pr_pingServer @cServerName
-	end
-end
-'
-END
-GO
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[pr_pingSoloServers]') AND type in (N'P', N'PC'))
-BEGIN
-EXEC dbo.sp_executesql @statement = N'CREATE    procedure [pr_pingSoloServers] (@nGroupToCheck int)
-as
-begin
-	set nocount on
-
-	declare @cServerName varchar(200)
-	declare @cSQLString nvarchar(2000)
-	declare @cSubject varchar(200)
-	declare @cMessage varchar(200)
-	declare @dLastCheck dateTime
-	declare @dMinutesSinceLastCheck int
-	declare @bSkipNextRun bit
-	declare @nReturnStatus int
-
-	set @cServerName = ''''
-
-	while exists (
-		select top 1 *
-			from dm_servers (nolock)
-			where
-				servername > @cServerName
-				and isEnabled = 1
-				and pingCheck = 1
-				and (lastPingCheck is null or dateDiff(minute, lastPingCheck, getDate()) > isnull(pingCheckMinuteInterval, 5))
-				and ukey_group = @nGroupToCheck
---				and detailedCheck = 0
-		)
-	begin
-
-		select top 1
-			@cServerName = serverName,
-			@dLastCheck = isnull(lastPingCheck, dateAdd(hour, -24, getDate())),
-			@bSkipNextRun = skipNextRun
-			from dm_servers  (nolock)
-			where
-				servername > @cServerName
-				and isEnabled = 1
-				and pingCheck = 1
-				and (lastPingCheck is null or dateDiff(minute, lastPingCheck, getDate()) > isnull(pingCheckMinuteInterval, 5))
-				and ukey_group = @nGroupToCheck
---				and detailedCheck = 0
-
-			order by serverName
-
-		if isnull(@bSkipNextRun, 0) = 0
-			exec @nReturnStatus = pr_pingServer @cServerName
-		else
-			update dm_servers with (rowlock)
-				set skipNextRun = 0
-				where serverName = @cServerName
-					and isEnabled = 1
-
-	end
-end
-'
-END
-GO
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
