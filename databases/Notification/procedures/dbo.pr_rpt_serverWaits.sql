@@ -1,8 +1,3 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
--- exec pr_rpt_serverWaits 'funmssql02', null, null
 ALTER procedure [dbo].[pr_rpt_serverWaits] (@cServerName varchar(100), @dStartDate dateTime, @dEndDate dateTime)
 as
 begin
@@ -26,9 +21,8 @@ begin
 		)
 	set @dLatestRun_cpuScheduler = (
 		select max(ymd)
-			from deepSQLStats (nolock)
+			from deepSQLStats_cputasks (nolock)
 			where serverName = @cServerName
-				and keyName = 'CPU Scheduler'
 				and ymd >= @dStartDate
 				and ymd <= @dEndDate
 		)
@@ -39,13 +33,14 @@ begin
 			and keyName = 'Wait Statistics'
 			and ymd = @dLatestRun_waitStats
 	union
-	select 'CPU ' + subkeyName as subkeyName, keyValue, ymd
-		from deepSQLStats (nolock)
+	select 'CPU ' + convert(varchar(20), cpuNumber) as subkeyName, numTasksWaiting, ymd
+		from deepSQLStats_cputasks (nolock)
 		where serverName = @cServerName
-			and keyName = 'CPU Scheduler'
 			and ymd = @dLatestRun_cpuScheduler
 		order by subkeyName
 
 
 
 end
+
+go

@@ -1,15 +1,17 @@
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[pr_graph_connectionsByHour]') AND type in (N'P', N'PC'))
-BEGIN
-EXEC dbo.sp_executesql @statement = N'-- exec pr_graph_connectionsByHour ''sqlcluster01''
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- exec pr_graph_connectionsByHour 'spiderxps\sqlbeat'
 
-CREATE procedure [pr_graph_connectionsByHour] (@cServerName varchar(100))
+ALTER procedure [dbo].[pr_graph_connectionsByHour] (@cServerName varchar(100))
 as
 begin
 	if @cServerName is null
 		return
 
 	select
-		convert(varchar(2), case when ymd_hour >= 13 then ymd_hour - 12 else ymd_hour end) + case when ymd_hour >= 13 then ''p'' else ''a'' end as axis_x,
+		convert(varchar(2), case when ymd_hour >= 13 then ymd_hour - 12 else ymd_hour end) + case when ymd_hour >= 13 then 'p' else 'a' end as axis_x,
 		convert(decimal(10,2), convert(decimal(10,2), activeConnections) / convert(decimal(10,2), numPolls)) as axis_y
 		into #dataValues
 		from (
@@ -17,7 +19,7 @@ begin
 				datePart(day, ymd) as ymd_day, datePart(hour, ymd) as ymd_hour,
 				count(distinct ymd) as numPolls,
 				count(*) as totalConnections,
-				sum(case when command <> ''awaiting command'' then 1 else 0 end) as activeConnections
+				sum(case when command <> 'awaiting command' then 1 else 0 end) as activeConnections
 				from processLog (nolock)
 				where serverName = @cServerName
 					and ymd >= dateAdd(hour, -24, getDate())
@@ -26,6 +28,11 @@ begin
 
 		order by ymd_day, ymd_hour
 
+	if @@rowcount = 0
+	begin
+		select '' as graphURL
+		return
+	end
 
 	--************************************************************************************
 	-- generate the google charts request string based on #dataValues
@@ -38,16 +45,16 @@ begin
 
 	set @nAxisMax_y = ( select isnull(max(axis_y), 0) from #dataValues )
 
-	set @cURLString = ''http://chart.apis.google.com/chart?chs=809x350&chd=t:''
+	set @cURLString = 'http://chart.apis.google.com/chart?chs=809x350&chd=t:'
 
-	set @cDatapoints = ''''
-	set @cAxisLabels_x = ''''
+	set @cDatapoints = ''
+	set @cAxisLabels_x = ''
 
-	select @cDataPoints = @cDataPoints + convert(varchar(20), convert(decimal(10,1), (axis_y / @nAxisMax_y) * 100.00)) + '',''
+	select @cDataPoints = @cDataPoints + convert(varchar(20), convert(decimal(10,1), (axis_y / @nAxisMax_y) * 100.00)) + ','
 		from #dataValues
 --		order by axis_x
 
-	select @cAxisLabels_x = @cAxisLabels_x + axis_x + ''|''
+	select @cAxisLabels_x = @cAxisLabels_x + axis_x + '|'
 		from #dataValues
 --		order by axis_x
 
@@ -58,30 +65,23 @@ begin
 
 	set @cURLString = @cURLString +
 
-		''&cht=lc'' + -- line chart
---		''&chxl=0:|'' + @cAxisLabels + -- defining X axis labels as time of day
-		''&chxt=x,y'' + -- showing X and Y axis
-		''&chco=ff0000,00ff00,0000ff,CCCCCC'' + -- showing in these colors
-		''&chxl=0:|'' + @cAxisLabels_x +  -- x axis ranges
-			''|'' + ''1:|0|'' +
-				convert(varchar(20), case when @nAxisMax_y >= 5 then convert(bigint, @nAxisMax_y*.25) else convert(decimal(10,1), @nAxisMax_y*.25) end) + ''|'' +
-				convert(varchar(20), case when @nAxisMax_y >= 5 then convert(bigint, @nAxisMax_y*.50) else convert(decimal(10,1), @nAxisMax_y*.50) end) + ''|'' +
-				convert(varchar(20), case when @nAxisMax_y >= 5 then convert(bigint, @nAxisMax_y*.75) else convert(decimal(10,1), @nAxisMax_y*.75) end) + ''|'' +
+		'&cht=lc' + -- line chart
+--		'&chxl=0:|' + @cAxisLabels + -- defining X axis labels as time of day
+		'&chxt=x,y' + -- showing X and Y axis
+		'&chco=ff0000,00ff00,0000ff,CCCCCC' + -- showing in these colors
+		'&chxl=0:|' + @cAxisLabels_x +  -- x axis ranges
+			'|' + '1:|0|' +
+				convert(varchar(20), case when @nAxisMax_y >= 5 then convert(bigint, @nAxisMax_y*.25) else convert(decimal(10,1), @nAxisMax_y*.25) end) + '|' +
+				convert(varchar(20), case when @nAxisMax_y >= 5 then convert(bigint, @nAxisMax_y*.50) else convert(decimal(10,1), @nAxisMax_y*.50) end) + '|' +
+				convert(varchar(20), case when @nAxisMax_y >= 5 then convert(bigint, @nAxisMax_y*.75) else convert(decimal(10,1), @nAxisMax_y*.75) end) + '|' +
 				convert(varchar(20), case when @nAxisMax_y >= 5 then convert(bigint, @nAxisMax_y) else convert(decimal(10,1), @nAxisMax_y) end) + -- y axis ranges
 
---		''&cht=p3'' + -- 3d pie chart
---		''&chl='' + @cAxisLabels + -- with these wedge names
+--		'&cht=p3' + -- 3d pie chart
+--		'&chl=' + @cAxisLabels + -- with these wedge names
 
-		''&chtt=Active Connections ('' + @cServerName + '')'' -- with this title
+		'&chtt=Active Connections (' + @cServerName + ')' -- with this title
 
 	select @cURLString as graphURL
 
 	drop table #dataValues
 end
-'
-END
-GO
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
