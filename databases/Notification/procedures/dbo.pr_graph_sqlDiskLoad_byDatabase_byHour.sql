@@ -28,14 +28,18 @@ begin
 		max(diskIO) - min(diskIO) as diskIO_delta,
 		convert(dateTime, null) as prevBatchTime
 		into #activity
-		from notification.dbo.processLog (nolock)
-		where serverName = @cServerName
-			and ymd >= @dStartDate
-			and lastBatchTime >= @dStartDate
-			and hostname <> convert(varchar(100), @@serverName)
-			and lastBatchTime is not null
-			and spid >= 50
-			and ymd < convert(varchar(13), getDate(), 120) + ':00:00.000'
+		from (
+			select spid, hostname, dbname, programName, login_time, ymd, lastBatchTime, max(cpuTime) as cpuTime, max(diskIO) as diskIO
+				from notification.dbo.processLog (nolock)
+				where serverName = @cServerName
+					and ymd >= @dStartDate
+					and lastBatchTime >= @dStartDate
+					and hostname <> convert(varchar(100), @@serverName)
+					and lastBatchTime is not null
+					and spid >= 50
+					and ymd < convert(varchar(13), getDate(), 120) + ':00:00.000'
+				group by spid, hostname, dbname, programName, login_time, ymd, lastBatchTime
+			) a
 		group by spid, hostname, programName, login_time, lastBatchTime, dbName
 
 	if @@rowcount = 0
