@@ -1,9 +1,14 @@
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[pr_processStagedData]') AND type in (N'P', N'PC'))
-BEGIN
-EXEC dbo.sp_executesql @statement = N'--alter table runs_stage add ukey_group int
+USE [Configuration]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_processStagedData]    Script Date: 06/18/2008 08:42:33 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+--alter table runs_stage add ukey_group int
 --alter table runs_log add ukey_group int
 --GO
-CREATE procedure [pr_processStagedData] (@nUkeyGroup int)
+ALTER procedure [dbo].[pr_processStagedData] (@nUkeyGroup int)
 as
 begin
 	declare @nUkeyRun bigint
@@ -31,7 +36,7 @@ begin
 		from runs_stage a (nolock)
 		join notification.dbo.dm_servers b (nolock) on a.serverName = b.serverName
 			and b.ukey_group = @nUkeyGroup
-		left outer join dm_counters c (nolock) on a.counterName = c.objectName + ''.'' + c.counterName
+		left outer join dm_counters c (nolock) on a.counterName = c.objectName + '.' + c.counterName
 		left outer join dm_keyNames d (nolock) on a.keyName = d.keyName
 		where a.ukey_group = @nUkeyGroup
 		order by a.ukey
@@ -49,9 +54,9 @@ begin
 		from notification.dbo.dm_servers a
 		join runs_log b (nolock) on a.serverName = b.serverName
 			and b.ymd >= @dRunStart
-			and b.message like ''%error%''
-			and b.message like ''%connecting to wmi%''
-			and b.message not like ''%row handle%''
+			and b.message like '%error%'
+			and b.message like '%connecting to wmi%'
+			and b.message not like '%row handle%'
 			and b.ukey_group = @nUkeyGroup
 		where a.ukey_group = @nUkeyGroup
 
@@ -60,22 +65,15 @@ begin
 		a.serverName,
 		1 as isConnectivity,
 		2 as severity,
-		''Unable to connect to '' + isnull(a.serverName, '''') + '' using WMI at '' + convert(varchar(20), max(a.ymd), 120) + ''.'' as subject,
-		isnull(max(a.message), '''') + char(13) + char(13) +
-			''Future connections using WMI are DISABLED.''
+		'Unable to connect to ' + isnull(a.serverName, '') + ' using WMI at ' + convert(varchar(20), max(a.ymd), 120) + '.' as subject,
+		isnull(max(a.message), '') + char(13) + char(13) +
+			'Future connections using WMI are DISABLED.'
 		from runs_log a (nolock)
 		where a.ymd >= @dRunStart
-			and a.message like ''%error%''
-			and a.message like ''%connecting to wmi%''
-			and a.message not like ''%row handle%''
---			and a.message not like ''%runtime error%''
+			and a.message like '%error%'
+			and a.message like '%connecting to wmi%'
+			and a.message not like '%row handle%'
+--			and a.message not like '%runtime error%'
 			and a.ukey_group = @nUkeyGroup
 		group by a.serverName
 end
-'
-END
-GO
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO

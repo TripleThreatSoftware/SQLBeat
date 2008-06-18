@@ -1,5 +1,5 @@
 -- exec pr_rpt_sqlDiskWaiting 'spiderxps', '', ''
-create procedure pr_rpt_sqlDiskWaiting (@cServerName varchar(100), @dStartDate dateTime, @dEndDate dateTime)
+ALTER procedure [dbo].[pr_rpt_sqlDiskWaiting] (@cServerName varchar(100), @dStartDate dateTime, @dEndDate dateTime)
 as
 begin
 --	declare @cServerName varchar(100)
@@ -12,12 +12,12 @@ begin
 
 	set nocount on
 
-	select ymd,
+	select serverName, ymd,
 		substring(subKeyName, 18, 100) as dbname,
 		keyValue
 		from deepSQLStats (nolock)
 		where subkeyName like '%disk io waiting%'
-			and serverName = @cServername
+			and (serverName = @cServername or isnull(@cServerName, '') = '')
 			and ymd >= @dStartDate
 			and ymd <= @dEndDate
 		order by ymd desc, dbname
