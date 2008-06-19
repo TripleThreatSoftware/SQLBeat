@@ -1,6 +1,3 @@
-USE [Notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_monitorBigBrother]    Script Date: 06/18/2008 15:04:20 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -642,9 +639,9 @@ begin
 				exec sp_executeSQL @cSQLString
 
 				insert into #results (message, severity, subject, isLongRunningJob) values (
-					'Job [' + @cThisJob + '] running as SPID ' + convert(varchar(20), @nThisSPID) + ' killed.',
-					2,
 					'Job [' + @cThisJob + '] running as SPID ' + convert(varchar(20), @nThisSPID) + ' killed at ' + convert(varchar(19), getDate(), 120) + '.',
+					2,
+					'Job [' + @cThisJob + '] running as SPID ' + convert(varchar(20), @nThisSPID) + ' killed.',
 					1)
 			end
 			else

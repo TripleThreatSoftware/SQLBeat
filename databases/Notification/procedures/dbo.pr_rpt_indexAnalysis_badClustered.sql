@@ -1,12 +1,14 @@
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[pr_rpt_indexAnalysis_badClustered]') AND type in (N'P', N'PC'))
-BEGIN
-EXEC dbo.sp_executesql @statement = N'-- exec pr_rpt_indexAnalysis ''funmssql02'', null, null
-CREATE procedure [pr_rpt_indexAnalysis_badClustered] (@cServerName varchar(100), @dStartDate dateTime, @dEndDate dateTime)
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- exec pr_rpt_indexAnalysis 'funmssql02', null, null
+ALTER procedure [dbo].[pr_rpt_indexAnalysis_badClustered] (@cServerName varchar(100), @dStartDate dateTime, @dEndDate dateTime)
 as
 begin
 
 --	declare @cServerName varchar(100)
---	set @cServerName = ''funmssql02''
+--	set @cServerName = 'funmssql02'
 
 	set @dStartDate = isnull(@dStartDate, dateAdd(week, -1, getDate()))
 	set @dEndDate = isnull(@dEndDate, getDate())
@@ -16,22 +18,27 @@ begin
 		select max(ymd)
 			from deepSQLStats (nolock)
 			where serverName = @cServerName
-				and subkeyName = ''Nonclustered used more than clustered''
+				and subkeyName = 'Nonclustered used more than clustered'
 				and ymd >= @dStartDate
 				and ymd <= @dEndDate
 		)
 
-	select keyValue, ymd
-		from deepSQLStats (nolock)
-		where serverName = @cServerName
-			and subkeyName = ''Nonclustered used more than clustered''
-			and ymd = @dLatestRun
 
+	select
+		serverName, ymd,
+
+		dbo.fn_returnListItem(dbo.fn_returnListItem(keyValue, 5, space(1)), 1, '.') as databaseName,
+		dbo.fn_returnListItem(dbo.fn_returnListItem(keyValue, 5, space(1)), 2, '.') as tableName,
+
+		dbo.fn_returnListItem(keyValue, 3, space(1)) as indexNumber,
+		convert(bigint, dbo.fn_returnListItem(keyValue, 25, space(1))) as nonClusteredIndexSeeks,
+		convert(bigint, dbo.fn_returnDigits(right(keyValue, charindex('.', substring(reverse(keyValue), 3, 100))), 0)) as clusteredIndexSeeks
+
+		from deepSQLStats (nolock)
+		where subkeyName = 'Nonclustered used more than clustered'
+			and ymd = @dLatestRun
+			and serverName = @cServerName
+			and isnumeric(dbo.fn_returnListItem(keyValue, 25, space(1))) = 1
+
+		order by databaseName, tableName, indexNumber
 end
-'
-END
-GO
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO

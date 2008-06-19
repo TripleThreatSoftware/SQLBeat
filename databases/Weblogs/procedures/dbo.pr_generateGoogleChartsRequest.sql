@@ -1,9 +1,4 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-
-ALTER procedure [dbo].[pr_generateGoogleChartsRequest] (@nWidth int, @nHeight int, @bRelativeToTotal bit = 0)
+ALTER procedure [dbo].[pr_generateGoogleChartsRequest] (@nWidth int, @nHeight int, @bRelativeToTotal bit = 0, @bAbsoluteYAxis bit = 0)
 as
 begin
 
@@ -26,6 +21,7 @@ begin
 	declare @nAvgValue decimal(20,6)
 	declare @cSeriesName varchar(200)
 	declare @cSetName varchar(200)
+	declare @nMaxSeriesValue decimal(20,6)
 
 	set @cURLString = 'http://chart.apis.google.com/chart?chs=' + convert(varchar(20), @nWidth) + 'x' + convert(varchar(20), @nHeight) + '&chd=t:'
 
@@ -33,6 +29,8 @@ begin
 	set @cDatapoints = ''
 	set @cLegend = ''
 	set @cAxisLabels_x = ''
+
+	set @nMaxSeriesValue = (select max(axis_y) from #dataValues)
 
 	while exists (select top 1 seriesName from #dataValues where seriesName > @cSeriesName)
 	begin
@@ -46,7 +44,7 @@ begin
 			set @nAvgValue = (select avg(axis_y) from #dataValues where seriesName = @cSeriesName)
 			set @nMaxValue = (select max(axis_y) from #dataValues where seriesName = @cSeriesName)
 
-			if @nMaxValue > @nAvgValue * 10
+			if @nMaxValue > @nAvgValue * 10 and @bAbsoluteYAxis = 0
 			begin
 				set @nMaxValue = @nAvgValue * 10
 
@@ -101,19 +99,20 @@ begin
 
 			print '   Working on set: ' + @cSetName
 
-			if (select count(distinct seriesName) from #dataValues) = 1
+--			if (select count(distinct seriesName) from #dataValues) = 1
 				set @cLegend = @cLegend + @cSetName + '|'
-			else
-				set @cLegend = @cLegend + @cSeriesName + '-' + @cSetName + '|'
+--			else
+--				set @cLegend = @cLegend + @cSeriesName + '-' + @cSetName + '|'
 
 			select @cDataPoints = @cDataPoints +
-				convert(varchar(20), convert(decimal(10,1), isnull(axis_y/@nMaxValue, 0)*100)) + ','
+				convert(varchar(20), convert(decimal(10,1),  isnull(axis_y/@nMaxValue, 0)*100)) + ','
 				from #dataValues
 				where seriesName = @cSeriesName
 					and setName = @cSetName
 				order by sortOrder
 
-			set @cDataPoints = left(@cDataPoints, len(@cDataPoints) - 1) + '|'
+			if len(@cDataPoints) > 0
+				set @cDataPoints = left(@cDataPoints, len(@cDataPoints) - 1) + '|'
 		end
 	end
 
@@ -133,11 +132,15 @@ begin
 	set @cURLString = @cURLString +
 
 		'&cht=lc' + -- line chart
-		'&chdl=' + @cLegend + -- legend
+		case when (select count(distinct setName) from #dataValues) = 1 then '' else '&chdl=' + @cLegend end + -- legend
 		'&chxt=x,y' + -- showing X and Y axis
 		'&chco=ff0000,00ff00,0000ff,CCCCCC,ccff00,ff7e00,00f6ff,e4ff00,f600ff' + -- showing in these colors
-		'&chxr=1,0,100' + --convert(varchar(20), convert(int, ceiling(100*(@nMaxSeriesValue / @nMaxvalue)))) +
-		'&chxl=0:|' + @cAxisLabels_x  -- x axis ranges
+		'&chxr=1,0,' +
+			case when @bAbsoluteYAxis <> 0
+				then convert(varchar(20), @nMaxSeriesValue)
+				else '100'
+				end +
+		'&chxl=0:|' + @cAxisLabels_x   -- x axis ranges
 
 	select @cURLString as graphURL
 
