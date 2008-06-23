@@ -1,3 +1,9 @@
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
 ALTER procedure [dbo].[pr_generateGoogleChartsRequest] (@nWidth int, @nHeight int, @bRelativeToTotal bit = 0, @bAbsoluteYAxis bit = 0)
 as
 begin
@@ -22,6 +28,8 @@ begin
 	declare @cSeriesName varchar(200)
 	declare @cSetName varchar(200)
 	declare @nMaxSeriesValue decimal(20,6)
+	declare @nMinSeriesValue decimal(20,6)
+	declare @nNumDataPoints decimal(10,2)
 
 	set @cURLString = 'http://chart.apis.google.com/chart?chs=' + convert(varchar(20), @nWidth) + 'x' + convert(varchar(20), @nHeight) + '&chd=t:'
 
@@ -31,6 +39,7 @@ begin
 	set @cAxisLabels_x = ''
 
 	set @nMaxSeriesValue = (select max(axis_y) from #dataValues)
+	set @nMinSeriesValue = (select min(axis_y) from #dataValues)
 
 	while exists (select top 1 seriesName from #dataValues where seriesName > @cSeriesName)
 	begin
@@ -39,12 +48,20 @@ begin
 			where seriesName > @cSeriesName
 			order by seriesName
 
-		if @bRelativeToTotal = 0
+		if @bAbsoluteYAxis = 1
+		begin
+			set @nAvgValue = (select avg(axis_y) from #dataValues)
+			set @nMaxValue = (select max(axis_y) from #dataValues)
+		end
+		else
 		begin
 			set @nAvgValue = (select avg(axis_y) from #dataValues where seriesName = @cSeriesName)
 			set @nMaxValue = (select max(axis_y) from #dataValues where seriesName = @cSeriesName)
+		end
 
-			if @nMaxValue > @nAvgValue * 10 and @bAbsoluteYAxis = 0
+		if @bRelativeToTotal = 0
+		begin
+			if @nMaxValue > @nAvgValue * 10
 			begin
 				set @nMaxValue = @nAvgValue * 10
 
@@ -68,6 +85,7 @@ begin
 		end
 		else
 		begin
+			-- in this case we're representing each data point as a portion of a pie. So, if we have three points at 10 for a given X, they'd each display at 1/3rd
 			set @nMaxValue = (select max(axis_y) from (select axis_x, sum(axis_y) as axis_y from #dataValues where seriesName = @cSeriesName group by axis_x) a)
 			set @nAvgValue = (select avg(axis_y) from (select axis_x, sum(axis_y) as axis_y from #dataValues where seriesName = @cSeriesName group by axis_x) a)
 
@@ -99,33 +117,82 @@ begin
 
 			print '   Working on set: ' + @cSetName
 
---			if (select count(distinct seriesName) from #dataValues) = 1
+			if (select count(distinct seriesName) from #dataValues) = 1 or @cSeriesName = @cSetName
 				set @cLegend = @cLegend + @cSetName + '|'
---			else
---				set @cLegend = @cLegend + @cSeriesName + '-' + @cSetName + '|'
+			else
+				set @cLegend = @cLegend + @cSeriesName + '-' + @cSetName + '|'
 
-			select @cDataPoints = @cDataPoints +
-				convert(varchar(20), convert(decimal(10,1),  isnull(axis_y/@nMaxValue, 0)*100)) + ','
-				from #dataValues
-				where seriesName = @cSeriesName
-					and setName = @cSetName
-				order by sortOrder
+			if @bAbsoluteYAxis = 0
+				select @cDataPoints = @cDataPoints +
+					convert(varchar(20), convert(decimal(10,1),  isnull(axis_y/@nMaxValue, 0)*100)) + ','
+					from #dataValues
+					where seriesName = @cSeriesName
+						and setName = @cSetName
+					order by sortOrder
+			else
+				select @cDataPoints = @cDataPoints +
+					convert(varchar(20), convert(decimal(10,1),  isnull((axis_y - @nMinSeriesValue)/(@nMaxValue - @nMinSeriesValue), 0)*100)) + ','
+					from #dataValues
+					where seriesName = @cSeriesName
+						and setName = @cSetName
+					order by sortOrder
 
 			if len(@cDataPoints) > 0
 				set @cDataPoints = left(@cDataPoints, len(@cDataPoints) - 1) + '|'
 		end
 	end
 
-	-- take the labels from the last set we looked at
-	select @cAxisLabels_x = @cAxisLabels_x + axis_x + '|'
+	select top 1
+		@cSeriesName = seriesName,
+		@cSetName = setName
+		from #dataValues
+		group by seriesName, setName
+		order by count(*) desc
+
+	select axis_x, identity(int) as ukey
+		into #xAxis
 		from #dataValues
 		where seriesName = @cSeriesName
-			and setName = @cSetname
+			and setName = @cSetName
 		order by sortOrder
 
-	set @cLegend = left(@cLegend, len(@cLegend) - 1)
-	set @cDataPoints = left(@cDataPoints, len(@cDataPoints) - 1)
-	set @cAxisLabels_x = left(@cAxisLabels_x, len(@cAxisLabels_x) - 1)
+	set @nNumDataPoints = @@rowcount
+
+	-- take the labels from the last set we looked at
+	if @nNumDataPoints > 15
+		select @cAxisLabels_x = @cAxisLabels_x + axis_x + '|'
+			from #xAxis
+			where  (
+					ukey = 1
+					or ukey = floor(@nNumDataPoints * (2.00/15.00))
+					or ukey = floor(@nNumDataPoints * (3.00/15.00))
+					or ukey = floor(@nNumDataPoints * (4.00/15.00))
+					or ukey = floor(@nNumDataPoints * (5.00/15.00))
+					or ukey = floor(@nNumDataPoints * (6.00/15.00))
+					or ukey = floor(@nNumDataPoints * (7.00/15.00))
+					or ukey = floor(@nNumDataPoints * (8.00/15.00))
+					or ukey = floor(@nNumDataPoints * (9.00/15.00))
+					or ukey = floor(@nNumDataPoints * (10.00/15.00))
+					or ukey = floor(@nNumDataPoints * (11.00/15.00))
+					or ukey = floor(@nNumDataPoints * (12.00/15.00))
+					or ukey = floor(@nNumDataPoints * (13.00/15.00))
+					or ukey = floor(@nNumDataPoints * (14.00/15.00))
+					or ukey = @nNumDataPoints
+					)
+			order by ukey
+	else
+		select @cAxisLabels_x = @cAxisLabels_x + axis_x + '|'
+			from #xAxis
+			order by ukey
+
+	if len(@cLegend) > 0
+		set @cLegend = left(@cLegend, len(@cLegend) - 1)
+
+	if len(@cDataPoints) > 0
+		set @cDataPoints = left(@cDataPoints, len(@cDataPoints) - 1)
+
+	if len(@cAxisLabels_x) > 0
+		set @cAxisLabels_x = left(@cAxisLabels_x, len(@cAxisLabels_x) - 1)
 
 	set @cURLString = @cURLString + @cDatapoints
 
@@ -135,7 +202,11 @@ begin
 		case when (select count(distinct setName) from #dataValues) = 1 then '' else '&chdl=' + @cLegend end + -- legend
 		'&chxt=x,y' + -- showing X and Y axis
 		'&chco=ff0000,00ff00,0000ff,CCCCCC,ccff00,ff7e00,00f6ff,e4ff00,f600ff' + -- showing in these colors
-		'&chxr=1,0,' +
+		'&chxr=1,' +
+			case when @bAbsoluteYAxis = 1
+				then convert(varchar(20), @nMinSeriesValue)
+				else '0'
+				end + ',' +
 			case when @bAbsoluteYAxis <> 0
 				then convert(varchar(20), @nMaxSeriesValue)
 				else '100'
@@ -144,4 +215,5 @@ begin
 
 	select @cURLString as graphURL
 
+	drop table #xAxis
 end
