@@ -1,3 +1,8 @@
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
 ALTER procedure [dbo].[pr_rpt_serverWaits] (@cServerName varchar(100), @dStartDate dateTime, @dEndDate dateTime)
 as
 begin
@@ -33,7 +38,7 @@ begin
 			and keyName = 'Wait Statistics'
 			and ymd = @dLatestRun_waitStats
 	union
-	select 'CPU ' + convert(varchar(20), cpuNumber) as subkeyName, numTasksWaiting, ymd
+	select 'CPU ' + convert(varchar(20), cpuNumber) as subkeyName, convert(varchar(20), numTasksWaiting) + ' tasks waiting', ymd
 		from deepSQLStats_cputasks (nolock)
 		where serverName = @cServerName
 			and ymd = @dLatestRun_cpuScheduler
@@ -42,5 +47,3 @@ begin
 
 
 end
-
-go

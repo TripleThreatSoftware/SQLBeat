@@ -20,6 +20,7 @@ begin
 	declare @cMACAddress varchar(100)
 	declare @cProcedureName varchar(100)
 	declare @nSPID int
+	declare @dStartTime dateTime
 
 	-- insert into hist_monitorBigBrother (stepName) values ('Starting')
 
@@ -1044,7 +1045,8 @@ begin
 	select g.ukey as ukey_server, a.serverName, c.groupName, isnull(a.message, 'N/A') as notes, a.ymd,
 		isnull(g.lastConfigurationCheck, dateAdd(week, -3, getDate())) as lastConfigurationCheck,
 		convert(int, dateDiff(minute, a.ymd, getDate()) / 5) * 5 as minutesStuck,
-		e.[name] as jobName
+		e.[name] as jobName,
+		f.startTime
 		into #stuckConfigCheck
 		from configuration..runs_log a (nolock)
 		join (
@@ -1091,7 +1093,8 @@ begin
 
 	while exists (select top 1 jobName from #stuckConfigCheck where jobName > @cThisJob and minutesStuck > case when dateDiff(day, lastConfigurationCheck, getDate()) > 1 then 30 else 10 end)
 	begin
-		select top 1 @cThisJob = jobName
+		select top 1 @cThisJob = jobName ,
+			@dStartTime = startTime
 			from #stuckConfigCheck
 			where jobName > @cThisJob
 				and minutesStuck > case when dateDiff(day, lastConfigurationCheck, getDate()) > 1 then 30 else 10 end
@@ -1100,7 +1103,10 @@ begin
 		exec msdb..sp_stop_job @job_name = @cThisJob
 
 		insert into #results (message, severity, subject) values
-			('Job ' + @cThisJob + ' sent a STOP command.', 2, 'Job ' + @cThisJob + ' sent a STOP command at ' + convert(varchar(19), getDate(), 120) + '.')
+			(
+				'Job ' + @cThisJob + ', started at ' + convert(varchar(20), @dStartTime) + ', sent a STOP command at ' + convert(varchar(20), getDate(), 120) + '.',
+				2,
+				'Job ' + @cThisJob + ', started at ' + convert(varchar(20), @dStartTime) + ', sent a STOP command.')
 	end
 
 	drop table #stuckConfigCheck
@@ -1114,7 +1120,8 @@ begin
 	select g.ukey as ukey_server, a.serverName, c.groupName, isnull(notes, 'N/A') as notes, a.ymd,
 		isnull(g.lastEventLogCheck, dateAdd(week, -3, getDate())) as lastEventLogCheck,
 		convert(int, dateDiff(minute, a.ymd, getDate()) / 5) * 5 as minutesStuck,
-		e.[name] as jobName
+		e.[name] as jobName,
+		f.startTime
 		into #stuckEventLogCheck
 		from eventLog_history a (nolock)
 		join (
@@ -1174,7 +1181,10 @@ begin
 		exec msdb..sp_stop_job @job_name = @cThisJob
 
 		insert into #results (message, severity, subject) values
-			('Job ' + @cThisJob + ' sent a STOP command.', 2, 'Job ' + @cThisJob + ' sent a STOP command at ' + convert(varchar(19), getDate(), 120) + '.')
+			(
+				'Job ' + @cThisJob + ', started at ' + convert(varchar(20), @dStartTime) + ', sent a STOP command at ' + convert(varchar(20), getDate(), 120) + '.',
+				2,
+				'Job ' + @cThisJob + ', started at ' + convert(varchar(20), @dStartTime) + ', sent a STOP command.')
 	end
 
 	drop table #stuckEventLogCheck

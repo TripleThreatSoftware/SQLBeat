@@ -857,9 +857,6 @@ begin
 				select @cDatabaseName = MIN(name)
 					FROM [' + @cServerName + '].master.dbo.sysdatabases
 					WHERE name NOT IN (''master'', ''model'', ''tempdb'', ''msdb'', ''distribution'', ''pubs'', ''northwind'')
-						AND DATABASEPROPERTY(name, ''IsOffline'') = 0
-						AND DATABASEPROPERTY(name, ''IsSuspect'') = 0
-						AND DATABASEPROPERTY(name, ''IsReadOnly'') = 0
 						and (status & 32) <> 32 -- loading
 						and (status & 64) <> 64 -- prerecovery
 						and (status & 128) <> 128 -- recovery
@@ -873,7 +870,7 @@ begin
 			SELECT '''''' + @cDatabaseName + '''''' AS dbName,
 				a.[name] AS userName
 
-				FROM [' + @cServerName + '].'' + QUOTENAME(@cDatabaseName) + ''.dbo.sysusers a
+				FROM [' + @cServerName + '].['' + @cDatabaseName + ''].dbo.sysusers a
 				left outer join [' + @cServerName + '].master.dbo.syslogins b on a.sid = b.sid
 
 				WHERE a.islogin = 1
@@ -1097,7 +1094,7 @@ begin
 		if @cUserName is not null
 		begin
 			-- with password, for stores
-			set @cSQLString = 'osql -S' + @cServerName + ' -Usa -P -n -h-1 -w300 -dmaster -i"\\' + @cThisServerName + '\shared\all_user_activity.SQL"'
+			set @cSQLString = 'osql -S' + @cServerName + ' -U' + @cUserName + ' -P' + @cPassword + ' -n -h-1 -w300 -dmaster -i"\\' + @cThisServerName + '\shared\all_user_activity.SQL"'
 		end
 		else
 		begin
