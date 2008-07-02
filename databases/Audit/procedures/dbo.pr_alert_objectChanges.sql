@@ -1,50 +1,8 @@
-USE [msdb]
-GO
-/****** Object:  Step [pr_checkObjects]    Script Date: 06/30/2008 13:56:35 ******/
-EXEC msdb.dbo.sp_delete_jobstep @job_name=N'Monitor SQL objects', @step_id=1
-GO
-USE [msdb]
-GO
-EXEC msdb.dbo.sp_add_jobstep @job_name=N'Monitor SQL objects', @step_name=N'pr_checkObjects',
-		@step_id=1,
-		@cmdexec_success_code=0,
-		@on_success_action=3,
-		@on_fail_action=2,
-		@retry_attempts=0,
-		@retry_interval=0,
-		@os_run_priority=0, @subsystem=N'TSQL',
-		@command=N'exec pr_checkObjects',
-		@database_name=N'Audit',
-		@flags=0
-GO
-USE [msdb]
-GO
-EXEC msdb.dbo.sp_add_jobstep @job_name=N'Monitor SQL objects', @step_name=N'pr_alert_objectChanges',
-		@step_id=2,
-		@cmdexec_success_code=0,
-		@on_success_action=1,
-		@on_fail_action=2,
-		@retry_attempts=0,
-		@retry_interval=0,
-		@os_run_priority=0, @subsystem=N'TSQL',
-		@command=N'pr_alert_objectChanges null, null',
-		@database_name=N'Audit',
-		@flags=0
-GO
-
-
 use [audit]
-go
-create clustered index ix_objectText_serverName_databaseName_objectName_auditRun on auditData_objectText (serverName, databaseName, objectName, ymd, ukey_auditRun) with fillfactor = 60
-go
-
-create index ix_objectText_serverName_auditRun on auditData_objectText (serverName, ukey_auditRun, ymd) with fillfactor = 60
-go
-create index ix_objectText_ymd_auditRun_serverName on auditData_objectText (ymd, ukey_auditRun, servername) with fillfactor = 60
 go
 
 -- exec pr_alert_objectChanges '2008-01-01', null
-create procedure pr_alert_objectChanges (@dStartDate dateTime = null, @dEndDate dateTime = null)
+alter procedure pr_alert_objectChanges (@dStartDate dateTime = null, @dEndDate dateTime = null)
 as
 begin
 	set nocount on
@@ -389,7 +347,7 @@ begin
 				when @bObjectDropped = 1 then 'dropped'
 				else 'changed'
 				end + ' ' +
-				'at ' + convert(varchar(20), getDate(), 120) + '.'
+				'at ' + convert(varchar(20), isnull(@dYMD_now, getDate()), 120) + '.'
 
 		update #then
 			set isChanged = 1
