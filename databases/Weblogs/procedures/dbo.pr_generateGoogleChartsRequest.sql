@@ -4,7 +4,7 @@ SET QUOTED_IDENTIFIER ON
 GO
 
 
-ALTER procedure [dbo].[pr_generateGoogleChartsRequest] (@nWidth int, @nHeight int, @bRelativeToTotal bit = 0, @bAbsoluteYAxis bit = 0)
+ALTER procedure [dbo].[pr_generateGoogleChartsRequest] (@nWidth int, @nHeight int, @bRelativeToTotal bit = 0, @bAbsoluteYAxis bit = 0, @bShowPie bit = 0)
 as
 begin
 
@@ -197,21 +197,27 @@ begin
 	set @cURLString = @cURLString + @cDatapoints
 
 	set @cURLString = @cURLString +
-
-		'&cht=lc' + -- line chart
 		case when (select count(distinct setName) from #dataValues) = 1 then '' else '&chdl=' + @cLegend end + -- legend
-		'&chxt=x,y' + -- showing X and Y axis
-		'&chco=ff0000,00ff00,0000ff,CCCCCC,ccff00,ff7e00,00f6ff,e4ff00,f600ff' + -- showing in these colors
-		'&chxr=1,' +
-			case when @bAbsoluteYAxis = 1
-				then convert(varchar(20), @nMinSeriesValue)
-				else '0'
-				end + ',' +
-			case when @bAbsoluteYAxis <> 0
-				then convert(varchar(20), @nMaxSeriesValue)
-				else '100'
-				end +
-		'&chxl=0:|' + @cAxisLabels_x   -- x axis ranges
+		'&chco=ff0000,00ff00,0000ff,CCCCCC,ccff00,ff7e00,00f6ff,e4ff00,f600ff' -- showing in these colors
+
+	if @bShowPie = 1
+		set @cURLString = @cURLString +
+			'&cht=p3' + -- 3d pie chart
+			'&chl=' + @cAxisLabels_x -- with these wedge names
+	else
+		set @cURLString = @cURLString +
+			'&cht=lc' + -- line chart
+			'&chxt=x,y' + -- showing X and Y axis
+			'&chxl=0:|' + @cAxisLabels_x +   -- x axis ranges
+			'&chxr=1,' +
+				case when @bAbsoluteYAxis = 1
+					then convert(varchar(20), @nMinSeriesValue)
+					else '0'
+					end + ',' +
+				case when @bAbsoluteYAxis <> 0
+					then convert(varchar(20), @nMaxSeriesValue)
+					else '100'
+					end
 
 	select @cURLString as graphURL
 

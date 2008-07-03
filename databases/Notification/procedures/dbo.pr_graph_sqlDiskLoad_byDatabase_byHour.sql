@@ -11,7 +11,7 @@ begin
 --	set @cServerName = 'mssql-ny'
 
 	declare @dStartDate dateTime
-	set @dStartDate = dateAdd(hour, -12, getDate())
+	set @dStartDate = dateAdd(hour, -48, getDate())
 
 	set nocount on
 
@@ -26,10 +26,11 @@ begin
 		max(diskIO) as diskIO_max,
 		max(cpuTime) - min(cpuTime) as cpuTime_delta,
 		max(diskIO) - min(diskIO) as diskIO_delta,
-		convert(dateTime, null) as prevBatchTime
+		convert(dateTime, null) as prevBatchTime,
+		identity(int) as ukey
 		into #activity
 		from (
-			select spid, hostname, dbname, programName, login_time, ymd, lastBatchTime, max(cpuTime) as cpuTime, max(diskIO) as diskIO
+			select spid, hostname, dbname, programName, login_time, ymd, lastBatchTime, sum(cpuTime) as cpuTime, sum(diskIO) as diskIO
 				from notification.dbo.processLog (nolock)
 				where serverName = @cServerName
 					and ymd >= @dStartDate
@@ -41,6 +42,7 @@ begin
 				group by spid, hostname, dbname, programName, login_time, ymd, lastBatchTime
 			) a
 		group by spid, hostname, programName, login_time, lastBatchTime, dbName
+		order by spid, dbName, hostname, programName, login_time, lastBatchTime
 
 	if @@rowcount = 0
 	begin
@@ -48,19 +50,13 @@ begin
 		return
 	end
 
-	create clustered index ix_tmp_activity on #activity (keyString, lastBatchTime desc) with fillfactor = 100
+	create clustered index ix_tmp_activity on #activity (ukey, keyString) with fillfactor = 90
 
-	update #activity
-		set prevBatchTime = b.prevBatch
+	update a
+		set prevBatchTime = b.lastBatchTime
 		from #activity a
-		join (
-			select a.keyString, a.lastBatchTime, max(b.lastBatchTime) as prevBatch
-				from #activity a
-				join #activity b on a.keyString = b.keyString
-					and a.lastBatchTime > b.lastBatchTime
-				group by a.keyString, a.lastBatchTime
-			) b on a.keyString = b.keyString
-					and a.lastBatchTime = b.lastBatchTime
+		join #activity b on a.keyString = b.keyString
+			and a.ukey = b.ukey + 1
 
 	delete from #activity where prevBatchTime < @dStartDate --or isnull(prevBatchTime, '') = ''
 
