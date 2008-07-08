@@ -1,6 +1,3 @@
-USE [Notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_rpt_runningOutageReport]    Script Date: 06/18/2008 13:12:05 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -22,7 +19,7 @@ begin
 		left(isnull(a.serverName, 'N/A') + space(20), 20) + ' ' +
 		isnull(convert(varchar(19), b.ymd, 120), 'N/A') + char(13)
 
-		from dm_servers a
+		from dm_servers a (nolock)
 		left outer join (
 			select serverName, max(ymd) as ymd
 				from pingLog (nolock)

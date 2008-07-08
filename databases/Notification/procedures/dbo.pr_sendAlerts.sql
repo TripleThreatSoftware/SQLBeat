@@ -5,7 +5,7 @@ GO
 
 
 
--- pr_sendAlerts 'cole', 0
+-- pr_sendAlerts 'cole', 1
 -- pr_sendAlerts 'bob', 0
 -- select count(*) from notificationLog
 -- select top 500 * from messagesSent order by ymd desc
@@ -154,7 +154,7 @@ begin
 	begin
 		set @nUkeyMessage = 0
 
-		while exists (select top 1 ukey from #messagesToSend where ukey > @nUkeyMessage)
+		while exists (select top 1 ukey from #messagesToSend where ukey > @nUkeyMessage and isnull(subject, '') <> '')
 		begin
 			select top 1
 				@cThisSubject = 'SQLBeat (' + isnull(serverName, 'N/A') + ') : ' + isnull(subject, ''),
@@ -163,6 +163,7 @@ begin
 				@nUkeyMessage = ukey
 				from #messagesToSend
 				where ukey > @nUkeyMessage
+					and isnull(subject, '') <> ''
 				order by ukey
 
 --			print replicate('=', 50)
