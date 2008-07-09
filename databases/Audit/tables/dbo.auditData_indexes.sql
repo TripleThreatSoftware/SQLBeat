@@ -1,4 +1,10 @@
-create table auditData_indexes (ukey int identity, ukey_auditRun bigint, ymd dateTime default getDate(), serverName varchar(200),
-	databaseName varchar(500), tableName varchar(500), tableID bigint,
-	indexID bigint, indexName varchar(200), indexXType varchar(2), columnName varchar(200), keyNumber int)
+alter table auditData_indexes add ymd_firstSeen dateTime default getDate()
+alter table auditData_indexes add ymd_lastSeen dateTime default getDate()
+alter table auditData_indexes add isCurrent bit default 1
+GO
+truncate table auditData_indexes
+GO
+alter table auditData_indexes drop column ymd
+GO
+alter table auditData_indexes drop column ukey_auditRun
 GO

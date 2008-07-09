@@ -1,10 +1,15 @@
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[pr_archiveOldPartitionedTables]') AND type in (N'P', N'PC'))
-BEGIN
-EXEC dbo.sp_executesql @statement = N'-- The keyFieldList variable should not contain ymd_id or ymd fields
-CREATE  procedure [pr_archiveOldPartitionedTables] (@cTableName varchar(100), @cDateField varchar(100), @cKeyfieldList varchar(100))
+USE [Notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_archiveOldPartitionedTables]    Script Date: 07/09/2008 11:12:17 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER OFF
+GO
+-- The keyFieldList variable should not contain ymd_id or ymd fields
+ALTER  procedure [dbo].[pr_archiveOldPartitionedTables] (@cTableName varchar(100), @cDateField varchar(100), @cKeyfieldList varchar(100))
 as
 begin
---	print ''Beginning to archive old partitioned tables''
+--	print 'Beginning to archive old partitioned tables'
 	set nocount on
 
 	declare @cLastWeekTable varchar(8)
@@ -45,24 +50,24 @@ begin
 	end
 
 	update #dm_ymd
-		set ymdString = convert(varchar(4), [year]) + dbo.fn_padl(month, 2, ''0'') + dbo.fn_padl(day, 2, ''0'')
+		set ymdString = convert(varchar(4), [year]) + dbo.fn_padl(month, 2, '0') + dbo.fn_padl(day, 2, '0')
 
 	set @cArchiveTableName = @cTableName
 
-	if right(@cTableName, 6) in (''_daily'', ''_stage'')
+	if right(@cTableName, 6) in ('_daily', '_stage')
 		set @cArchiveTableName = left(@cTableName, len(@cTableName) - 6)
 	else
-		if left(@cTableName, 6) = ''stage_''
+		if left(@cTableName, 6) = 'stage_'
 			set @cArchiveTableName = right(@cTableName, len(@cTableName) - 6)
 		else
-			if left(@cTableName, 8) = ''staging_''
+			if left(@cTableName, 8) = 'staging_'
 				set @cArchiveTableName = right(@cTableName, len(@cTableName) - 8)
 
 	if (
 		select count(*)
 			from sysObjects a
 			join sysColumns b on a.id = b.id and b.name = @cDateField
-			where a.name = @cTableName and a.xtype = ''U''
+			where a.name = @cTableName and a.xtype = 'U'
 		) > 0
 		set @lHasYMD = 1
 	else
@@ -88,24 +93,24 @@ begin
 		where left([name], len(db_name())) = db_name()
 			and [name] <> db_name()
 			and dbo.fn_returnDigits([name], 0) > 0
-			and [name] not in (''master'', ''model'', ''msdb'', ''northwind'')
+			and [name] not in ('master', 'model', 'msdb', 'northwind')
 			and (
 				status in (0, 8)
 				or (not status % 32 = 0 and not status % 64 = 0 and not status % 128 = 0)
 				)
 		order by [name] desc
 
-	print ''Last week table: '' + @cLastWeekTable
+--	print 'Last week table: ' + @cLastWeekTable
 
 	while exists (select top 1 * from #databases)
 	begin
 		select top 1 @cThisDatabase = dbname from #databases
 
-		print ''Archiving old partitioned tables in '' + @cThisDatabase
+--		print 'Archiving old partitioned tables in ' + @cThisDatabase
 
 		set @cThisMonth = right(@cThisDatabase, 6)
 
-		set @cSQLString = ''select name from '' + @cThisDatabase + ''..sysobjects where xtype = ''''U'''' and name like '''''' + @cArchiveTableName + ''%'''' and name not like ''''%week%'''' order by name''
+		set @cSQLString = 'select name from ' + @cThisDatabase + '..sysobjects where xtype = ''U'' and name like ''' + @cArchiveTableName + '%'' and name not like ''%week%'' order by name'
 --		print @cSQLString
 
 		insert into #tables
@@ -113,12 +118,12 @@ begin
 
 		delete from #tables where right(tableName, 8) > @cLastWeekTable
 
-		set @cSQLString = ''''
+		set @cSQLString = ''
 		while exists (select top 1 * from #tables)
 		begin
 			select top 1 @cThisTable = tableName from #tables order by tableName
 
-			print ''Working: '' + @cThisTable
+--			print 'Working: ' + @cThisTable
 
 			if isnumeric(right(@cThisTable, 8)) = 0
 			begin
@@ -134,9 +139,9 @@ begin
 					from #dm_ymd
 					where @cThisDay = ymdString)
 
-			set @cWeekTable = @cArchiveTableName + ''_'' + left(@cThisDay, 6) + ''_week'' + convert(varchar(2), @nWeek)
+			set @cWeekTable = @cArchiveTableName + '_' + left(@cThisDay, 6) + '_week' + convert(varchar(2), @nWeek)
 
-			print ''Belongs in: '' + @cWeekTable
+--			print 'Belongs in: ' + @cWeekTable
 
 			select @dStartDate = min(ymd), @dEndDate = max(ymd)
 				from #dm_ymd
@@ -146,14 +151,14 @@ begin
 
 			set @lMakeTable = 0
 
-			set @cSQLString = ''select name from '' + @cThisDatabase + ''..sysobjects where xtype = ''''U'''' and name = '''''' + @cWeekTable + ''''''''
+			set @cSQLString = 'select name from ' + @cThisDatabase + '..sysobjects where xtype = ''U'' and name = ''' + @cWeekTable + ''''
 --			print @cSQLString
 			exec sp_executeSQL @cSQLString
 
 			if @@rowcount > 0
 			begin
-				-- the table does exists, lets see if it''s empty. if so, drop it and make it again - just in case
-				set @cSQLString = ''select count(*) from '' + @cThisDatabase + ''..['' + @cWeekTable + '']''
+				-- the table does exists, lets see if it's empty. if so, drop it and make it again - just in case
+				set @cSQLString = 'select count(*) from ' + @cThisDatabase + '..[' + @cWeekTable + ']'
 --				print @cSQLString
 				insert into #results
 				exec sp_executeSQL @cSQLString
@@ -162,8 +167,8 @@ begin
 				begin
 					set @lMakeTable = 1
 
-					set @cSQLString = ''use '' + @cThisDatabase + ''
-						drop table ['' + @cWeekTable + '']''
+					set @cSQLString = 'use ' + @cThisDatabase + '
+						drop table [' + @cWeekTable + ']'
 --					print @cSQLString
 					exec sp_executeSQL @cSQLString
 				end
@@ -176,91 +181,91 @@ begin
 			if @lMakeTable = 1
 			begin
 
-				print ''Making week table: '' + @cWeekTable
+--				print 'Making week table: ' + @cWeekTable
 
-				-- the archive table doesn''t yet exist, so create it using an INSERT INTO from the day table
-				-- we''re currently working
-				set @cSQLString = ''use '' + @cThisDatabase + ''
-					select * into '' + @cWeekTable + '' from '' + @cThisTable
+				-- the archive table doesn't yet exist, so create it using an INSERT INTO from the day table
+				-- we're currently working
+				set @cSQLString = 'use ' + @cThisDatabase + '
+					select * into ' + @cWeekTable + ' from ' + @cThisTable
 --				print @cSQLString
 				exec sp_executeSQL @cSQLString
 
-				set @cPKString = ''''
+				set @cPKString = ''
 
 				if @lHasYMD = 1
 				begin
-					set @cSQLString = ''use '' + @cThisDatabase + '' ALTER TABLE '' + @cWeekTable + '' WITH CHECK '' +
-							''ADD CONSTRAINT '' + @cWeekTable + ''_ymd '' +
-							''CHECK ('' + @cDateField + '' >= '''''' + convert(varchar(20), @dStartDate,101) + ''''''
-								and '' + @cDateField + '' < '''''' + convert(varchar(20), dateAdd(day, 1, @dEndDate),101) + '''''')''
+					set @cSQLString = 'use ' + @cThisDatabase + ' ALTER TABLE ' + @cWeekTable + ' WITH CHECK ' +
+							'ADD CONSTRAINT ' + @cWeekTable + '_ymd ' +
+							'CHECK (' + @cDateField + ' >= ''' + convert(varchar(20), @dStartDate,101) + '''
+								and ' + @cDateField + ' < ''' + convert(varchar(20), dateAdd(day, 1, @dEndDate),101) + ''')'
 --					print @cSQLString
 					exec sp_executesql @cSQLString
 
-					if @cKeyfieldList not like ''%'' + @cDateField + ''%''
-						set @cPKString = case when @cPKString = '''' then @cDateField else @cPKString + '', '' + @cDateField end
+					if @cKeyfieldList not like '%' + @cDateField + '%'
+						set @cPKString = case when @cPKString = '' then @cDateField else @cPKString + ', ' + @cDateField end
 				end
 
 --				-- For performance reasons lets try making an index
---				if @cKeyFieldList <> ''''
+--				if @cKeyFieldList <> ''
 --				begin
---					set @cSQLString = ''use '' + @cThisDatabase + ''
---						CREATE INDEX [ix_'' + @cWeekTable + ''] ON '' +
---							''['' + @cWeekTable + ''] '' +
---							''('' + @cKeyfieldList + '') '' +
---							''WITH  FILLFACTOR = 80''
+--					set @cSQLString = 'use ' + @cThisDatabase + '
+--						CREATE INDEX [ix_' + @cWeekTable + '] ON ' +
+--							'[' + @cWeekTable + '] ' +
+--							'(' + @cKeyfieldList + ') ' +
+--							'WITH  FILLFACTOR = 80'
 ----					print @cSQLString
 --					exec sp_executeSQL @cSQLString
 --				end
 
-				set @cSQLString = ''use '' + @cThisDatabase + ''
-					ALTER TABLE '' + @cWeekTable + ''
-						ADD CONSTRAINT [PK_'' + @cWeekTable + '']
-						PRIMARY KEY CLUSTERED ('' + case when @cPKString <> '''' then @cPKString + '', '' else '''' end + @cKeyfieldList + '')
-						WITH  FILLFACTOR = 80''
+				set @cSQLString = 'use ' + @cThisDatabase + '
+					ALTER TABLE ' + @cWeekTable + '
+						ADD CONSTRAINT [PK_' + @cWeekTable + ']
+						PRIMARY KEY CLUSTERED (' + case when @cPKString <> '' then @cPKString + ', ' else '' end + @cKeyfieldList + ')
+						WITH  FILLFACTOR = 80'
 --				print @cSQLString
 				exec sp_executesql @cSQLString
 			end
 			else
 			begin
-				print ''Inserting into: '' + @cWeekTable
+--				print 'Inserting into: ' + @cWeekTable
 
-				-- the archive table exists, so insert into it from the day table we''re working
+				-- the archive table exists, so insert into it from the day table we're working
 				truncate table #fields
-				set @cSQLString = ''use '' + @cThisDatabase + ''
+				set @cSQLString = 'use ' + @cThisDatabase + '
 					select distinct a.name
 						from syscolumns a
-						join sysobjects b on a.id = b.id and b.name = '''''' + @cThisTable + '''''' and b.xtype = ''''U''''''
+						join sysobjects b on a.id = b.id and b.name = ''' + @cThisTable + ''' and b.xtype = ''U'''
 
 --				print @cSQLString
 				insert into #fields
 				exec sp_executeSQL @cSQLString
 
-				set @cFieldList = ''''
+				set @cFieldList = ''
 				while exists (select top 1 * from #fields)
 				begin
 					select top 1 @cThisField = fieldName from #fields
 
-					set @cFieldList = @cFieldList + case when @cFieldList = '''' then '''' else '', '' end + ''['' + @cThisField + '']''
+					set @cFieldList = @cFieldList + case when @cFieldList = '' then '' else ', ' end + '[' + @cThisField + ']'
 
 					delete from #fields where fieldName = @cThisField
 				end
 
-				if @cFieldList = ''''
-					set @cFieldList = ''*''
+				if @cFieldList = ''
+					set @cFieldList = '*'
 
-				set @cSQLString = ''use '' + @cThisDatabase + ''
-					insert into '' + @cWeekTable + ''('' + @cFieldList + '') select '' + @cFieldList + '' from '' + @cThisTable
+				set @cSQLString = 'use ' + @cThisDatabase + '
+					insert into ' + @cWeekTable + '(' + @cFieldList + ') select ' + @cFieldList + ' from ' + @cThisTable
 --				print @cSQLString
 				exec sp_executesql @cSQLString
 			end
 
 			-- double check that permissions are set properly by re-applying them
-			set @cSQLString = ''use '' + @cThisDatabase + '' grant select on '' + @cWeekTable + '' to public''
+			set @cSQLString = 'use ' + @cThisDatabase + ' grant select on ' + @cWeekTable + ' to public'
 --			print @cSQLString
 			exec sp_executesql @cSQLString
 
-			set @cSQLString =  ''use '' + @cThisDatabase + ''
-					drop table ['' + @cThisTable + '']''
+			set @cSQLString =  'use ' + @cThisDatabase + '
+					drop table [' + @cThisTable + ']'
 --			print @cSQLString
 			exec sp_executeSQL @cSQLString
 
@@ -276,10 +281,7 @@ begin
 	drop table #results
 	drop table #dm_ymd
 
---	print ''Done archiving''
+--	print 'Done archiving'
 end
 
--- exec pr_archiveOldPartitionedTables ''mart_vehicle_byday_daily'', ''ukey_auto''
-'
-END
-GO
+-- exec pr_archiveOldPartitionedTables 'mart_vehicle_byday_daily', 'ukey_auto'

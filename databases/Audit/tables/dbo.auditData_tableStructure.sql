@@ -1,5 +1,10 @@
-create table auditData_tableStructure (ukey int identity, ukey_auditRun bigint, ymd dateTime default getDate(), serverName varchar(200),
-	databaseName varchar(500), tableName varchar(500), tableID bigint,
-	xtype varchar(2), columnName varchar(200), columnLength smallint, columnPrecision tinyint, columnType tinyint,
-	columnXType tinyint, columnIsNullable int)
+alter table auditData_tableStructure add ymd_firstSeen dateTime default getDate()
+alter table auditData_tableStructure add ymd_lastSeen dateTime default getDate()
+alter table auditData_tableStructure add isCurrent bit default 1
+GO
+truncate table auditData_tableStructure
+GO
+alter table auditData_tableStructure drop column ymd
+GO
+alter table auditData_tableStructure drop column ukey_auditRun
 GO

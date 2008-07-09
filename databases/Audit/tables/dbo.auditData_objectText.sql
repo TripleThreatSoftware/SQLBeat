@@ -1,4 +1,10 @@
-alter table auditData_objectText add textChecksum bigint default 0
+alter table auditData_objectText add ymd_firstSeen dateTime default getDate()
+alter table auditData_objectText add ymd_lastSeen dateTime default getDate()
+alter table auditData_objectText add isCurrent bit default 1
 GO
-update auditData_objectText set textChecksum = notification.dbo.fn_checksum(isnull(objectText, ''))
+truncate table auditData_objectText
+GO
+alter table auditData_objectText drop column ymd
+GO
+alter table auditData_objectText drop column ukey_auditRun
 GO

@@ -1,7 +1,12 @@
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[pr_monitorPerformanceLog]') AND type in (N'P', N'PC'))
-BEGIN
-EXEC dbo.sp_executesql @statement = N'-- exec pr_monitorPerformanceLog 4
-CREATE procedure [pr_monitorPerformanceLog]
+USE [Notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_monitorPerformanceLog]    Script Date: 07/09/2008 11:26:41 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- exec pr_monitorPerformanceLog 4
+ALTER procedure [dbo].[pr_monitorPerformanceLog]
 as
 begin
 --	declare @nUkeyGroup int
@@ -13,8 +18,8 @@ begin
 	set @dStartDate = dateAdd(hour, -12, getDate())
 	set @dEndDate = getDate()
 
---	set @dStartDate = ''2007-11-12''
---	set @dEndDate = ''2007-11-14''
+--	set @dStartDate = '2007-11-12'
+--	set @dEndDate = '2007-11-14'
 --	set @nUkeyGroup = 3
 
 	select ukey_server, runStamp, min(ymd) as ymd, b.serverName, convert(bigint, 0) as previousRunStamp
@@ -45,16 +50,16 @@ begin
 		into #normalizedCounters
 		from dm_performanceCounters a
 		join dm_performanceCounters b on case
-			when charindex(''('', a.counterName) > 0
-					then left(a.counterName, charindex(''('', a.counterName) - 1)
+			when charindex('(', a.counterName) > 0
+					then left(a.counterName, charindex('(', a.counterName) - 1)
 					else a.counterName
-				end = replace(b.counterName, ''Base'', '''')
-		where right(b.counterName, 4) = ''Base''
+				end = replace(b.counterName, 'Base', '')
+		where right(b.counterName, 4) = 'Base'
 
 	select a.runStamp, e.ymd,
 		a.ukey_server, ukey_counter, ukey_object,
 		e.serverName,
-		isnull(instanceName, '''') as instanceName,
+		isnull(instanceName, '') as instanceName,
 		convert(decimal(25,4), counterValue) as counterValue,
 		e.previousRunStamp,
 		convert(decimal(25,4), 0) as previousCounterValue,
@@ -109,7 +114,7 @@ begin
 			then (counterValue - previousCounterValue) / secondsDelta else 0 end
 		from #runData a
 		join dm_performanceCounters b on a.ukey_counter = b.ukey
-			and (b.counterName like ''%/sec%'' or b.counterName like ''%per second%'')
+			and (b.counterName like '%/sec%' or b.counterName like '%per second%')
 
 	-- for any "per second" measure, go back and reset the previous value to the new calculated number
 	update a with (tablock)
@@ -121,7 +126,7 @@ begin
 			and a.ukey_counter = b.ukey_counter
 			and a.instanceName = b.instanceName
 		join dm_performanceCounters c on a.ukey_counter = c.ukey
-			and (c.counterName like ''%/sec%'' or c.counterName like ''%per second%'')
+			and (c.counterName like '%/sec%' or c.counterName like '%per second%')
 
 	select ukey_server, ukey_counter, ukey_object, instanceName,
 		min(currentValue) as minValue,
@@ -134,7 +139,7 @@ begin
 		count(*) as numReadings
 		into #runAverages
 		from #runData
-		where not (isnull(previousRunStamp, '''') = '''' or counterValue < 0)
+		where not (isnull(previousRunStamp, '') = '' or counterValue < 0)
 		group by ukey_server, ukey_counter, ukey_object, instanceName
 
 	create unique clustered index ix_tmp_runAverages on #runAverages (ukey_server, ukey_counter, ukey_object, instanceName) with fillfactor = 100
@@ -157,7 +162,7 @@ begin
 			and a.ukey_object = b.ukey_object
 			and a.ukey_counter = b.ukey_counter
 			and a.instanceName = b.instanceName
-		where not (isnull(previousRunStamp, '''') = '''' or counterValue < 0)
+		where not (isnull(previousRunStamp, '') = '' or counterValue < 0)
 
 	select serverName, ymd,
 		count(*) as numCounters,
@@ -168,28 +173,28 @@ begin
 		group by serverName, ymd
 
 	-- these are the timeStamps that were out of tolerance
-	select a.serverName + '' @ '' + convert(varchar(20), a.ymd, 120) as serverName,
-		left(replace(objectName, ''SQLServer:'', '''') + space(18), 18) + '' '' +
-		left(instanceName + space(25), 25) + '' '' +
-		left(replace(replace(d.counterName, ''/sec'', ''/s''), ''per second'', ''/s'') + space(25), 25) + '' '' +
+	select a.serverName + ' @ ' + convert(varchar(20), a.ymd, 120) as serverName,
+		left(replace(objectName, 'SQLServer:', '') + space(18), 18) + ' ' +
+		left(instanceName + space(25), 25) + ' ' +
+		left(replace(replace(d.counterName, '/sec', '/s'), 'per second', '/s') + space(25), 25) + ' ' +
 		right(space(6) + case
 			when currentValue > 10 then convert(varchar(20), convert(bigint, currentValue))
 			when currentValue < .05 then convert(varchar(20), convert(decimal(20,4), currentValue))
 			else convert(varchar(20), convert(decimal(20,2), currentValue))
-			end, 6) + '' '' +
+			end, 6) + ' ' +
 		right(space(6) + case
 			when previousValue > 10 then convert(varchar(20), convert(bigint, previousValue))
 			when currentValue < .05 then convert(varchar(20), convert(decimal(20,4), previousValue))
 			else convert(varchar(20), convert(decimal(20,2), previousValue))
-			end, 6) + '' '' +
+			end, 6) + ' ' +
 		right(space(6) + case
 			when avgValue > 10 then convert(varchar(20), convert(bigint, avgValue))
 			when currentValue < .05 then convert(varchar(20), convert(decimal(20,4), avgValue))
 			else convert(varchar(20), convert(decimal(20,2), avgValue))
-			end, 6) + '' '' +
-		right(space(5) + convert(varchar(20), convert(int, relativeToAverage)), 5) + ''% '' +
-		right(space(5) + convert(varchar(20), convert(int, relativeToAverage_lastHour)), 5) + ''% '' +
-		right(space(5) + convert(varchar(20), convert(int, relativeToPrevious)), 5) + ''% '' + char(13) as messageText
+			end, 6) + ' ' +
+		right(space(5) + convert(varchar(20), convert(int, relativeToAverage)), 5) + '% ' +
+		right(space(5) + convert(varchar(20), convert(int, relativeToAverage_lastHour)), 5) + '% ' +
+		right(space(5) + convert(varchar(20), convert(int, relativeToPrevious)), 5) + '% ' + char(13) as messageText
 
 		into #output
 		from #results a
@@ -198,7 +203,7 @@ begin
 		join ( select serverName, avg(sumOverAverage) as sumOverAverage from #rollup group by serverName ) c on a.serverName = c.serverName
 			and b.sumOverAverage > c.sumOverAverage * 15
 		join dm_performanceCounters d on a.ukey_counter = d.ukey
-			and right(d.counterName, 4) <> ''Base''
+			and right(d.counterName, 4) <> 'Base'
 		join dm_performanceObjects e on a.ukey_object = e.ukey
 		where (relativeToAverage > 250 or relativeToMax > 250)
 			and relativeToPrevious <> 0
@@ -207,7 +212,7 @@ begin
 	declare @cThisSubject varchar(2000)
 	declare @cThisServer varchar(500)
 
-	set @cThisServer = ''''
+	set @cThisServer = ''
 
 	while exists (select top 1 serverName from #output where serverName > @cThisServer)
 	begin
@@ -217,38 +222,38 @@ begin
 			order by serverName
 
 		set @cThisMessage = char(13) +
-			left(''Object'' + space(18), 18) + '' '' +
-			left(''Instance'' + space(25), 25) + '' '' +
-			left(''Counter'' + space(25), 25) + '' '' +
-			left(''Now'' + space(6), 6) + '' '' +
-			left(''Prev'' + space(6), 6) + '' '' +
-			left(''Avg'' + space(6), 6) + '' '' +
-			left(''Avg'' + space(6), 6) + '' '' +
-			left(''1hr'' + space(6), 6) + '' '' +
-			left(''Prev'' + space(6), 6) + char(13) +
+			left('Object' + space(18), 18) + ' ' +
+			left('Instance' + space(25), 25) + ' ' +
+			left('Counter' + space(25), 25) + ' ' +
+			left('Now' + space(6), 6) + ' ' +
+			left('Prev' + space(6), 6) + ' ' +
+			left('Avg' + space(6), 6) + ' ' +
+			left('Avg' + space(6), 6) + ' ' +
+			left('1hr' + space(6), 6) + ' ' +
+			left('Prev' + space(6), 6) + char(13) +
 
-			replicate(''='', 18) + '' '' +
-			replicate(''='', 25) + '' '' +
-			replicate(''='', 25) + '' '' +
-			replicate(''='', 6) + '' '' +
-			replicate(''='', 6) + '' '' +
-			replicate(''='', 6) + '' '' +
-			replicate(''='', 6) + '' '' +
-			replicate(''='', 6) + '' '' +
-			replicate(''='', 6) + '' '' + char(13)
+			replicate('=', 18) + ' ' +
+			replicate('=', 25) + ' ' +
+			replicate('=', 25) + ' ' +
+			replicate('=', 6) + ' ' +
+			replicate('=', 6) + ' ' +
+			replicate('=', 6) + ' ' +
+			replicate('=', 6) + ' ' +
+			replicate('=', 6) + ' ' +
+			replicate('=', 6) + ' ' + char(13)
 
 		select @cThisMessage = @cThisMessage + messageText
 			from #output
 			where serverName = @cThisServer
 			order by serverName, messageText
 
-		set @cThisSubject = ''Server stats out of tolerance @ '' + right(@cThisServer, 19)
+		set @cThisSubject = 'Server stats out of tolerance @ ' + right(@cThisServer, 19)
 
 		print @cThisSubject
 		print @cThisMessage
 
 		insert into notification..notificationLog_stage (serverName, severity, subject, message) values (
-			left(@cThisServer, charindex('' '', @cThisServer) - 1), 2, @cThisSubject, @cThisMessage)
+			left(@cThisServer, charindex(' ', @cThisServer) - 1), 2, @cThisSubject, @cThisMessage)
 	end
 
 	drop table #runs
@@ -260,10 +265,3 @@ begin
 	drop table #normalizedCounters
 
 end
-'
-END
-GO
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO

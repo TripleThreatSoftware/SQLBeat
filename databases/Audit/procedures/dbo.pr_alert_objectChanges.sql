@@ -2,197 +2,98 @@ use [audit]
 go
 
 -- exec pr_alert_objectChanges '2008-01-01', null
-alter procedure pr_alert_objectChanges (@dStartDate dateTime = null, @dEndDate dateTime = null)
+ALTER procedure [dbo].[pr_alert_objectChanges] (@dStartDate dateTime = null, @dEndDate dateTime = null)
 as
 begin
 	set nocount on
 
 --	declare @dStartDate dateTime
 --	declare @dEndDate dateTime
---
---	set @dStartdate = '2008-01-01 09:30:00.000'
 
-	declare @nThisUkey bigint
-
+	set @dStartdate = isnull(@dStartDate, dateAdd(hour, -24*7, getDate()))
 	set @dEndDate = isnull(@dEndDate, getDate())
+
+	select distinct serverName, databaseName
+		into #currentDatabases
+		from auditData_objectText
+		where isCurrent = 1
+			and ymd_lastSeen >= @dStartDate
+			and ymd_lastSeen <= @dEndDate
+
+	select distinct serverName, databaseName
+		into #addedDatabases
+		from auditData_objectText
+		where isCurrent = 1
+			and ymd_firstSeen >= @dStartDate
+			and ymd_firstSeen <= @dEndDate
+
+	select serverName, databaseName, max(ymd_lastSeen) as ymd_lastSeen
+		into #droppedDatabases
+		from auditData_objectText
+		where isCurrent = 0
+			and ymd_lastSeen >= @dStartDate
+			and ymd_lastSeen <= @dEndDate
+		group by serverName, databaseName
+
+	delete #droppedDatabases
+		from #droppedDatabases a
+		join #currentDatabases b on a.serverName = b.serverName
+			and a.databaseName = b.databaseName
+
+	-- dropped objects
+	select *
+		into #droppedObjects
+		from auditData_objectText
+		where isCurrent = 0
+			and ymd_lastSeen >= @dStartDate
+			and ymd_lastSeen <= @dEndDate
+
+	-- added objects
+	select *
+		into #addedObjects
+		from auditData_objectText
+		where isCurrent = 1
+			and ymd_firstSeen >= @dStartDate
+			and ymd_firstSeen <= @dEndDate
+
+	delete #droppedObjects
+		from #droppedObjects a
+		join #droppedDatabases b on a.serverName = b.serverName
+			and a.databaseName = b.databaseName
+
+	delete #addedObjects
+		from #addedObjects a
+		join #addedDatabases b on a.serverName = b.serverName
+			and a.databaseName = b.databaseName
 
 	create table #messages (ukey int identity, serverName varchar(200), subject varchar(500), message varchar(max))
 
-	declare @serverRuns table(serverName varchar(200), ukey_auditRun bigint, ymd dateTime)
-
-	insert into @serverRuns (serverName, ukey_auditRun, ymd)
-	select serverName, max(ukey_auditRun) as ukey_auditRun, max(ymd) as ymd
-		from auditData_objectText (nolock)
-		where ymd <= @dEndDate
-			and ymd >= isnull(@dStartDate, dateAdd(week, -2, getDate()))
-		group by serverName
-
+	-- databases added
+	insert into #messages (serverName, subject, message)
 	select
-		a.serverName, a.databaseName, a.objectName,
-		convert(int, 0) as ukey_then,
-		convert(dateTime, '') as ymd_then,
-		case when isnull(a.ukey_auditRun, 0) = isnull(b.ukey_auditRun, 0) then b.ukey_auditRun else null end as ukey_now,
-		b.ymd as ymd_now,
-		convert(bit, 0) as databaseDropped,
-		convert(bit, 0) as databaseAdded,
-		convert(bit, 0) as objectDropped,
-		convert(bit, 0) as objectAdded,
+		serverName,
+		'Database [' + databaseName + '] was added.' as subject,
+		'Database [' + databaseName + '] ' +
+			'was added ' +
+			'to ' + serverName + ' ' +
+			'around ' + convert(varchar(20), getDate(), 120) + '.' as message
+		from #addedDatabases
+		group by serverName, databaseName
 
-		convert(bigint, 0) as checksum_now,
-		convert(bigint, 0) as checksum_then,
-
-		identity(int) as ukey
-		into #results
-		from @serverRuns b
-		join (
-			select serverName, databaseName, objectName, max(ukey_auditRun) as ukey_auditRun
-				from auditData_objectText (nolock)
-				where ymd <= @dEndDate
-					and ymd >= isnull(@dStartDate, dateAdd(week, -2, getDate()))
-				group by serverName, databaseName, objectName
-			) a on a.serverName = b.serverName
-		order by a.serverName, a.databaseName, a.objectName
-
-	create clustered index ix_tmp_results_ukey on #results (ukey, serverName) with fillfactor = 100
-	create index ix_tmp_results_serverName_databaseName_objectName_ukeyAuditRun on #results (serverName, databaseName, objectName)
-
-	if @dStartDate is null
-	begin
-		update #results
-			set ukey_then = b.ukey_auditRun,
-				ymd_then = b.ymd
-			from #results a
-			join (
-				select
-					a.serverName, a.databaseName, a.objectName,
-					max(a.ukey_auditRun) as ukey_auditRun,
-					max(a.ymd) as ymd
-					from auditData_objectText a (nolock)
-					join #results b on a.serverName = b.serverName
-						and a.databaseName = b.databaseName
-						and a.objectName = b.objectName
-						and (
-							a.ukey_auditRun < b.ukey_now
-							or isnull(b.ukey_now, 0) = 0
-							)
-					where a.ymd <= @dEndDate
-						and a.ymd >= dateAdd(week, -2, getDate())
-					group by a.serverName, a.databaseName, a.objectName
-				) b on a.serverName = b.serverName
-					and a.databaseName = b.databaseName
-					and a.objectName = b.objectName
-	end
-	else
-	begin
-		update #results
-			set ukey_then = b.ukey_auditRun,
-				ymd_then = b.ymd
-			from #results a
-			join (
-				select
-					serverName, databaseName, objectName,
-					min(ukey_auditRun) as ukey_auditRun,
-					min(ymd) as ymd
-					from auditData_objectText a (nolock)
-					where ymd <= @dEndDate
-						and ymd >= @dStartDate
-					group by a.serverName, a.databaseName, a.objectName
-				) b on a.serverName = b.serverName
-					and a.databaseName = b.databaseName
-					and a.objectName = b.objectName
-	end
+	-- databases dropped
+	insert into #messages (serverName, subject, message)
+	select
+		serverName,
+		'Database [' + databaseName + '] was dropped.' as subject,
+		'Database [' + databaseName + '] ' +
+			'was dropped ' +
+			'from ' + serverName + ' ' +
+			'around ' + convert(varchar(20), min(ymd_lastSeen), 120) + '.' as message
+		from #droppedDatabases
+		group by serverName, databaseName
 
 
-	update #results
-		set checksum_now = b.textChecksum_now,
-			checksum_then = b.textChecksum_then
-		from #results a
-		join (
-			select a.ukey,
-				sum(case when b.ukey_auditRun = a.ukey_now then textChecksum else 0 end) as textChecksum_now,
-				sum(case when b.ukey_auditRun = a.ukey_then then textChecksum else 0 end) as textChecksum_then
-				from #results a
-				join auditData_objectText b (nolock) on a.serverName = b.serverName
-					and a.databaseName = b.databaseName
-					and a.objectName = b.objectName
-					and b.ukey_auditRun in (a.ukey_now, a.ukey_then)
-				group by a.ukey
-			) b on a.ukey = b.ukey
 
-	update #results
-		set databaseAdded = 1
-		from #results a
-		join (
-			select serverName, databaseName
-				from #results
-				group by serverName, databaseName
-				having sum(case when isnull(ukey_then, 0) <> 0 then 1 else 0 end) = 0
-			) b on a.serverName = b.serverName
-				and a.databaseName = b.databaseName
-
-	if @@rowcount > 0
-		insert into #messages (serverName, subject, message)
-		select
-			serverName,
-			'Database [' + databaseName + '] was added.' as subject,
-			'Database [' + databaseName + '] ' +
-				'and ' + convert(varchar(20), count(*)) + ' objects were added ' +
-				'to ' + serverName + ' ' +
-				'around ' + convert(varchar(20), getDate(), 120) + '.' as message
-			from #results
-			where databaseAdded = 1
-			group by serverName, databaseName
-
-	update #results
-		set databaseDropped = 1
-		from #results a
-		join (
-			select serverName, databaseName
-				from #results
-				group by serverName, databaseName
-				having sum(case when isnull(ukey_now, 0) <> 0 then 1 else 0 end) = 0
-			) b on a.serverName = b.serverName
-				and a.databaseName = b.databaseName
-
-	if @@rowcount > 0
-		insert into #messages (serverName, subject, message)
-		select
-			serverName,
-			'Database [' + databaseName + '] was dropped.' as subject,
-			'Database [' + databaseName + '] ' +
-				'and ' + convert(varchar(20), count(*)) + ' objects were dropped ' +
-				'from ' + serverName + ' ' +
-				'around ' + convert(varchar(20), min(ymd_then), 120) + '.' as message
-			from #results
-			where databaseDropped = 1
-			group by serverName, databaseName
-
-	update #results
-		set objectAdded = 1
-		from #results a
-		join (
-			select serverName, databaseName, objectName
-				from #results
-				group by serverName, databaseName, objectName
-				having sum(case when isnull(ukey_then, 0) <> 0 then 1 else 0 end) = 0
-			) b on a.serverName = b.serverName
-				and a.databaseName = b.databaseName
-				and a.objectName = b.objectName
-
-	--if @@rowcount > 0
-	--	select distinct serverName, databaseName, objectName from #results where objectAdded = 1 and not databaseAdded = 1
-
-	update #results
-		set objectDropped = 1
-		from #results a
-		join (
-			select serverName, databaseName, objectName
-				from #results
-				group by serverName, databaseName, objectName
-				having sum(case when isnull(ukey_now, 0) <> 0 then 1 else 0 end) = 0
-			) b on a.serverName = b.serverName
-				and a.databaseName = b.databaseName
-				and a.objectName = b.objectName
 
 	declare @cServerName varchar(200)
 	declare @cDatabaseName varchar(500)
@@ -210,6 +111,7 @@ begin
 	declare @cSubject varchar(500)
 	declare @dYMD_then dateTime
 	declare @dYMD_now dateTime
+	declare @nThisUkey bigint
 
 	create table #then (codeLine varchar(8000), ukey int identity, isChanged bit default 0)
 	create table #now (codeLine varchar(8000), ukey int identity, isChanged bit default 0)
@@ -218,15 +120,8 @@ begin
 
 	while exists (
 		select top 1 ukey
-			from #results
+			from #addedObjects
 			where ukey > @nThisUkey
-				and databaseDropped = 0
-				and databaseAdded = 0
-				and (
-					isnull(checksum_now, 0) <> isnull(checksum_then, 0)
-					or objectAdded = 1
-					or objectDropped = 1
-					)
 		)
 	begin
 		select top 1
@@ -238,19 +133,12 @@ begin
 			@nUkeyAuditRun_now = ukey_now,
 			@bObjectAdded = objectAdded,
 			@bObjectDropped = objectDropped,
-			@dYMD_then = ymd_then,
-			@dYMD_now = ymd_now,
+			@dYMD_then = ymd_lastSeen,
+			@dYMD_now = ymd_firstSeen,
 			@nCheckSumNow = isnull(checksum_now, 0),
 			@nCheckSumThen = isnull(checksum_then, 0)
-			from #results
+			from #addedObjects
 			where ukey > @nThisUkey
-				and databaseDropped = 0
-				and databaseAdded = 0
-				and (
-					isnull(checksum_now, 0) <> isnull(checksum_then, 0)
-					or objectAdded = 1
-					or objectDropped = 1
-					)
 			order by ukey
 
 	--	print 'Processing [' + @cServerName + '].[' + @cDatabaseName + '].[' + @cObjectName + ']'
@@ -261,29 +149,28 @@ begin
 
 --		print 'Changed: ' + @cObjectName + ' ' + convert(varchar(20), isnull(@nCheckSumThen, 0)) + '/' + convert(varchar(20), isnull(@nCheckSumNow, 0))
 
-		if @bObjectAdded = 0
+		-- if the object has some history
+		if exists (select top 1 ukey from #droppedObjects where serverName = @cServerName and databaseName = @cDatabaseName and objectName = @cObjectName)
 		begin
 
 			set @nUkeyLine = 0
 
 			while exists (
 				select top 1 ukey
-					from auditData_objectText
+					from #droppedObjects
 					where serverName = @cServerName
 						and databaseName = @cDatabaseName
 						and objectName = @cObjectName
-						and ukey_auditRun = @nUkeyAuditRun_then
 						and ukey > @nUkeyLine
 				)
 			begin
 				select top 1
 					@nUkeyLine = ukey,
 					@cThisLine = objectText
-					from auditData_objectText
+					from #droppedObjects
 					where serverName = @cServerName
 						and databaseName = @cDatabaseName
 						and objectName = @cObjectName
-						and ukey_auditRun = @nUkeyAuditRun_then
 						and ukey > @nUkeyLine
 					order by ukey
 
@@ -295,47 +182,40 @@ begin
 			end
 		end
 
-		if @bObjectDropped = 0
+		-- we know this wasn't dropped, it was just changed
+		delete from #droppedObjects where serverName = @cServerName and databaseName = @cDatabaseName and objectName = @cObjectName
+
+		set @nUkeyLine = 0
+
+		while exists (
+			select top 1 ukey
+				from #addedObjects
+				where serverName = @cServerName
+					and databaseName = @cDatabaseName
+					and objectName = @cObjectName
+					and ukey > @nUkeyLine
+			)
 		begin
+			select top 1
+				@nUkeyLine = ukey,
+				@cThisLine = objectText
+				from #addedObjects
+				where serverName = @cServerName
+					and databaseName = @cDatabaseName
+					and objectName = @cObjectName
+					and ukey > @nUkeyLine
+				order by ukey
 
-			set @nUkeyLine = 0
-
-			while exists (
-				select top 1 ukey
-					from auditData_objectText
-					where serverName = @cServerName
-						and databaseName = @cDatabaseName
-						and objectName = @cObjectName
-						and ukey_auditRun = @nUkeyAuditRun_now
-						and ukey > @nUkeyLine
-				)
-			begin
-				select top 1
-					@nUkeyLine = ukey,
-					@cThisLine = objectText
-					from auditData_objectText
-					where serverName = @cServerName
-						and databaseName = @cDatabaseName
-						and objectName = @cObjectName
-						and ukey_auditRun = @nUkeyAuditRun_now
-						and ukey > @nUkeyLine
-					order by ukey
-
-				insert into #now (codeLine)
-				select listItem
-					from notification.dbo.fn_makeTableFromList(@cThisLine, char(13))
-					where isnull(rtrim(ltrim(replace(replace(listItem, char(13), ''), char(10), ''))), '') <> ''
-			end
+			insert into #now (codeLine)
+			select listItem
+				from notification.dbo.fn_makeTableFromList(@cThisLine, char(13))
+				where isnull(rtrim(ltrim(replace(replace(listItem, char(13), ''), char(10), ''))), '') <> ''
 		end
 
 		set @cMessage = case
-			when @bObjectAdded = 1
+			when (select count(*) from #then) = 0
 				then 'Object [' + isnull(@cDatabaseName, '') + '].[' + isnull(@cObjectName, '') + '] was added ' +
 					'around ' + convert(varchar(20), isnull(@dYMD_now, ''), 120) + '.' + char(13) + char(13)
-			when @bObjectDropped = 1
-				then 'Object [' + isnull(@cDatabaseName, '') + '].[' + isnull(@cObjectName, '') + '] was dropped ' +
-					'around ' + convert(varchar(20), isnull(@dYMD_now, ''), 120) + '.' + char(13) + char(13) +
-					'Old object text:' + char(13) + replicate('=', 40)
 			else 'Object [' + isnull(@cDatabaseName, '') + '].[' + isnull(@cObjectName, '') + '] was changed ' +
 					'between ' + convert(varchar(20), isnull(@dYMD_then, ''), 120) + ' ' +
 					'and ' + convert(varchar(20), isnull(@dYMD_now, ''), 120) + '.' + char(13) + char(13) +
@@ -343,8 +223,7 @@ begin
 			end
 
 		set @cSubject = 'Object [' + @cDatabaseName + '].[' + @cObjectName + '] was ' +
-			case when @bObjectAdded = 1 then 'added'
-				when @bObjectDropped = 1 then 'dropped'
+			case when (select count(*) from #then) = 0 then 'added'
 				else 'changed'
 				end + ' ' +
 				'at ' + convert(varchar(20), isnull(@dYMD_now, getDate()), 120) + '.'
@@ -363,7 +242,7 @@ begin
 				and a.ukey = b.ukey
 			where b.ukey is null
 
-		if isnull(@bObjectAdded, 0) = 0
+		if (select count(*) from #then) > 0
 		begin
 			select @cMessage = isnull(@cMessage, '') + char(13) +
 				right('00000' + convert(varchar(5), isnull(ukey, 0)), 5) + ': ' +
@@ -372,7 +251,7 @@ begin
 				where isChanged = 1
 		end
 
-		if isnull(@bObjectDropped, 0) = 0
+		if (select count(*) from #now) = 0
 		begin
 			set @cMessage = @cMessage + char(13) + char(13) + 'New object text:' + char(13) + replicate('=', 40)
 
@@ -388,28 +267,45 @@ begin
 
 	end
 
+	-- so now, anything left in the #droppedObjects table really was dropped
+
+
+	if @cMessage <> ''
+		insert into #messages (serverName, [subject], [message])
+		select serverName,
+			'Object [' + isnull(databaseName, '') + '].[' + isnull(objectName, '') + '] was dropped ' +
+				'around ' + convert(varchar(20), isnull(ymd_lastSeen, ''), 120) + '.' as subject,
+			'Object [' + isnull(databaseName, '') + '].[' + isnull(objectName, '') + '] was dropped ' +
+				'around ' + convert(varchar(20), isnull(ymd_lastSeen, ''), 120) + '.' as message
+			from #droppedObjects
+
 	insert into notification..notificationLog_stage (serverName, subject, message, severity)
 	select serverName, subject, left(message, 4000), 2 as severity
 		from #messages
 
-	--set @nThisUkey = 0
-	--
-	--while exists (select top 1 ukey from #messages where ukey > @nThisUkey)
-	--begin
-	--	select top 1
-	--		@nThisUkey = ukey,
-	--		@cSubject = subject,
-	--		@cMessage = message,
-	--		@cServerName = serverName
-	--		from #messages
-	--		where ukey > @nThisUkey
-	--		order by ukey
-	--
-	--	exec notification.dbo.pr_sendMessage @cFrom='heybear@gmail.com', @cTo='cole@sqlbeat.com', @cSubject=@cSubject, @cBody=@cMessage
-	--end
+--	set @nThisUkey = 0
+--
+--	while exists (select top 1 ukey from #messages where ukey > @nThisUkey)
+--	begin
+--		select top 1
+--			@nThisUkey = ukey,
+--			@cSubject = subject,
+--			@cMessage = message,
+--			@cServerName = serverName
+--			from #messages
+--			where ukey > @nThisUkey
+--			order by ukey
+--
+--		exec notification.dbo.pr_sendMessage @cFrom='heybear@gmail.com', @cTo='cole@sqlbeat.com', @cSubject=@cSubject, @cBody=@cMessage
+--	end
+
+	drop table #droppedObjects
+	drop table #addedObjects
+	drop table #droppedDatabases
+	drop table #addedDatabases
+	drop table #currentDatabases
 
 	drop table #then
 	drop table #now
-	drop table #results
 	drop table #messages
 end

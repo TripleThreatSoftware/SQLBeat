@@ -12,13 +12,14 @@ begin
 	set @cServerName = ''
 
 	create table #objectText (databaseName varchar(500), objectName varchar(500), id bigint,
-		xtype varchar(2), objectText varchar(8000), ukey int identity)
+		xtype varchar(2), objectText varchar(8000), ukey int identity, isChanged bit default 0)
 	create table #tableStructure (databaseName varchar(500), tableName varchar(500), tableID bigint,
 		xtype varchar(2), columnName varchar(200), columnLength smallint, columnPrecision tinyint, columnType tinyint,
-		columnXType tinyint, columnIsNullable int, ukey int identity)
+		columnXType tinyint, columnIsNullable int, ukey int identity, isChanged bit default 0)
 	create table #indexes (databaseName varchar(500), tableName varchar(500), tableID bigint,
-		indexID bigint, indexName varchar(200), indexXType varchar(2), columnName varchar(200), keyNumber int)
-	create table #foreignKeys (databaseName varchar(500), id bigint, keyName varchar(200))
+		indexID bigint, indexName varchar(200), indexXType varchar(2), columnName varchar(200),
+		keyNumber int, isChanged bit default 0, ukey int identity)
+	create table #foreignKeys (databaseName varchar(500), id bigint, keyName varchar(200), isChanged bit default 0, ukey int identity)
 
 	insert into auditRuns (ymd) values (getDate())
 	set @nUkeyAuditRun = (select scope_identity())
@@ -166,25 +167,225 @@ begin
 
 		EXECUTE(@cProcedureName)
 
-		insert into auditData_objectText (ukey_auditRun, serverName, databaseName, objectName, id, xtype, objectText, textChecksum)
-		select @nUkeyAuditRun, @cServerName, databaseName, objectName, id, xtype, objectText, notification.dbo.fn_checksum(isnull(objectText, ''))
+		--***************************************************************************************************************************
+		--***************************************************************************************************************************
+		-- deal with the object text table
+		--***************************************************************************************************************************
+		--***************************************************************************************************************************
+
+		-- find things that don't currently exist in the table
+		update #objectText
+			set isChanged = 1
+			from #objectText a
+			left outer join auditData_objectText b on b.serverName = @cServerName
+				and isnull(a.databaseName, '') = isnull(b.databaseName, '')
+				and isnull(a.objectName, '') = isnull(b.objectName, '')
+				and isnull(a.id, '') = isnull(b.id, '')
+				and isnull(a.xtype, '') = isnull(b.xtype, '')
+				and notification.dbo.fn_checksum(isnull(a.objectText, '')) = b.textChecksum
+			where b.ukey is null
+
+		-- anything in the table that is in the current snapshot, update
+		update auditData_objectText
+			set ymd_lastSeen = getDate(),
+				isCurrent = 1
+			from auditData_objectText a
+			join #objectText b on isnull(a.databaseName, '') = isnull(b.databaseName, '')
+				and isnull(a.objectName, '') = isnull(b.objectName, '')
+				and isnull(a.id, '') = isnull(b.id, '')
+				and isnull(a.xtype, '') = isnull(b.xtype, '')
+				and notification.dbo.fn_checksum(isnull(b.objectText, '')) = a.textChecksum
+			where a.serverName = @cServerName
+
+		-- anything in the table but not in the snapshot, mark as gone!
+		update auditData_objectText
+			set isCurrent = 0
+			from auditData_objectText a
+			left outer join #objectText b on isnull(a.databaseName, '') = isnull(b.databaseName, '')
+				and isnull(a.objectName, '') = isnull(b.objectName, '')
+				and isnull(a.id, '') = isnull(b.id, '')
+				and isnull(a.xtype, '') = isnull(b.xtype, '')
+				and notification.dbo.fn_checksum(isnull(b.objectText, '')) = a.textChecksum
+			where b.ukey is null
+				and a.serverName = @cServerName
+
+		-- add new things to the table
+		insert into auditData_objectText (serverName, databaseName, objectName, id, xtype, objectText, textChecksum)
+		select @cServerName, databaseName, objectName, id, xtype, objectText,
+			notification.dbo.fn_checksum(isnull(objectText, ''))
 			from #objectText
+			where isChanged = 1
 			order by ukey
 
-		insert into auditData_tableStructure (ukey_auditRun, serverName, databaseName, tableName, tableid, xtype, columnName,
+
+		--***************************************************************************************************************************
+		--***************************************************************************************************************************
+		-- deal with the table structure table
+		--***************************************************************************************************************************
+		--***************************************************************************************************************************
+
+		-- find things that don't currently exist in the table
+		update #tableStructure
+			set isChanged = 1
+			from #tableStructure a
+			left outer join auditData_tableStructure b on b.serverName = @cServerName
+				and isnull(a.databaseName, '') = isnull(b.databaseName, '')
+				and isnull(a.tableName, '') = isnull(b.tableName, '')
+				and isnull(a.tableid, '') = isnull(b.tableid, '')
+				and isnull(a.xtype, '') = isnull(b.xtype, '')
+				and isnull(a.columnName, '') = isnull(b.columnName, '')
+				and isnull(a.columnLength, '') = isnull(b.columnLength, '')
+				and isnull(a.columnPrecision, '') = isnull(b.columnPrecision, '')
+				and isnull(a.columnType, '') = isnull(b.columnType, '')
+				and isnull(a.columnXType, '') = isnull(b.columnXType, '')
+				and isnull(a.columnIsNullable, '') = isnull(b.columnIsNullable, '')
+			where b.ukey is null
+
+		-- anything in the table that is in the current snapshot, update
+		update auditData_tableStructure
+			set ymd_lastSeen = getDate(),
+				isCurrent = 1
+			from auditData_tableStructure a
+			join #tableStructure b on isnull(a.databaseName, '') = isnull(b.databaseName, '')
+				and isnull(a.tableName, '') = isnull(b.tableName, '')
+				and isnull(a.tableid, '') = isnull(b.tableid, '')
+				and isnull(a.xtype, '') = isnull(b.xtype, '')
+				and isnull(a.columnName, '') = isnull(b.columnName, '')
+				and isnull(a.columnLength, '') = isnull(b.columnLength, '')
+				and isnull(a.columnPrecision, '') = isnull(b.columnPrecision, '')
+				and isnull(a.columnType, '') = isnull(b.columnType, '')
+				and isnull(a.columnXType, '') = isnull(b.columnXType, '')
+				and isnull(a.columnIsNullable, '') = isnull(b.columnIsNullable, '')
+			where a.serverName = @cServerName
+
+		-- anything in the table but not in the snapshot, mark as gone!
+		update auditData_tableStructure
+			set isCurrent = 0
+			from auditData_tableStructure a
+			left outer join #tableStructure b on isnull(a.databaseName, '') = isnull(b.databaseName, '')
+				and isnull(a.tableName, '') = isnull(b.tableName, '')
+				and isnull(a.tableid, '') = isnull(b.tableid, '')
+				and isnull(a.xtype, '') = isnull(b.xtype, '')
+				and isnull(a.columnName, '') = isnull(b.columnName, '')
+				and isnull(a.columnLength, '') = isnull(b.columnLength, '')
+				and isnull(a.columnPrecision, '') = isnull(b.columnPrecision, '')
+				and isnull(a.columnType, '') = isnull(b.columnType, '')
+				and isnull(a.columnXType, '') = isnull(b.columnXType, '')
+				and isnull(a.columnIsNullable, '') = isnull(b.columnIsNullable, '')
+			where b.ukey is null
+				and a.serverName = @cServerName
+
+		insert into auditData_tableStructure (serverName, databaseName, tableName, tableid, xtype, columnName,
 			columnLength, columnPrecision, columnType, columnXType, columnIsNullable)
-		select @nUkeyAuditRun, @cServerName, databaseName, tableName, tableid, xtype, columnName,
+		select @cServerName, databaseName, tableName, tableid, xtype, columnName,
 			columnLength, columnPrecision, columnType, columnXType, columnIsNullable
 			from #tableStructure
+			where isChanged = 1
 			order by ukey
 
-		insert into auditData_indexes (ukey_auditRun, serverName, databaseName, tableName, tableid, indexID, indexName, indexXType, columnName, keyNumber)
-		select @nUkeyAuditRun, @cServerName, databaseName, tableName, tableid, indexID, indexName, indexXType, columnName, keyNumber
-			from #indexes
+		--***************************************************************************************************************************
+		--***************************************************************************************************************************
+		-- deal with the indexes table
+		--***************************************************************************************************************************
+		--***************************************************************************************************************************
 
-		insert into auditData_foreignKeys (ukey_auditRun, serverName, databaseName, id, keyName)
-		select @nUkeyAuditRun, @cServerName, databaseName, id, keyName
+		-- find things that don't currently exist in the table
+		update #indexes
+			set isChanged = 1
+			from #indexes a
+			left outer join auditData_indexes b on b.serverName = @cServerName
+				and isnull(a.databaseName, '') = isnull(b.databaseName, '')
+				and isnull(a.tableName, '') = isnull(b.tableName, '')
+				and isnull(a.tableid, '') = isnull(b.tableid, '')
+				and isnull(a.indexID, '') = isnull(b.indexID, '')
+				and isnull(a.indexName, '') = isnull(b.indexName, '')
+				and isnull(a.indexXType, '') = isnull(b.indexXType, '')
+				and isnull(a.columnName, '') = isnull(b.columnName, '')
+				and isnull(a.keyNumber, '') = isnull(b.keyNumber, '')
+			where b.ukey is null
+
+		-- anything in the table that is in the current snapshot, update
+		update auditData_indexes
+			set ymd_lastSeen = getDate(),
+				isCurrent = 1
+			from auditData_indexes a
+			join #indexes b on isnull(a.databaseName, '') = isnull(b.databaseName, '')
+				and isnull(a.tableName, '') = isnull(b.tableName, '')
+				and isnull(a.tableid, '') = isnull(b.tableid, '')
+				and isnull(a.indexID, '') = isnull(b.indexID, '')
+				and isnull(a.indexName, '') = isnull(b.indexName, '')
+				and isnull(a.indexXType, '') = isnull(b.indexXType, '')
+				and isnull(a.columnName, '') = isnull(b.columnName, '')
+				and isnull(a.keyNumber, '') = isnull(b.keyNumber, '')
+			where a.serverName = @cServerName
+
+		-- anything in the table but not in the snapshot, mark as gone!
+		update auditData_indexes
+			set isCurrent = 0
+			from auditData_indexes a
+			left outer join #indexes b on isnull(a.databaseName, '') = isnull(b.databaseName, '')
+				and isnull(a.tableName, '') = isnull(b.tableName, '')
+				and isnull(a.tableid, '') = isnull(b.tableid, '')
+				and isnull(a.indexID, '') = isnull(b.indexID, '')
+				and isnull(a.indexName, '') = isnull(b.indexName, '')
+				and isnull(a.indexXType, '') = isnull(b.indexXType, '')
+				and isnull(a.columnName, '') = isnull(b.columnName, '')
+				and isnull(a.keyNumber, '') = isnull(b.keyNumber, '')
+			where b.ukey is null
+				and a.serverName = @cServerName
+
+		insert into auditData_indexes (serverName, databaseName, tableName, tableid, indexID, indexName, indexXType, columnName, keyNumber)
+		select @cServerName, databaseName, tableName, tableid, indexID, indexName, indexXType, columnName, keyNumber
+			from #indexes
+			where isChanged = 1
+
+		--***************************************************************************************************************************
+		--***************************************************************************************************************************
+		-- deal with the foreign keys table
+		--***************************************************************************************************************************
+		--***************************************************************************************************************************
+
+		-- find things that don't currently exist in the table
+		update #foreignKeys
+			set isChanged = 1
+			from #foreignKeys a
+			left outer join auditData_foreignKeys b on b.serverName = @cServerName
+				and isnull(a.databaseName, '') = isnull(b.databaseName, '')
+				and isnull(a.id, '') = isnull(b.id, '')
+				and isnull(a.keyName, '') = isnull(b.keyName, '')
+			where b.ukey is null
+
+		-- anything in the table that is in the current snapshot, update
+		update auditData_foreignKeys
+			set ymd_lastSeen = getDate(),
+				isCurrent = 1
+			from auditData_foreignKeys a
+			join #foreignKeys b on isnull(a.databaseName, '') = isnull(b.databaseName, '')
+				and isnull(a.id, '') = isnull(b.id, '')
+				and isnull(a.keyName, '') = isnull(b.keyName, '')
+			where a.serverName = @cServerName
+
+		-- anything in the table but not in the snapshot, mark as gone!
+		update auditData_foreignKeys
+			set isCurrent = 0
+			from auditData_foreignKeys a
+			left outer join #foreignKeys b on isnull(a.databaseName, '') = isnull(b.databaseName, '')
+				and isnull(a.id, '') = isnull(b.id, '')
+				and isnull(a.keyName, '') = isnull(b.keyName, '')
+			where b.ukey is null
+				and a.serverName = @cServerName
+
+		insert into auditData_foreignKeys (serverName, databaseName, id, keyName)
+		select @cServerName, databaseName, id, keyName
 			from #foreignKeys
+			where isChanged = 1
+
+
+		--***************************************************************************************************************************
+		--***************************************************************************************************************************
+		-- now, update the server record
+		--***************************************************************************************************************************
+		--***************************************************************************************************************************
 
 		update notification..dm_servers
 			set lastObjectCheck = getDate()

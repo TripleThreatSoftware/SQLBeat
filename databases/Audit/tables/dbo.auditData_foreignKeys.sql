@@ -1,10 +1,14 @@
-create table auditData_foreignKeys (ukey int identity, ukey_auditRun bigint, ymd dateTime default getDate(), serverName varchar(200),
-	databaseName varchar(500), id bigint, keyName varchar(200))
+alter table auditData_foreignKeys add ymd_firstSeen dateTime default getDate()
+alter table auditData_foreignKeys add ymd_lastSeen dateTime default getDate()
+alter table auditData_foreignKeys add isCurrent bit default 1
 GO
-update notification..dm_servers set lastObjectCheck = ''
-GO
-truncate table auditData_objectText
-truncate table auditData_tableStructure
-truncate table auditData_indexes
 truncate table auditData_foreignKeys
+GO
+alter table auditData_foreignKeys drop column ymd
+GO
+alter table auditData_foreignKeys drop column ukey_auditRun
+GO
+update  notification..dm_servers
+	set lastObjectCheck = ''
+	where serverName = 'devmssql02'
 GO

@@ -1,6 +1,6 @@
 USE [Configuration]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_processRunResults]    Script Date: 06/18/2008 08:42:22 ******/
+/****** Object:  StoredProcedure [dbo].[pr_processRunResults]    Script Date: 07/09/2008 11:17:38 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -163,8 +163,8 @@ begin
 	drop index #thisRun.ix_tmp_thisRun
 	drop index #lastRun.ix_tmp_lastRun
 
-	create clustered index ix_tmp_thisRun on #thisRun (ukey_server, ukey_counter, instanceName, ukey_keyName, keyValue) with fillfactor = 100
-	create clustered index ix_tmp_lastRun on #lastRun (ukey_server, ukey_counter, instanceName, ukey_keyName, keyValue) with fillfactor = 100
+	create clustered index ix_tmp_thisRun on #thisRun (ukey_server, ukey_counter, instanceName, ukey_keyName) with fillfactor = 100
+	create clustered index ix_tmp_lastRun on #lastRun (ukey_server, ukey_counter, instanceName, ukey_keyName) with fillfactor = 100
 
 	update #thisRun
 		set isChecked = 1,
