@@ -1,5 +1,3 @@
-USE [Notification]
-GO
 /****** Object:  StoredProcedure [dbo].[pr_archiveOldPartitionedTables]    Script Date: 07/09/2008 11:12:17 ******/
 SET ANSI_NULLS ON
 GO
@@ -285,3 +283,4 @@ begin
 end
 
 -- exec pr_archiveOldPartitionedTables 'mart_vehicle_byday_daily', 'ukey_auto'
+GO

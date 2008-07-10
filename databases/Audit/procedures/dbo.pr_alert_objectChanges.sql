@@ -1,5 +1,6 @@
 use [audit]
-go
+
+GO
 
 -- exec pr_alert_objectChanges '2008-01-01', null
 ALTER procedure [dbo].[pr_alert_objectChanges] (@dStartDate dateTime = null, @dEndDate dateTime = null)
@@ -279,26 +280,22 @@ begin
 				'around ' + convert(varchar(20), isnull(ymd_lastSeen, ''), 120) + '.' as message
 			from #droppedObjects
 
+	-- if this is the first pass we've made against this server, don't send out any messages. it'll be all "object added"
+	delete #messages
+		from #messages a
+		join (
+			select serverName
+				from auditData_objectText
+				group by serverName
+				having sum(case when isnull(ymd_firstSeen, '') <> isnull(ymd_lastSeen, '') then 1 else 0 end) = 0
+			) b on a.serverName = b.serverName
+
+	-- write the alerts
 	insert into notification..notificationLog_stage (serverName, subject, message, severity)
 	select serverName, subject, left(message, 4000), 2 as severity
 		from #messages
 
---	set @nThisUkey = 0
---
---	while exists (select top 1 ukey from #messages where ukey > @nThisUkey)
---	begin
---		select top 1
---			@nThisUkey = ukey,
---			@cSubject = subject,
---			@cMessage = message,
---			@cServerName = serverName
---			from #messages
---			where ukey > @nThisUkey
---			order by ukey
---
---		exec notification.dbo.pr_sendMessage @cFrom='heybear@gmail.com', @cTo='cole@sqlbeat.com', @cSubject=@cSubject, @cBody=@cMessage
---	end
-
+	-- clean up
 	drop table #droppedObjects
 	drop table #addedObjects
 	drop table #droppedDatabases

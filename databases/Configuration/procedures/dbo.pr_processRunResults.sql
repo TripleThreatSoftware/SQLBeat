@@ -1,5 +1,3 @@
-USE [Configuration]
-GO
 /****** Object:  StoredProcedure [dbo].[pr_processRunResults]    Script Date: 07/09/2008 11:17:38 ******/
 SET ANSI_NULLS ON
 GO
@@ -546,3 +544,4 @@ begin
 
 	insert into runs_log (message, ukey_group) values ('PRR: Done!', @nUkeyGroup)
 end
+GO

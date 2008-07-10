@@ -1,5 +1,3 @@
-USE [Notification]
-GO
 /****** Object:  StoredProcedure [dbo].[pr_monitorJobIntervals]    Script Date: 07/09/2008 11:14:13 ******/
 SET ANSI_NULLS ON
 GO
@@ -245,3 +243,4 @@ begin
 	end
 
 end
+GO

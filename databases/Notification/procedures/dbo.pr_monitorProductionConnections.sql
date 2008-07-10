@@ -1,5 +1,3 @@
-USE [Notification]
-GO
 /****** Object:  StoredProcedure [dbo].[pr_monitorProductionConnections]    Script Date: 07/09/2008 11:18:55 ******/
 SET ANSI_NULLS ON
 GO
@@ -310,3 +308,4 @@ begin
 	drop table #historical
 	drop table #results
 end
+GO

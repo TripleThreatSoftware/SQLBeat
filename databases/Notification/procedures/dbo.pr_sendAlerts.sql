@@ -136,7 +136,7 @@ begin
 						or isnull(businessHours, 0) = 0
 						)
 				)
-			and (b.userName = a.userName)
+			and (b.userName = a.userName or b.userName is null)
 		left outer join dm_servers d on a.serverName = d.serverName
 		where (b.ukey_group = d.ukey_group or isnull(b.ukey_group, 0) = 0 or isnull(d.ukey_group, 0) = 0)
 
