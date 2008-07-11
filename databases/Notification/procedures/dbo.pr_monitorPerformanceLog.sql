@@ -1,4 +1,3 @@
-/****** Object:  StoredProcedure [dbo].[pr_monitorPerformanceLog]    Script Date: 07/09/2008 11:26:41 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -263,4 +262,3 @@ begin
 	drop table #normalizedCounters
 
 end
-GO

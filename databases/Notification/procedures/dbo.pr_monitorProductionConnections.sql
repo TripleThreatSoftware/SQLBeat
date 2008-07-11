@@ -1,8 +1,6 @@
-/****** Object:  StoredProcedure [dbo].[pr_monitorProductionConnections]    Script Date: 07/09/2008 11:18:55 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
+use [notification]
+go
+
 ALTER procedure [dbo].[pr_monitorProductionConnections]
 as
 begin
@@ -12,142 +10,144 @@ begin
 	declare @cThisSubject varchar(500)
 	declare @nUkey int
 	declare @cThisServerName varchar(100)
+	declare @cSQLString nvarchar(4000)
+	declare @nNumMinutes int
 
-	set @cThisServerName = convert(varchar(100), serverProperty('servername'))
+	declare @dStartDate dateTime
+	declare @dEndDate dateTime
 
-	select spid, lastBatchTime, hostname, login, command, bufferContents, max(ymd) as ymd, serverName, lastWaitType
-		into #currentActivity
-		from processLog (nolock)
-		where serverName in (select serverName from dm_servers (nolock) where ukey_group in (select ukey from dm_serverGroups (nolock) where isProduction = 1 ))
-			and ymd >= dateAdd(hour, -2, getDate())
-			and lastBatchTime >= dateAdd(minute, -60, getDate())
-			and spid > 50
-			and programName not in ('SQLAgent - Job invocation engine', 'SQLAgent - Generic Refresher')
-			and hostName <> @cThisServerName
-		group by spid, lastBatchTime, hostname, login, command, bufferContents, serverName, lastWaitType
+	declare @dStartDate1 dateTime
+	declare @dEndDate1 dateTime
 
-	select spid, lastBatchTime, hostname, login, command, bufferContents, max(ymd) as ymd, a.serverName, lastWaitType
-		into #historicalActivity
-		from v_processLog_all a
-		where serverName in (select serverName from dm_servers (nolock) where ukey_group in (select ukey from dm_serverGroups (nolock) where isProduction =1 ))
-			and (
-				(ymd >= dateAdd(week, -1, dateAdd(minute, -60, getDate())) and ymd <= dateAdd(week, -1, getDate()))
-				or (ymd >= dateAdd(week, -2, dateAdd(minute, -60, getDate())) and ymd <= dateAdd(week, -2, getDate()))
-				or (ymd >= dateAdd(week, -3, dateAdd(minute, -60, getDate())) and ymd <= dateAdd(week, -3, getDate()))
-				or (ymd >= dateAdd(week, -4, dateAdd(minute, -60, getDate())) and ymd <= dateAdd(week, -4, getDate()))
-			)
-			and spid > 50
-			and programName not in ('SQLAgent - Job invocation engine', 'SQLAgent - Generic Refresher')
-			and hostName <> @cThisServerName
-			and dateDiff(hour, lastBatchTime, ymd) <= 6
-		group by spid, lastBatchTime, hostname, login, command, bufferContents, a.serverName, lastWaitType
+	declare @dStartDate2 dateTime
+	declare @dEndDate2 dateTime
 
-	-- select left(convert(varchar(19), getDate(), 120), 10) + ' ' + right(convert(varchar(19), getDate(), 120), 8)
+	declare @dStartDate3 dateTime
+	declare @dEndDate3 dateTime
 
-	-- query time by fifteen minute blocks
+	set @nNumMinutes = 30
+
+	set @dEndDate = getDate()
+	set @dStartDate = dateAdd(minute, -@nNumMinutes, @dEndDate)
+
+	set @dEndDate1 = dateAdd(week, -1, @dEndDate)
+	set @dStartDate1 = dateAdd(minute, -@nNumMinutes, @dEndDate1)
+
+	set @dEndDate2 = dateAdd(week, -1, @dEndDate1)
+	set @dStartDate2 = dateAdd(minute, -@nNumMinutes, @dEndDate2)
+
+	set @dEndDate3 = dateAdd(week, -1, @dEndDate2)
+	set @dStartDate3 = dateAdd(minute, -@nNumMinutes, @dEndDate3)
+
+	set @cThisServerName = (select top 1 settingValue from dm_settings where settingName = 'current machine name')
+
 	select
-		a.serverName,
-		a.ymd,
-		isnull(a.numConnections, 0) as numConnections,
+		serverName, ymd,
+		convert(decimal(10,2), convert(decimal(10,2), a.numActiveConnections) / convert(decimal(10,2), a.numPolls)) as numActiveConnections,
+		isnull(a.numPolls, 0) as numPolls,
 
-		isnull(b.numWaitingConnections, 0) as numWaitingConnections_oledb,
-		isnull(b.secondsElapsed_avg, 0) as secondsElapsed_avg_oledb,
-		isnull(b.secondsElapsed_max, 0) as secondsElapsed_max_oledb,
+		convert(decimal(10,2), convert(decimal(10,2), isnull(a.numWaitingConnections_oledb, 0)) / convert(decimal(10,2), a.numPolls)) as numWaitingConnections_oledb,
+		convert(decimal(10,2), convert(decimal(10,2), isnull(a.secondsElapsed_avg_oledb, 0)) / convert(decimal(10,2), a.numPolls)) as secondsElapsed_avg_oledb,
+		convert(decimal(10,2), convert(decimal(10,2), isnull(a.secondsElapsed_max_oledb, 0)) / convert(decimal(10,2), a.numPolls)) as secondsElapsed_max_oledb,
 
-		isnull(c.numWaitingConnections, 0) as numWaitingConnections,
-		isnull(c.secondsElapsed_avg, 0) as secondsElapsed_avg,
-		isnull(c.secondsElapsed_max, 0) as secondsElapsed_max,
-
-		identity(int) as ukey
+		convert(decimal(10,2), convert(decimal(10,2), isnull(a.numWaitingConnections, 0)) / convert(decimal(10,2), a.numPolls)) as numWaitingConnections,
+		convert(decimal(10,2), convert(decimal(10,2), isnull(a.secondsElapsed_avg, 0)) / convert(decimal(10,2), a.numPolls)) as secondsElapsed_avg,
+		convert(decimal(10,2), convert(decimal(10,2), isnull(a.secondsElapsed_max, 0)) / convert(decimal(10,2), a.numPolls)) as secondsElapsed_max
 
 		into #current
-
 		from (
-			select serverName,
-				count(*) as numConnections,
-				max(ymd) as ymd
+			select
+				serverName,
+				max(ymd) as ymd,
+				count(*) as numActiveConnections,
+				count(distinct convert(varchar(16), ymd, 120)) as numPolls,
 
-				from #currentActivity a
+				avg(case when lastWaitType = 'oledb' then dateDiff(second, lastBatchTime, ymd) else null end) as secondsElapsed_avg_oledb,
+				max(case when lastWaitType = 'oledb' then dateDiff(second, lastBatchTime, ymd) else null end) as secondsElapsed_max_oledb,
+				sum(case when lastWaitType = 'oledb' then 1 else 0 end) as numWaitingConnections_oledb,
+
+				avg(case when lastWaitType <> 'oledb' then dateDiff(second, lastBatchTime, ymd) else null end) as secondsElapsed_avg,
+				max(case when lastWaitType <> 'oledb' then dateDiff(second, lastBatchTime, ymd) else null end) as secondsElapsed_max,
+				sum(case when lastWaitType <> 'oledb' then 1 else 0 end) as numWaitingConnections
+
+				from processLog (nolock)
+				where serverName in (select serverName from dm_servers (nolock) where ukey_group in (select ukey from dm_serverGroups (nolock) where isProduction = 1 ))
+					and ymd between @dStartDate and @dEndDate
+					and lastBatchTime between @dStartDate and @dEndDate
+					and spid > 50
+					and programName not in ('SQLAgent - Job invocation engine', 'SQLAgent - Generic Refresher')
+					and programName not like '%repl%'
+					and hostName <> @cThisServerName
+					and command <> 'awaiting command'
 				group by serverName
 			) a
-		left outer join (
-			select serverName,
-				avg(dateDiff(second, lastBatchTime, ymd)) as secondsElapsed_avg,
-				max(dateDiff(second, lastBatchTime, ymd)) as secondsElapsed_max,
-				count(*) as numWaitingConnections
-				from #currentActivity a
-				where command <> 'awaiting command' and lastWaitType = 'oledb'
-				group by serverName
-			) b on a.serverName = b.serverName
-		left outer join (
-			select serverName,
-				avg(dateDiff(second, lastBatchTime, ymd)) as secondsElapsed_avg,
-				max(dateDiff(second, lastBatchTime, ymd)) as secondsElapsed_max,
-				count(*) as numWaitingConnections
 
-				from #currentActivity a
-				where command <> 'awaiting command'
-				group by serverName
-			) c on a.serverName = c.serverName
-		order by a.serverName
+	-- create the table
+	select top 0 * into #historical from #current
 
-	-- historical
+	set @cSQLString = '
 	select
-		a.serverName,
-		avg(isnull(a.numConnections, 0)) as numConnections,
+		serverName, ymd,
+		convert(decimal(10,2), convert(decimal(10,2), a.numActiveConnections) / convert(decimal(10,2), a.numPolls)) as numActiveConnections,
+		isnull(a.numPolls, 0) as numPolls,
 
-		avg(isnull(b.numWaitingConnections, 0)) as numWaitingConnections_oledb,
-		avg(isnull(b.secondsElapsed_avg, 0)) as secondsElapsed_avg_oledb,
-		max(isnull(b.secondsElapsed_max, 0)) as secondsElapsed_max_oledb,
+		convert(decimal(10,2), convert(decimal(10,2), isnull(a.numWaitingConnections_oledb, 0)) / convert(decimal(10,2), a.numPolls)) as numWaitingConnections_oledb,
+		convert(decimal(10,2), convert(decimal(10,2), isnull(a.secondsElapsed_avg_oledb, 0)) / convert(decimal(10,2), a.numPolls)) as secondsElapsed_avg_oledb,
+		convert(decimal(10,2), convert(decimal(10,2), isnull(a.secondsElapsed_max_oledb, 0)) / convert(decimal(10,2), a.numPolls)) as secondsElapsed_max_oledb,
 
-		avg(isnull(c.numWaitingConnections, 0)) as numWaitingConnections,
-		avg(isnull(c.secondsElapsed_avg, 0)) as secondsElapsed_avg,
-		max(isnull(c.secondsElapsed_max, 0)) as secondsElapsed_max,
-
-		identity(int) as ukey
-
-		into #historical
-
+		convert(decimal(10,2), convert(decimal(10,2), isnull(a.numWaitingConnections, 0)) / convert(decimal(10,2), a.numPolls)) as numWaitingConnections,
+		convert(decimal(10,2), convert(decimal(10,2), isnull(a.secondsElapsed_avg, 0)) / convert(decimal(10,2), a.numPolls)) as secondsElapsed_avg,
+		convert(decimal(10,2), convert(decimal(10,2), isnull(a.secondsElapsed_max, 0)) / convert(decimal(10,2), a.numPolls)) as secondsElapsed_max
 		from (
-			select serverName,
-				dateDiff(week, ymd, getDate()) as whichWeek,
-				count(*) as numConnections
+			select
+				serverName,
+				max(ymd) as ymd,
+				count(*) as numActiveConnections,
+				count(distinct convert(varchar(16), ymd, 120)) as numPolls,
 
-				from #historicalActivity a
-				group by serverName, dateDiff(week, ymd, getDate())
-			) a
-		left outer join (
-			select serverName,
-				dateDiff(week, ymd, getDate()) as whichWeek,
-				avg(dateDiff(second, lastBatchTime, ymd)) as secondsElapsed_avg,
-				max(dateDiff(second, lastBatchTime, ymd)) as secondsElapsed_max,
-				count(*) as numWaitingConnections
-				from #historicalActivity a
-				where command <> 'awaiting command' and lastWaitType = 'oledb'
-				group by serverName, dateDiff(week, ymd, getDate())
-			) b on a.serverName = b.serverName
-		left outer join (
-			select serverName,
-				dateDiff(week, ymd, getDate()) as whichWeek,
-				avg(dateDiff(second, lastBatchTime, ymd)) as secondsElapsed_avg,
-				max(dateDiff(second, lastBatchTime, ymd)) as secondsElapsed_max,
-				count(*) as numWaitingConnections
-				from #historicalActivity a
-				where command <> 'awaiting command'
-				group by serverName, dateDiff(week, ymd, getDate())
-			) c on a.serverName = c.serverName
-		group by a.serverName
+				avg(case when lastWaitType = ''oledb'' then dateDiff(second, lastBatchTime, ymd) else null end) as secondsElapsed_avg_oledb,
+				max(case when lastWaitType = ''oledb'' then dateDiff(second, lastBatchTime, ymd) else null end) as secondsElapsed_max_oledb,
+				sum(case when lastWaitType = ''oledb'' then 1 else 0 end) as numWaitingConnections_oledb,
+
+				avg(case when lastWaitType <> ''oledb'' then dateDiff(second, lastBatchTime, ymd) else null end) as secondsElapsed_avg,
+				max(case when lastWaitType <> ''oledb'' then dateDiff(second, lastBatchTime, ymd) else null end) as secondsElapsed_max,
+				sum(case when lastWaitType <> ''oledb'' then 1 else 0 end) as numWaitingConnections
+
+				from v_processLog_all (nolock)
+				where serverName in (select serverName from dm_servers (nolock) where ukey_group in (select ukey from dm_serverGroups (nolock) where isProduction = 1 ))
+					and (
+						(ymd between ''' + convert(varchar(20), @dStartDate1, 120) + ''' and ''' + convert(varchar(20), @dEndDate1, 120) + '''
+							and lastBatchTime between ''' + convert(varchar(20), @dStartDate1, 120) + ''' and ''' + convert(varchar(20), @dEndDate1, 120) + '''
+							)
+						or (ymd between ''' + convert(varchar(20), @dStartDate2, 120) + ''' and ''' + convert(varchar(20), @dEndDate2, 120) + '''
+							and lastBatchTime between ''' + convert(varchar(20), @dStartDate2, 120) + ''' and ''' + convert(varchar(20), @dEndDate2, 120) + '''
+							)
+						or (ymd between ''' + convert(varchar(20), @dStartDate3, 120) + ''' and ''' + convert(varchar(20), @dEndDate3, 120) + '''
+							and lastBatchTime between ''' + convert(varchar(20), @dStartDate3, 120) + ''' and ''' + convert(varchar(20), @dEndDate3, 120) + '''
+							)
+						)
+					and spid > 50
+					and programName not in (''SQLAgent - Job invocation engine'', ''SQLAgent - Generic Refresher'')
+					and programName not like ''%repl%''
+					and hostName <> ''' + @cThisServerName + '''
+					and command <> ''awaiting command''
+				group by serverName
+			) a'
+
+	insert into #historical
+	exec sp_executeSQL @cSQLString
 
 	select
 		a.serverName, a.ymd,
-		a.numConnections as numConnections_now, b.numConnections as numConnections_hist,
-		case when b.numConnections <> 0
+
+		a.numActiveConnections as numActiveConnections_now, b.numActiveConnections as numActiveConnections_hist,
+		case when b.numActiveConnections <> 0
 			then convert(int, (
-						convert(decimal(10,2), a.numConnections - b.numConnections) / convert(decimal(10,2), b.numConnections)
+						convert(decimal(10,2), a.numActiveConnections - b.numActiveConnections) / convert(decimal(10,2), b.numActiveConnections)
 					) * 100
 				)
 			else 0
-			end as numConnections_delta,
+			end as numActiveConnections_delta,
 
 		a.numWaitingConnections_oledb as numWaitingConnections_oledb_now, b.numWaitingConnections_oledb as numWaitingConnections_oledb_hist,
 		case when b.numWaitingConnections_oledb <> 0
@@ -211,12 +211,15 @@ begin
 		join #historical b on a.serverName = b.serverName
 		order by a.serverName
 
---	select * from #historical
---	select * from #results
-
 	set @cThisServerName = ''
 
-	while exists (select top 1 serverName from dm_servers (nolock) where ukey_group in (select ukey from dm_serverGroups where isProduction =1 ) and serverName > @cThisServerName)
+	while exists (
+		select top 1 serverName
+			from dm_servers (nolock)
+			where ukey_group in (select ukey from dm_serverGroups where isProduction =1 )
+				and serverName > @cThisServerName
+				and detailedCheck = 1
+		)
 	begin
 		select top 1 @cThisServerName = serverName
 			from dm_servers	 (nolock)
@@ -226,68 +229,68 @@ begin
 						where isProduction = 1
 					)
 				and serverName > @cThisServerName
+				and detailedCheck = 1
 			order by serverName
 
 		set @cThisMessage = ''
 
 		select
-			@cThisSubject = 'Connections to ' + @cThisServerName + ' out of tolerance for 30 minutes ending ' + right(convert(varchar(19), ymd, 120), 8) + '.',
-			@cThisMessage = 'Connections between ' + right(convert(varchar(19), dateAdd(minute, -60, getDate()), 120), 8) + ' and ' + right(convert(varchar(19), ymd, 120), 8) + '.' + char(13) + char(13) +
+			@cThisSubject = 'Connections to ' + @cThisServerName + ' out of tolerance for ' + convert(varchar(20), @nNumMinutes) + ' minutes ending ' + right(convert(varchar(19), ymd, 120), 8) + '.',
+			@cThisMessage = 'Connections between ' + right(convert(varchar(19), @dStartDate, 120), 8) + ' and ' + right(convert(varchar(19), ymd, 120), 8) + '.' + char(13) + char(13) +
 				left('Measure' + space(30), 30) + ' ' +
-				left('Now' + space(4), 4) + ' ' +
-				left('Avg' + space(4), 4) + ' ' +
+				left('Now' + space(6), 6) + ' ' +
+				left('Avg' + space(6), 6) + ' ' +
 				left('Relative' + space(8), 8) + char(13) +
 
 				replicate('=', 30) + ' ' +
-				replicate('=', 4) + ' ' +
-				replicate('=', 4) + ' ' +
+				replicate('=', 6) + ' ' +
+				replicate('=', 6) + ' ' +
 				replicate('=', 8) + ' ' + char(13) +
 
-				left('Number of connections' + space(30), 30) + ' ' +
-				right(space(4) + convert(varchar(20), numConnections_now), 4) + ' ' +
-				right(space(4) + convert(varchar(20), numConnections_hist), 4) + ' ' +
-				right(space(8) + convert(varchar(20), numConnections_delta), 7) + '%' + char(13) +
+				left('Number of active connections' + space(30), 30) + ' ' +
+				right(space(4) + convert(varchar(20), numActiveConnections_now), 6) + ' ' +
+				right(space(4) + convert(varchar(20), numActiveConnections_hist), 6) + ' ' +
+				right(space(8) + convert(varchar(20), numActiveConnections_delta), 7) + '%' + char(13) +
 
 				left('OLEDB waiting connections' + space(30), 30) + ' ' +
-				right(space(3) + convert(varchar(20), numWaitingConnections_oledb_now), 4) + ' ' +
-				right(space(3) + convert(varchar(20), numWaitingConnections_oledb_hist), 4) + ' ' +
+				right(space(3) + convert(varchar(20), numWaitingConnections_oledb_now), 6) + ' ' +
+				right(space(3) + convert(varchar(20), numWaitingConnections_oledb_hist), 6) + ' ' +
 				right(space(7) + convert(varchar(20), numWaitingConnections_oledb_delta), 7) + '%' + char(13) +
 
 				left('OLEDB waiting seconds (avg)' + space(30), 30) + ' ' +
-				right(space(3) + convert(varchar(20), secondsElapsed_avg_oledb_now), 4) + ' ' +
-				right(space(3) + convert(varchar(20), secondsElapsed_avg_oledb_hist), 4) + ' ' +
+				right(space(3) + convert(varchar(20), secondsElapsed_avg_oledb_now), 6) + ' ' +
+				right(space(3) + convert(varchar(20), secondsElapsed_avg_oledb_hist), 6) + ' ' +
 				right(space(7) + convert(varchar(20), secondsElapsed_avg_oledb_delta), 7) + '%' + char(13) +
 
 				left('OLEDB waiting seconds (max)' + space(30), 30) + ' ' +
-				right(space(3) + convert(varchar(20), secondsElapsed_max_oledb_now), 4) + ' ' +
-				right(space(3) + convert(varchar(20), secondsElapsed_max_oledb_hist), 4) + ' ' +
+				right(space(3) + convert(varchar(20), secondsElapsed_max_oledb_now), 6) + ' ' +
+				right(space(3) + convert(varchar(20), secondsElapsed_max_oledb_hist), 6) + ' ' +
 				right(space(7) + convert(varchar(20), secondsElapsed_max_oledb_delta), 7) + '%' + char(13) +
 
 				left('Waiting connections' + space(30), 30) + ' ' +
-				right(space(3) + convert(varchar(20), numWaitingConnections_now), 4) + ' ' +
-				right(space(3) + convert(varchar(20), numWaitingConnections_hist), 4) + ' ' +
+				right(space(3) + convert(varchar(20), numWaitingConnections_now), 6) + ' ' +
+				right(space(3) + convert(varchar(20), numWaitingConnections_hist), 6) + ' ' +
 				right(space(7) + convert(varchar(20), numWaitingConnections_delta), 7) + '%' + char(13) +
 
 				left('Waiting seconds (avg)' + space(30), 30) + ' ' +
-				right(space(3) + convert(varchar(20), secondsElapsed_avg_now), 4) + ' ' +
-				right(space(3) + convert(varchar(20), secondsElapsed_avg_hist), 4) + ' ' +
+				right(space(3) + convert(varchar(20), secondsElapsed_avg_now), 6) + ' ' +
+				right(space(3) + convert(varchar(20), secondsElapsed_avg_hist), 6) + ' ' +
 				right(space(7) + convert(varchar(20), secondsElapsed_avg_delta), 7) + '%' + char(13) +
 
 				left('Waiting seconds (max)' + space(30), 30) + ' ' +
-				right(space(3) + convert(varchar(20), secondsElapsed_max_now), 4) + ' ' +
-				right(space(3) + convert(varchar(20), secondsElapsed_max_hist), 4) + ' ' +
+				right(space(3) + convert(varchar(20), secondsElapsed_max_now), 6) + ' ' +
+				right(space(3) + convert(varchar(20), secondsElapsed_max_hist), 6) + ' ' +
 				right(space(7) + convert(varchar(20), secondsElapsed_max_delta), 7) + '%'
 
 			from #results
 
 			where (
-					(numConnections_delta <= -75 or numConnections_delta >= 200)
-					or ((numWaitingConnections_oledb_delta >= 200 and numWaitingConnections_oledb_now > 15))
-					or ((secondsElapsed_avg_oledb_delta >= 200 and secondsElapsed_avg_oledb_now > 30))
-					or ((secondsElapsed_max_oledb_delta >= 200 and secondsElapsed_max_oledb_now > 60))
-					or ((numWaitingConnections_delta <= -75 and (numWaitingConnections_hist - numWaitingConnections_now) > 5) or (numWaitingConnections_delta >= 200 and numWaitingConnections_now > 20))
-					or ((secondsElapsed_avg_delta >= 200 and secondsElapsed_avg_now > 30))
-					or ((secondsElapsed_max_delta >= 200 and secondsElapsed_max_now > 200))
+					(numActiveConnections_delta <= -75 or numActiveConnections_delta >= 200)
+					or ((numWaitingConnections_oledb_delta >= 100 and numWaitingConnections_oledb_now >= 5))
+					or ((secondsElapsed_avg_oledb_delta >= 200 and secondsElapsed_avg_oledb_now > 15))
+					or ((secondsElapsed_max_oledb_delta >= 200 and secondsElapsed_max_oledb_now > 30))
+					or ((secondsElapsed_avg_delta >= 200 and secondsElapsed_avg_now > 15))
+					or ((secondsElapsed_max_delta >= 200 and secondsElapsed_max_now > 30))
 				)
 				and serverName = @cThisServerName
 
@@ -302,10 +305,8 @@ begin
 
 	end
 
-	drop table #currentActivity
-	drop table #historicalActivity
 	drop table #current
 	drop table #historical
 	drop table #results
+
 end
-GO
