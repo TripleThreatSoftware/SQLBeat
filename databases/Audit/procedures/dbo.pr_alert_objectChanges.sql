@@ -1,5 +1,4 @@
 use [audit]
-
 GO
 
 -- exec pr_alert_objectChanges '2008-01-01', null
@@ -11,7 +10,7 @@ begin
 --	declare @dStartDate dateTime
 --	declare @dEndDate dateTime
 
-	set @dStartdate = isnull(@dStartDate, dateAdd(hour, -24*7, getDate()))
+	set @dStartdate = isnull(@dStartDate, dateAdd(hour, -28, getDate()))
 	set @dEndDate = isnull(@dEndDate, getDate())
 
 	select distinct serverName, databaseName
