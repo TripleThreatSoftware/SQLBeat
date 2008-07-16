@@ -1,5 +1,10 @@
-use [notification]
-go
+USE [Notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_monitorProductionConnections]    Script Date: 07/16/2008 08:56:18 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 
 ALTER procedure [dbo].[pr_monitorProductionConnections]
 as
@@ -235,7 +240,7 @@ begin
 		set @cThisMessage = ''
 
 		select
-			@cThisSubject = 'Connections to ' + @cThisServerName + ' out of tolerance for ' + convert(varchar(20), @nNumMinutes) + ' minutes ending ' + right(convert(varchar(19), ymd, 120), 8) + '.',
+			@cThisSubject = 'Connections to ' + @cThisServerName + ' out of tolerance at ' + right(convert(varchar(19), ymd, 120), 8) + '.',
 			@cThisMessage = 'Connections between ' + right(convert(varchar(19), @dStartDate, 120), 8) + ' and ' + right(convert(varchar(19), ymd, 120), 8) + '.' + char(13) + char(13) +
 				left('Measure' + space(30), 30) + ' ' +
 				left('Now' + space(6), 6) + ' ' +
@@ -287,8 +292,8 @@ begin
 			where (
 					(numActiveConnections_delta <= -75 or numActiveConnections_delta >= 200)
 					or ((numWaitingConnections_oledb_delta >= 100 and numWaitingConnections_oledb_now >= 5))
-					or ((secondsElapsed_avg_oledb_delta >= 200 and secondsElapsed_avg_oledb_now > 15))
-					or ((secondsElapsed_max_oledb_delta >= 200 and secondsElapsed_max_oledb_now > 30))
+					or ((secondsElapsed_avg_oledb_delta >= 200 and secondsElapsed_avg_oledb_now > 15 and numWaitingConnections_oledb_now >= 3))
+					or ((secondsElapsed_max_oledb_delta >= 200 and secondsElapsed_max_oledb_now > 30 and numWaitingConnections_oledb_now >= 5))
 					or ((secondsElapsed_avg_delta >= 200 and secondsElapsed_avg_now > 15))
 					or ((secondsElapsed_max_delta >= 200 and secondsElapsed_max_now > 30))
 				)

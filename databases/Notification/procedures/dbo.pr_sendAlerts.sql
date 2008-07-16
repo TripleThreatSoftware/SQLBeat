@@ -1,19 +1,5 @@
-SET ANSI_NULLS ON
+use [notification]
 GO
-SET QUOTED_IDENTIFIER ON
-GO
-
-
-
--- pr_sendAlerts 'cole', 1
--- pr_sendAlerts 'bob', 0
--- select count(*) from notificationLog
--- select top 500 * from messagesSent order by ymd desc
--- select * from messageRules
--- select * from notificationsSent
--- select * from notificationLog where isEventLog = 1 and serverName in (select serverName from dm_servers where ukey_group = 6)
--- update messageRules set sendMessage = 0, allMessages = 0 where ukey = 144
--- truncate table notificationsSent
 
 ALTER procedure [dbo].[pr_sendAlerts] (@cUserName varchar(100) = '', @bIsPreview bit = 0)
 as
@@ -87,8 +73,12 @@ begin
 			and (b.userName = @cUserName or isnull(@cUserName, '') = '')
 		join userEmails c on b.ukey_userEmail = c.ukey
 		left outer join dm_servers d on a.serverName = d.serverName
-		where (b.ukey_group = d.ukey_group or isnull(b.ukey_group, 0) = 0 or isnull(d.ukey_group, 0) = 0)
-			and a.ymd >= dateAdd(hour, -48, getdate())
+		where (
+				b.ukey_group = d.ukey_group
+				or isnull(b.ukey_group, 0) = 0
+--				or isnull(d.ukey_group, 0) = 0
+				)
+			and a.ymd >= dateAdd(hour, -24, getdate())
 
 	delete #messages
 		from #messages a
@@ -138,7 +128,11 @@ begin
 				)
 			and (b.userName = a.userName or b.userName is null)
 		left outer join dm_servers d on a.serverName = d.serverName
-		where (b.ukey_group = d.ukey_group or isnull(b.ukey_group, 0) = 0 or isnull(d.ukey_group, 0) = 0)
+		where (
+			b.ukey_group = d.ukey_group
+			or isnull(b.ukey_group, 0) = 0
+--			or isnull(d.ukey_group, 0) = 0
+			)
 
 	select distinct a.serverName, a.userName, a.emailAddress, a.subject, a.message, a.ukey as ukey_notification, a.ymd,
 		identity(int) as ukey
@@ -148,10 +142,13 @@ begin
 			and a.userName = b.userName
 			and a.emailAddress = b.emailAddress
 		where b.ukey is null
+			and isnull(a.subject, '') <> ''
+			and isnull(a.message, '') <> ''
 		order by a.emailAddress, a.ymd
 
 	if @bIsPreview = 0
 	begin
+
 		set @nUkeyMessage = 0
 
 		while exists (select top 1 ukey from #messagesToSend where ukey > @nUkeyMessage and isnull(subject, '') <> '')
@@ -178,10 +175,12 @@ begin
 			from #messagesToSend
 	end
 	else
+	begin
 		select ukey, serverName, ymd, left(subject, 130) as subject, emailAddress
 			from #messagesToSend
 			where ymd >= dateAdd(day, -1, getDate())
 			order by ymd desc, subject
+	end
 
 	drop table #messages
 	drop table #messagesToSend

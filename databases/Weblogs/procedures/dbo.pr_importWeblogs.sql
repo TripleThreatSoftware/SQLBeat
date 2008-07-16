@@ -1,10 +1,6 @@
-use weblogs
-go
+USE [Weblogs]
+GO
 
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
 
 ALTER  procedure [dbo].[pr_importWeblogs] (@nUkeySource int)
 as
@@ -131,6 +127,7 @@ begin
 
 	-- temporary rule!!
 	delete from #filesToImport where filePath like '%ex071124.log' or filePath like '%ex071123.log'
+	delete from #filesToImport where filePath like '%.log%' and right(filePath, 4) <> '.log'
 
 	-- we really don't want to pull in more than 50 files at a time
 	delete from #filesToImport

@@ -1,6 +1,6 @@
 USE [Notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_monitorFulfillment]    Script Date: 06/18/2008 13:09:57 ******/
+/****** Object:  StoredProcedure [dbo].[pr_monitorFulfillment]    Script Date: 07/16/2008 15:50:46 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -155,32 +155,9 @@ begin
 		where dateDiff(minute, isnull(lastCheck, dateAdd(week, -1, getDate())), getDate()) > 15
 			and isEnabled = 1
 
-
-	if @bIsOffHours = 1
-	begin
-		insert into notificationLog_stage (serverName, subject, message, severity)
-		select serverName, 'Fulfillment failure at ' + convert(varchar(20), getDate(), 120), messageBody, 2 as severity
-			from #results
-	end
-	else
-	begin
-		select @cThisMessage = @cThisMessage +
-			left(serverName + space(20), 20) + ' ' +
-			left(messageBody, 75) + char(13)
-			from #results
-
-		set @nNumRows = @@rowcount
-
-		if @nNumRows > 0
-		begin
-			set @cThisSubject = 'SQLBeat : (' + @@serverName + ') Fulfillment failure alert for ' + convert(varchar(20), @nNumRows) + ' servers.'
-
-			print @cThisSubject
-			print @cThisMessage
-
-			exec pr_sendMessage '', 'DBA', @cThisSubject, @cThisMessage
-		end
-	end
+	insert into notificationLog_stage (serverName, subject, message, severity)
+	select serverName, 'Fulfillment failure at ' + convert(varchar(20), getDate(), 120), messageBody, 2 as severity
+		from #results
 
 	drop table #results
 end

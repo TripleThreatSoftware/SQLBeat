@@ -1,7 +1,6 @@
-SET ANSI_NULLS ON
+USE [Notification]
 GO
-SET QUOTED_IDENTIFIER ON
-GO
+
 
 -- select top 100 * from messagesSent order by ymd desc
 
@@ -1065,7 +1064,7 @@ begin
 
 		where a.serverName is not null
 			and isnull(a.message, '') <> 'END'
-			and dateDiff(minute, a.ymd, getDate()) > 10
+			and dateDiff(minute, a.ymd, getDate()) > 60
 			and e.[name] is not null
 
 	insert into #results (subject, message, severity, serverName)
@@ -1073,31 +1072,32 @@ begin
 		'Job "' + jobName + '" has been stuck on ' + serverName + ' for ' + convert(varchar(20), minutesStuck) + ' minutes (since ' + convert(varchar(19), ymd, 120) + ').' as subject,
 		'Job "' + jobName + '" has been stuck on ' + serverName + ' for ' + convert(varchar(20), minutesStuck) + ' minutes (since ' + convert(varchar(19), ymd, 120) + ').' + char(13) + char(13) +
 			'Step       : ' + notes + char(13) +
-			'Last Check : ' + convert(varchar(19), lastConfigurationCheck, 120) + char(13) +
-			'Action     : ' + case
-					when dateDiff(day, lastConfigurationCheck, getDate()) > 1 and minutesStuck < 30 then 'Running a wide pass. Giving it more time.'
-					when minutesStuck > 10 or (dateDiff(day, lastConfigurationCheck, getDate()) > 1 and minutesStuck > 30) then 'Server snoozed. Job restarted.'
-					else 'None'
-					end as message,
+			'Last Check : ' + convert(varchar(19), lastConfigurationCheck, 120)-- + char(13) +
+--			'Action     : ' + case
+--					when dateDiff(day, lastConfigurationCheck, getDate()) > 1 and minutesStuck < 90 then 'Running a wide pass. Giving it more time.'
+--					when minutesStuck > 10 or (dateDiff(day, lastConfigurationCheck, getDate()) > 1 and minutesStuck > 30) then 'Server snoozed. Job restarted.'
+--					else 'None'
+--					end
+			as message,
 		2 as severity, serverName
 		from #stuckConfigCheck
 
-	-- set the server to sleep that stuck us
-	update dm_servers
-		set configurationCheckSleepUntil = dateAdd(hour, 2, getDate())
-		from dm_servers a
-		join #stuckConfigCheck b on a.serverName = b.serverName
-		where minutesStuck > case when dateDiff(day, b.lastConfigurationCheck, getDate()) > 1 then 60 else 20 end
+--	-- set the server to sleep that stuck us
+--	update dm_servers
+--		set configurationCheckSleepUntil = dateAdd(hour, 2, getDate())
+--		from dm_servers a
+--		join #stuckConfigCheck b on a.serverName = b.serverName
+--		where minutesStuck > case when dateDiff(day, b.lastConfigurationCheck, getDate()) > 1 then 60 else 20 end
 
 	set @cThisJob = ''
 
-	while exists (select top 1 jobName from #stuckConfigCheck where jobName > @cThisJob and minutesStuck > case when dateDiff(day, lastConfigurationCheck, getDate()) > 1 then 30 else 10 end)
+	while exists (select top 1 jobName from #stuckConfigCheck where jobName > @cThisJob and minutesStuck > case when dateDiff(day, lastConfigurationCheck, getDate()) > 1 then 90 else 60 end)
 	begin
 		select top 1 @cThisJob = jobName ,
 			@dStartTime = startTime
 			from #stuckConfigCheck
 			where jobName > @cThisJob
-				and minutesStuck > case when dateDiff(day, lastConfigurationCheck, getDate()) > 1 then 30 else 10 end
+				and minutesStuck > case when dateDiff(day, lastConfigurationCheck, getDate()) > 1 then 90 else 60 end
 			order by jobName
 
 		exec msdb..sp_stop_job @job_name = @cThisJob
@@ -1148,32 +1148,33 @@ begin
 		'Job "' + jobName + '" has been stuck on ' + serverName + ' for ' + convert(varchar(20), minutesStuck) + ' minutes (since ' + convert(varchar(19), ymd, 120) + ').' as subject,
 		'Job "' + jobName + '" has been stuck on ' + serverName + ' for ' + convert(varchar(20), minutesStuck) + ' minutes (since ' + convert(varchar(19), ymd, 120) + ').' + char(13) + char(13) +
 			'Step       : ' + notes + char(13) +
-			'Last Check : ' + convert(varchar(19), lastEventLogCheck, 120) + char(13) +
-			'Action     : ' + case
-					when dateDiff(day, lastEventLogCheck, getDate()) > 1 and minutesStuck < 60 then 'Running a wide pass. Giving it more time.'
-					when notes like '%timeout%' or minutesStuck > 40 or (dateDiff(day, lastEventLogCheck, getDate()) > 1 and minutesStuck > 60) then 'Server snoozed. Job restarted.'
-					else 'None'
-					end as message,
+			'Last Check : ' + convert(varchar(19), lastEventLogCheck, 120) --+ char(13) +
+--			'Action     : ' + case
+--					when dateDiff(day, lastEventLogCheck, getDate()) > 1 and minutesStuck < 60 then 'Running a wide pass. Giving it more time.'
+--					when notes like '%timeout%' or minutesStuck > 40 or (dateDiff(day, lastEventLogCheck, getDate()) > 1 and minutesStuck > 60) then 'Server snoozed. Job restarted.'
+--					else 'None'
+--					end
+			as message,
 		2 as severity, serverName
 		from #stuckEventLogCheck
 
-	-- set the server to sleep that stuck us
-	update dm_servers
-		set eventLogCheckSleepUntil = dateAdd(hour, 1, getDate())
-		from dm_servers a
-		join #stuckEventLogCheck b on a.serverName = b.serverName
-		where minutesStuck > case when dateDiff(day, b.lastEventLogCheck, getDate()) > 1 then 60 else 40 end
-			or b.notes like '%timeout%'
+--	-- set the server to sleep that stuck us
+--	update dm_servers
+--		set eventLogCheckSleepUntil = dateAdd(hour, 1, getDate())
+--		from dm_servers a
+--		join #stuckEventLogCheck b on a.serverName = b.serverName
+--		where minutesStuck > case when dateDiff(day, b.lastEventLogCheck, getDate()) > 1 then 60 else 40 end
+--			or b.notes like '%timeout%'
 
 	set @cThisJob = ''
 
-	while exists (select top 1 jobName from #stuckEventLogCheck where jobName > @cThisJob and (minutesStuck > case when dateDiff(day, lastEventLogCheck, getDate()) > 1 then 60 else 40 end or notes like '%timeout%'))
+	while exists (select top 1 jobName from #stuckEventLogCheck where jobName > @cThisJob and (minutesStuck > case when dateDiff(day, lastEventLogCheck, getDate()) > 1 then 30 else 20 end or notes like '%timeout%'))
 	begin
 		select top 1 @cThisJob = jobName
 			from #stuckEventLogCheck
 			where jobName > @cThisJob
 				and (
-					minutesStuck > case when dateDiff(day, lastEventLogCheck, getDate()) > 1 then 60 else 40 end
+					minutesStuck > case when dateDiff(day, lastEventLogCheck, getDate()) > 1 then 30 else 20 end
 					or notes like '%timeout%'
 					)
 			order by jobName

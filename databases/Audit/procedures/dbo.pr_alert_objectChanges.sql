@@ -1,7 +1,7 @@
-use [audit]
+USE [Audit]
 GO
 
--- exec pr_alert_objectChanges '2008-01-01', null
+-- exec pr_alert_objectChanges null, null
 ALTER procedure [dbo].[pr_alert_objectChanges] (@dStartDate dateTime = null, @dEndDate dateTime = null)
 as
 begin
@@ -20,12 +20,15 @@ begin
 			and ymd_lastSeen >= @dStartDate
 			and ymd_lastSeen <= @dEndDate
 
-	select distinct serverName, databaseName
+	select
+		serverName, databaseName, min(ymd_firstSeen) as ymd_firstSeen
 		into #addedDatabases
 		from auditData_objectText
 		where isCurrent = 1
-			and ymd_firstSeen >= @dStartDate
-			and ymd_firstSeen <= @dEndDate
+		group by serverName, databaseName
+		having min(ymd_firstSeen) = max(ymd_firstSeen)
+			and min(ymd_firstSeen) >= @dStartDate
+			and min(ymd_firstSeen) <= @dEndDate
 
 	select serverName, databaseName, max(ymd_lastSeen) as ymd_lastSeen
 		into #droppedDatabases
@@ -76,9 +79,8 @@ begin
 		'Database [' + databaseName + '] ' +
 			'was added ' +
 			'to ' + serverName + ' ' +
-			'around ' + convert(varchar(20), getDate(), 120) + '.' as message
+			'around ' + convert(varchar(20), ymd_firstSeen, 120) + '.' as message
 		from #addedDatabases
-		group by serverName, databaseName
 
 	-- databases dropped
 	insert into #messages (serverName, subject, message)
@@ -93,20 +95,14 @@ begin
 		group by serverName, databaseName
 
 
-
+	-- select * from #addedObjects order by serverName, databaseName, objectName
 
 	declare @cServerName varchar(200)
 	declare @cDatabaseName varchar(500)
 	declare @cObjectName varchar(500)
-	declare @nCheckSumNow bigint
-	declare @nCheckSumThen bigint
-	declare @nUkeyAuditRun_then int
-	declare @nUkeyAuditRun_now int
 	declare @nUkeyLine bigint
 	declare @nUkeyNowLine bigint
 	declare @cThisLine varchar(max)
-	declare @bObjectAdded bit
-	declare @bObjectDropped bit
 	declare @cMessage varchar(max)
 	declare @cSubject varchar(500)
 	declare @dYMD_then dateTime
@@ -129,14 +125,8 @@ begin
 			@cServerName = serverName,
 			@cDatabaseName = databaseName,
 			@cObjectName = objectName,
-			@nUkeyAuditRun_then = ukey_then,
-			@nUkeyAuditRun_now = ukey_now,
-			@bObjectAdded = objectAdded,
-			@bObjectDropped = objectDropped,
 			@dYMD_then = ymd_lastSeen,
-			@dYMD_now = ymd_firstSeen,
-			@nCheckSumNow = isnull(checksum_now, 0),
-			@nCheckSumThen = isnull(checksum_then, 0)
+			@dYMD_now = ymd_firstSeen
 			from #addedObjects
 			where ukey > @nThisUkey
 			order by ukey
@@ -213,7 +203,7 @@ begin
 		end
 
 		set @cMessage = case
-			when (select count(*) from #then) = 0
+			when (select count(*) from #then) = 0 or isnull(@dYMD_then, '') = isnull(@dYMD_now, '')
 				then 'Object [' + isnull(@cDatabaseName, '') + '].[' + isnull(@cObjectName, '') + '] was added ' +
 					'around ' + convert(varchar(20), isnull(@dYMD_now, ''), 120) + '.' + char(13) + char(13)
 			else 'Object [' + isnull(@cDatabaseName, '') + '].[' + isnull(@cObjectName, '') + '] was changed ' +
@@ -223,7 +213,8 @@ begin
 			end
 
 		set @cSubject = 'Object [' + @cDatabaseName + '].[' + @cObjectName + '] was ' +
-			case when (select count(*) from #then) = 0 then 'added'
+			case when (select count(*) from #then) = 0 or isnull(@dYMD_then, '') = isnull(@dYMD_now, '')
+				then 'added'
 				else 'changed'
 				end + ' ' +
 				'at ' + convert(varchar(20), isnull(@dYMD_now, getDate()), 120) + '.'
@@ -251,7 +242,7 @@ begin
 				where isChanged = 1
 		end
 
-		if (select count(*) from #now) = 0
+		if (select count(*) from #now) > 0
 		begin
 			set @cMessage = @cMessage + char(13) + char(13) + 'New object text:' + char(13) + replicate('=', 40)
 
@@ -264,6 +255,10 @@ begin
 
 		if @cMessage <> ''
 			insert into #messages (serverName, [subject], [message]) values (@cServerName, @cSubject, @cMessage)
+
+
+		-- because of the way we handle multi-line objects, we must remove any other mention of this object
+		delete from #addedObjects where serverName = @cServerName and objectName = @cObjectName and databaseName = @cDatabaseName
 
 	end
 
@@ -291,7 +286,7 @@ begin
 
 	-- write the alerts
 	insert into notification..notificationLog_stage (serverName, subject, message, severity)
-	select serverName, subject, left(message, 4000), 2 as severity
+	select distinct serverName, subject, left(message, 4000), 2 as severity
 		from #messages
 
 	-- clean up

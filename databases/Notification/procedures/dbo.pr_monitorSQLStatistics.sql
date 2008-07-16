@@ -1,4 +1,6 @@
-/****** Object:  StoredProcedure [dbo].[pr_monitorSQLStatistics]    Script Date: 07/09/2008 11:27:42 ******/
+USE [Notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_monitorSQLStatistics]    Script Date: 07/16/2008 08:55:59 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -1279,4 +1281,3 @@ begin
 	drop table #previousRuns
 	drop table #processLog
 end
-GO
