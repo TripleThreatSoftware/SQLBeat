@@ -198,7 +198,7 @@ begin
 
 	set @cURLString = @cURLString +
 		case when (select count(distinct setName) from #dataValues) = 1 then '' else '&chdl=' + @cLegend end + -- legend
-		'&chco=ff0000,00ff00,0000ff,CCCCCC,ccff00,ff7e00,00f6ff,e4ff00,f600ff' -- showing in these colors
+		'&chco=ff0000,00ff00,0000ff,CCCCCC,849738,ff7e00,00f6ff,e4ff00,f600ff,20ae27,603897' -- showing in these colors
 
 	if @bShowPie = 1
 		set @cURLString = @cURLString +

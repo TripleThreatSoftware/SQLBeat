@@ -21,4 +21,9 @@ begin
 
 	return @nOccurs
 end
+-- select dbo.fn_occurs(' ', 'test test')
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER OFF
 GO

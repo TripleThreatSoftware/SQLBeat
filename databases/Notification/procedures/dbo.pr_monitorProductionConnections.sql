@@ -1,9 +1,4 @@
-USE [Notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_monitorProductionConnections]    Script Date: 07/16/2008 08:56:18 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
+use [notification]
 GO
 
 ALTER procedure [dbo].[pr_monitorProductionConnections]
@@ -148,7 +143,7 @@ begin
 		a.numActiveConnections as numActiveConnections_now, b.numActiveConnections as numActiveConnections_hist,
 		case when b.numActiveConnections <> 0
 			then convert(int, (
-						convert(decimal(10,2), a.numActiveConnections - b.numActiveConnections) / convert(decimal(10,2), b.numActiveConnections)
+						convert(decimal(10,2), a.numActiveConnections) / convert(decimal(10,2), b.numActiveConnections)
 					) * 100
 				)
 			else 0
@@ -157,7 +152,7 @@ begin
 		a.numWaitingConnections_oledb as numWaitingConnections_oledb_now, b.numWaitingConnections_oledb as numWaitingConnections_oledb_hist,
 		case when b.numWaitingConnections_oledb <> 0
 			then convert(int, (
-						convert(decimal(10,2), a.numWaitingConnections_oledb - b.numWaitingConnections_oledb) / convert(decimal(10,2), b.numWaitingConnections_oledb)
+						convert(decimal(10,2), a.numWaitingConnections_oledb) / convert(decimal(10,2), b.numWaitingConnections_oledb)
 					) * 100
 				)
 			else 0
@@ -166,7 +161,7 @@ begin
 		a.secondsElapsed_avg_oledb as secondsElapsed_avg_oledb_now, b.secondsElapsed_avg_oledb as secondsElapsed_avg_oledb_hist,
 		case when b.secondsElapsed_avg_oledb <> 0
 			then convert(int, (
-						convert(decimal(10,2), a.secondsElapsed_avg_oledb - b.secondsElapsed_avg_oledb) / convert(decimal(10,2), b.secondsElapsed_avg_oledb)
+						convert(decimal(10,2), a.secondsElapsed_avg_oledb) / convert(decimal(10,2), b.secondsElapsed_avg_oledb)
 					) * 100
 				)
 			else 0
@@ -175,7 +170,7 @@ begin
 		a.secondsElapsed_max_oledb as secondsElapsed_max_oledb_now, b.secondsElapsed_max_oledb as secondsElapsed_max_oledb_hist,
 		case when b.secondsElapsed_max_oledb <> 0
 			then convert(int, (
-						convert(decimal(10,2), a.secondsElapsed_max_oledb - b.secondsElapsed_max_oledb) / convert(decimal(10,2), b.secondsElapsed_max_oledb)
+						convert(decimal(10,2), a.secondsElapsed_max_oledb) / convert(decimal(10,2), b.secondsElapsed_max_oledb)
 					) * 100
 				)
 			else 0
@@ -184,7 +179,7 @@ begin
 		a.numWaitingConnections as numWaitingConnections_now, b.numWaitingConnections as numWaitingConnections_hist,
 		case when b.numWaitingConnections <> 0
 			then convert(int, (
-						convert(decimal(10,2), a.numWaitingConnections - b.numWaitingConnections) / convert(decimal(10,2), b.numWaitingConnections)
+						convert(decimal(10,2), a.numWaitingConnections) / convert(decimal(10,2), b.numWaitingConnections)
 					) * 100
 				)
 			else 0
@@ -193,7 +188,7 @@ begin
 		a.secondsElapsed_avg as secondsElapsed_avg_now, b.secondsElapsed_avg as secondsElapsed_avg_hist,
 		case when b.secondsElapsed_avg <> 0
 			then convert(int, (
-						convert(decimal(10,2), a.secondsElapsed_avg - b.secondsElapsed_avg) / convert(decimal(10,2), b.secondsElapsed_avg)
+						convert(decimal(10,2), a.secondsElapsed_avg) / convert(decimal(10,2), b.secondsElapsed_avg)
 					) * 100
 				)
 			else 0
@@ -202,7 +197,7 @@ begin
 		a.secondsElapsed_max as secondsElapsed_max_now, b.secondsElapsed_max as secondsElapsed_max_hist,
 		case when b.secondsElapsed_max <> 0
 			then convert(int, (
-						convert(decimal(10,2), a.secondsElapsed_max - b.secondsElapsed_max) / convert(decimal(10,2), b.secondsElapsed_max)
+						convert(decimal(10,2), a.secondsElapsed_max) / convert(decimal(10,2), b.secondsElapsed_max)
 					) * 100
 				)
 			else 0

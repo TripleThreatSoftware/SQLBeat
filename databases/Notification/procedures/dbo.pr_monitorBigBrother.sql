@@ -1,4 +1,6 @@
-USE [Notification]
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
 GO
 
 
@@ -560,13 +562,15 @@ begin
 	select distinct 'Job [' + isnull(rtrim(ltrim(b.name)), '') + '], ' +
 			'which has no history, ' +
 			'has been running for ' + convert(varchar(20), minutesRunning) + ' minutes ' +
-			'(Started at: ' + convert(varchar(20), startTime) + ').' as message,
+			'(Started at: ' + convert(varchar(20), startTime) + '). ' + char(13) +
+			'The current time is ' + convert(varchar(20), getDate(), 120) + '.' as message,
 		2 as severity,
 		'Job [' + isnull(rtrim(ltrim(b.name)), '') + '] has been running for more than ' + convert(varchar(20), convert(int, (minutesRunning/10)) * 10) + ' minutes.' as subject,
 		1 as isLongRunningJob
 		from #allJobs a
 		join msdb..sysjobs b (nolock) on a.job_id = b.job_id
 		left outer join  #jobAverageRuntimes d on a.job_id = d.job_id
+		left outer join msdb..sycategories c on a.category_id = c.category_id
 		where running = 1
 			and d.job_id is null
 			-- must have been running for more than 60 minutes before I care about it
@@ -576,6 +580,8 @@ begin
 			and b.[name] not like '%eventlog check%'
 			and b.[name] not like '%configuration check%'
 			and b.[name] not like '%import weblogs%'
+			and isnull(b.[name], '') not like '%sqlautomation%'
+			and isnull(b.[name], '') not like '%sqlbeat%'
 
 	-- if we found some long running jobs, kill 'em off if they're over five times normal runtime
 	if (select count(*) from #results where isLongRunningJob = 1) > 0

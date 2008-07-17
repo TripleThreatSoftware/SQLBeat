@@ -1,4 +1,4 @@
-USE [Audit]
+use [audit]
 GO
 
 -- exec pr_alert_objectChanges null, null
@@ -233,13 +233,14 @@ begin
 				and a.ukey = b.ukey
 			where b.ukey is null
 
-		if (select count(*) from #then) > 0
+		if (select count(*) from #then) > 0 and isnull(@dYMD_then, '') <> isnull(@dYMD_now, '')
 		begin
 			select @cMessage = isnull(@cMessage, '') + char(13) +
 				right('00000' + convert(varchar(5), isnull(ukey, 0)), 5) + ': ' +
 				replace(replace(isnull(codeLine, ''), char(13), space(0)), char(10), space(0))
 				from #then
 				where isChanged = 1
+				order by ukey
 		end
 
 		if (select count(*) from #now) > 0
@@ -251,6 +252,7 @@ begin
 				replace(replace(isnull(codeLine, ''), char(13), space(0)), char(10), space(0))
 				from #now
 				where isChanged = 1
+				order by ukey
 		end
 
 		if @cMessage <> ''
