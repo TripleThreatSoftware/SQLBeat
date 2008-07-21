@@ -1,4 +1,6 @@
-use [notification]
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
 GO
 
 ALTER procedure [dbo].[pr_sendAlerts] (@cUserName varchar(100) = '', @bIsPreview bit = 0)
@@ -149,30 +151,44 @@ begin
 	if @bIsPreview = 0
 	begin
 
-		set @nUkeyMessage = 0
+		-- rate limiter!
 
-		while exists (select top 1 ukey from #messagesToSend where ukey > @nUkeyMessage and isnull(subject, '') <> '')
+		if (select count(*) from #messagesToSend) > 100
 		begin
-			select top 1
-				@cThisSubject = 'SQLBeat (' + isnull(serverName, 'N/A') + ') : ' + isnull(subject, ''),
-				@cThisMessage = message,
-				@cEmailAddress = emailAddress,
-				@nUkeyMessage = ukey
-				from #messagesToSend
-				where ukey > @nUkeyMessage
-					and isnull(subject, '') <> ''
-				order by ukey
+			-- panic! email Cole, do not send these out
 
---			print replicate('=', 50)
---			print @cThisSubject
---			print @cThisMessage
+			set @cThisSubject = 'SQLBeat (' + @@servername + '): More than 100 messages are queued to send'
+			set @cThisMessage = 'There are ' + convert(varchar(20), (select count(*) from #messagesToSend)) + ' messages in the hopper to send.'
 
-			exec pr_sendMessage '', @cEmailAddress, @cThisSubject, @cThisMessage
+			exec pr_sendMessage '', 'cole@sqlbeat.com', 'More than 100 messages are queued to send', @cThisMessage
 		end
+		else
+		begin
+			set @nUkeyMessage = 0
 
-		insert into notificationsSent (ukey_notification, userName, emailAddress)
-		select distinct ukey_notification, userName, emailAddress
-			from #messagesToSend
+			while exists (select top 1 ukey from #messagesToSend where ukey > @nUkeyMessage and isnull(subject, '') <> '')
+			begin
+				select top 1
+					@cThisSubject = 'SQLBeat (' + isnull(serverName, 'N/A') + ') : ' + isnull(subject, ''),
+					@cThisMessage = message,
+					@cEmailAddress = emailAddress,
+					@nUkeyMessage = ukey
+					from #messagesToSend
+					where ukey > @nUkeyMessage
+						and isnull(subject, '') <> ''
+					order by ukey
+
+	--			print replicate('=', 50)
+	--			print @cThisSubject
+	--			print @cThisMessage
+
+				exec pr_sendMessage '', @cEmailAddress, @cThisSubject, @cThisMessage
+			end
+
+			insert into notificationsSent (ukey_notification, userName, emailAddress)
+			select distinct ukey_notification, userName, emailAddress
+				from #messagesToSend
+		end
 	end
 	else
 	begin
