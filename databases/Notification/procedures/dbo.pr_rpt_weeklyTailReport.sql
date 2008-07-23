@@ -1,4 +1,4 @@
-alter procedure [dbo].[pr_rpt_weeklyTailReport]
+ALTER procedure [dbo].[pr_rpt_weeklyTailReport]
 as
 begin
 	-- First, detail on the time and duration of outages in the last week
@@ -8,7 +8,7 @@ begin
 	declare @cThisSubject varchar(500)
 	declare @dLatestViewData dateTime
 
-	set @dStartDate = dateAdd(week, -1, convert(varchar(10), getDate(), 120))
+	set @dStartDate = dateAdd(week, -1, getDate())
 
 	create table #tailDetail (ukey int identity, serverName varchar(200), ukey_group int,
 		eventDetail varchar(1000), startDate dateTime, endDate dateTime)
@@ -247,6 +247,7 @@ begin
 		where subkeyName like '%disk io waiting%'
 			and ymd >= @dStartDate
 			and keyValue not like '% 0ms%'
+			and keyValue not like '% 15ms%'
 
 	insert into #otherErrors (serverName, subject, ymd, ukey_group)
 	select
@@ -269,6 +270,7 @@ begin
 				severity = 1
 				or message like '%Event log service was started%'
 				or subject like '%temperature%'
+				or subject like '%memory module%'
 				or subject like '%array controller%'
 				or subject like '%degraded%'
 				or subject like '%i/o%'
@@ -301,6 +303,7 @@ begin
 				severity = 1
 				or message like '%Event log service was started%'
 				or subject like '%temperature%'
+				or subject like '%memory module%'
 				or subject like '%array controller%'
 				or subject like '%degraded%'
 				or subject like '%i/o%'
@@ -385,11 +388,11 @@ begin
 		left outer join dm_servers b on a.serverName = b.serverName
 		left outer join dm_serverGroups c on a.ukey_group = c.ukey
 		where startDate >= @dStartDate
-			and (
-				c.ukey is null
-				or c.isProduction = 1
+--			and (
+--				c.ukey is null
+--				or c.isProduction = 1
 --				or c.groupName like '%uat%'
-				)
+--				)
 --			and not startDate between '2008-07-11 17:00:00.000' and '2008-07-13 23:59:59.000'
 			--and isnull(b.serverName, '') not in ('sis-gtid1', 'labmsproj01')
 		order by isnull(c.groupName, 'Other'), startDate, isnull(isnull(b.friendlyName, b.serverName), a.serverName )

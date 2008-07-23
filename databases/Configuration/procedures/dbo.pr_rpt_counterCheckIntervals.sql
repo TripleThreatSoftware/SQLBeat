@@ -1,11 +1,12 @@
-use [configuration]
+USE [Configuration]
 go
 
-create procedure pr_rpt_counterCheckIntervals
+ALTER procedure [dbo].[pr_rpt_counterCheckIntervals]
 as
 begin
 	Select
-		d.groupName, a.serverName, c.counterName,
+		d.groupName, a.serverName, a.configurationCheck, a.wmiStatus,
+		c.counterName, c.isEnabled,
 		isnull(b.checkMinuteInterval, isnull(c.checkMinuteInterval, 60)) as checkMinutes
 
 		from notification.dbo.dm_servers a
@@ -18,6 +19,7 @@ begin
 		where a.isEnabled = 1
 			and a.configurationCheck = 1
 			and a.isServerPingable = 1
-			and (a.configurationCheckSleepUntil is null or getDate() > configurationCheckSleepUntil)
+--			and (a.configurationCheckSleepUntil is null or getDate() > configurationCheckSleepUntil)
+			and a.wmiStatus = 'SUCCESS'
 		order by d.groupname, a.serverName, c.counterName
 end

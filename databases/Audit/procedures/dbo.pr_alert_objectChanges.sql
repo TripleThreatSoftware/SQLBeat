@@ -1,7 +1,13 @@
-use [audit]
+USE [Audit]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_alert_objectChanges]    Script Date: 07/23/2008 16:14:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
 GO
 
--- exec pr_alert_objectChanges null, null
+
+-- exec pr_alert_objectChanges '2008-07-21', null
 ALTER procedure [dbo].[pr_alert_objectChanges] (@dStartDate dateTime = null, @dEndDate dateTime = null)
 as
 begin
@@ -156,7 +162,8 @@ begin
 			begin
 				select top 1
 					@nUkeyLine = ukey,
-					@cThisLine = objectText
+					@cThisLine = objectText,
+					@dYMD_then = ymd_lastSeen
 					from #droppedObjects
 					where serverName = @cServerName
 						and databaseName = @cDatabaseName
@@ -173,7 +180,7 @@ begin
 		end
 
 		-- we know this wasn't dropped, it was just changed
-		delete from #droppedObjects where serverName = @cServerName and databaseName = @cDatabaseName and objectName = @cObjectName
+--		delete from #droppedObjects where serverName = @cServerName and databaseName = @cDatabaseName and objectName = @cObjectName
 
 		set @nUkeyLine = 0
 
@@ -203,17 +210,17 @@ begin
 		end
 
 		set @cMessage = case
-			when (select count(*) from #then) = 0 or isnull(@dYMD_then, '') = isnull(@dYMD_now, '')
+			when (select count(*) from #then) = 0 --or isnull(@dYMD_then, '') = isnull(@dYMD_now, '')
 				then 'Object [' + isnull(@cDatabaseName, '') + '].[' + isnull(@cObjectName, '') + '] was added ' +
 					'around ' + convert(varchar(20), isnull(@dYMD_now, ''), 120) + '.' + char(13) + char(13)
 			else 'Object [' + isnull(@cDatabaseName, '') + '].[' + isnull(@cObjectName, '') + '] was changed ' +
 					'between ' + convert(varchar(20), isnull(@dYMD_then, ''), 120) + ' ' +
 					'and ' + convert(varchar(20), isnull(@dYMD_now, ''), 120) + '.' + char(13) + char(13) +
-					'Old object text:' + char(13) + replicate('=', 40)
+					'Old object text (' + convert(varchar(20), @dYMD_then, 120) + '):' + char(13) + replicate('=', 40)
 			end
 
 		set @cSubject = 'Object [' + @cDatabaseName + '].[' + @cObjectName + '] was ' +
-			case when (select count(*) from #then) = 0 or isnull(@dYMD_then, '') = isnull(@dYMD_now, '')
+			case when (select count(*) from #then) = 0 --or isnull(@dYMD_then, '') = isnull(@dYMD_now, '')
 				then 'added'
 				else 'changed'
 				end + ' ' +
@@ -233,7 +240,7 @@ begin
 				and a.ukey = b.ukey
 			where b.ukey is null
 
-		if (select count(*) from #then) > 0 and isnull(@dYMD_then, '') <> isnull(@dYMD_now, '')
+		if (select count(*) from #then) > 0 --and isnull(@dYMD_then, '') <> isnull(@dYMD_now, '')
 		begin
 			select @cMessage = isnull(@cMessage, '') + char(13) +
 				right('00000' + convert(varchar(5), isnull(ukey, 0)), 5) + ': ' +
@@ -245,7 +252,7 @@ begin
 
 		if (select count(*) from #now) > 0
 		begin
-			set @cMessage = @cMessage + char(13) + char(13) + 'New object text:' + char(13) + replicate('=', 40)
+			set @cMessage = @cMessage + char(13) + char(13) + 'New object text (' + convert(varchar(20), @dYMD_now, 120) + '):' + char(13) + replicate('=', 40)
 
 			select @cMessage = isnull(@cMessage, '') + char(13) +
 				right('00000' + convert(varchar(5), isnull(ukey, 0)), 5) + ': ' +
@@ -261,6 +268,7 @@ begin
 
 		-- because of the way we handle multi-line objects, we must remove any other mention of this object
 		delete from #addedObjects where serverName = @cServerName and objectName = @cObjectName and databaseName = @cDatabaseName
+		delete from #droppedObjects where serverName = @cServerName and objectName = @cObjectName and databaseName = @cDatabaseName
 
 	end
 

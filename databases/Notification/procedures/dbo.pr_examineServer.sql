@@ -1,3 +1,6 @@
+USE [Notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 07/23/2008 13:44:00 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -1339,22 +1342,22 @@ begin
 
 			from #processes
 
-		-- lots of blocking
-		insert into #results (message, severity, subject, isBlocking)
-		select
-			convert(varchar(20), count(distinct spid)) + ' SPIDs ' +
-				'and ' + convert(varchar(20), count(*)) + ' threads ' +
-				'blocked in ' + isnull(dbName, '') + ' ' +
-				'at ' + convert(varchar(20), getDate(), 120) + '.' as message,
-			1 as severity,
-			convert(varchar(20), count(distinct spid)) + ' SPIDs ' +
-				'blocked in ' + isnull(dbName, '') + '.' as subject,
-			1 as isBlocking
-			from #processes
-			where isBlocked = 1
-				and isnull(dbName, '') not in ('distribution')
-			group by dbName
-			having count(*) >= @nMultipleBlockAlert
+--		-- lots of blocking
+--		insert into #results (message, severity, subject, isBlocking)
+--		select
+--			convert(varchar(20), count(distinct spid)) + ' SPIDs ' +
+--				'and ' + convert(varchar(20), count(*)) + ' threads ' +
+--				'blocked in ' + isnull(dbName, '') + ' ' +
+--				'at ' + convert(varchar(20), getDate(), 120) + '.' as message,
+--			1 as severity,
+--			convert(varchar(20), count(distinct spid)) + ' SPIDs ' +
+--				'blocked in ' + isnull(dbName, '') + '.' as subject,
+--			1 as isBlocking
+--			from #processes
+--			where isBlocked = 1
+--				and isnull(dbName, '') not in ('distribution')
+--			group by dbName
+--			having count(*) >= @nMultipleBlockAlert
 
 		-- blocked
 		insert into #results (message, severity, subject, isBlocking)
@@ -1388,7 +1391,7 @@ begin
 			from #processes a
 			left outer join #processes b on a.blockedBy = b.spid
 			where a.isBlocked = 1
-				and not (isnull(a.locks, '') = '' and isnull(b.locks, '') = '')
+--				and not (isnull(a.locks, '') = '' and isnull(b.locks, '') = '')
 --				and not (isnull(a.locks, '') not like '%waiting%' and isnull(b.locks, '') not like '%waiting%')
 				and a.blockedBy <> ''
 				and a.ignoreSPID = 0

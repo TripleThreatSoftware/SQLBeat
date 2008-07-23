@@ -1,6 +1,9 @@
-USE [Weblogs]
-GO
+use [weblogs]
+go
 
+--select * from dm_sources
+--
+--exec pr_importWeblogs 1
 
 ALTER  procedure [dbo].[pr_importWeblogs] (@nUkeySource int)
 as
@@ -79,7 +82,7 @@ begin
 
 		print @cThisMessage
 
-		insert into fact_weblogs_stage_hist (stepName) values (left(@cThisMessage, 500))
+		insert into fact_weblogs_stage_hist (stepName) values (left(@cThisMessage, 5000))
 
 		insert into notification..notificationLog_stage (servername, severity, subject, message) values (@cWeblogPath, 2, @cThisSubject, @cThisMessage)
 	end
@@ -119,7 +122,7 @@ begin
 	delete #filesToImport
 		from #filesToImport a
 		join dm_sourceFiles b on a.filePath = b.sourceFile
-			and b.errors >= 2
+			and b.errors >= 5
 
 	-- get rid of anything more than six months old
 	delete from #filesToImport
@@ -243,7 +246,7 @@ begin
 
 					print @cThisMessage
 
-					insert into fact_weblogs_stage_hist (stepName) values (left(@cThisMessage, 500))
+					insert into fact_weblogs_stage_hist (stepName) values (left(@cThisMessage, 5000))
 
 					if @cThisMessage not like '%being used by another process%'
 						if exists (select [name] from master..sysdatabases where [name] = 'notification')
@@ -395,7 +398,7 @@ begin
 
 			print @cThisMessage
 
-			insert into fact_weblogs_stage_hist (stepName) values (left(@cThisMessage, 500))
+			insert into fact_weblogs_stage_hist (stepName) values (left(@cThisMessage, 5000))
 
 			if @cThisMessage not like '%being used by another process%'
 				if exists (select [name] from master..sysdatabases where [name] = 'notification')
@@ -445,7 +448,7 @@ begin
 
 			print @cThisMessage
 
-			insert into fact_weblogs_stage_hist (stepName) values (left(@cThisMessage, 500))
+			insert into fact_weblogs_stage_hist (stepName) values (left(@cThisMessage, 5000))
 
 			if @cThisMessage not like '%being used by another process%'
 				if exists (select [name] from master..sysdatabases where [name] = 'notification')
