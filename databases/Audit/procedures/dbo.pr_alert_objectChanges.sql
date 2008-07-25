@@ -1,13 +1,10 @@
-USE [Audit]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_alert_objectChanges]    Script Date: 07/23/2008 16:14:39 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
 
 
--- exec pr_alert_objectChanges '2008-07-21', null
+-- exec pr_alert_objectChanges '2008-07-23', null
 ALTER procedure [dbo].[pr_alert_objectChanges] (@dStartDate dateTime = null, @dEndDate dateTime = null)
 as
 begin
@@ -70,6 +67,11 @@ begin
 		join #droppedDatabases b on a.serverName = b.serverName
 			and a.databaseName = b.databaseName
 
+	delete #droppedObjects
+		from #droppedObjects a
+		join #addedDatabases b on a.serverName = b.serverName
+			and a.databaseName = b.databaseName
+
 	delete #addedObjects
 		from #addedObjects a
 		join #addedDatabases b on a.serverName = b.serverName
@@ -114,6 +116,9 @@ begin
 	declare @dYMD_then dateTime
 	declare @dYMD_now dateTime
 	declare @nThisUkey bigint
+	declare @bIsChanged bit
+	declare @nThisLineNumber int
+	declare @nLastLineNumber int
 
 	create table #then (codeLine varchar(8000), ukey int identity, isChanged bit default 0)
 	create table #now (codeLine varchar(8000), ukey int identity, isChanged bit default 0)
@@ -209,29 +214,59 @@ begin
 				where isnull(rtrim(ltrim(replace(replace(listItem, char(13), ''), char(10), ''))), '') <> ''
 		end
 
-		set @cMessage = case
-			when (select count(*) from #then) = 0 --or isnull(@dYMD_then, '') = isnull(@dYMD_now, '')
-				then 'Object [' + isnull(@cDatabaseName, '') + '].[' + isnull(@cObjectName, '') + '] was added ' +
-					'around ' + convert(varchar(20), isnull(@dYMD_now, ''), 120) + '.' + char(13) + char(13)
-			else 'Object [' + isnull(@cDatabaseName, '') + '].[' + isnull(@cObjectName, '') + '] was changed ' +
-					'between ' + convert(varchar(20), isnull(@dYMD_then, ''), 120) + ' ' +
-					'and ' + convert(varchar(20), isnull(@dYMD_now, ''), 120) + '.' + char(13) + char(13) +
-					'Old object text (' + convert(varchar(20), @dYMD_then, 120) + '):' + char(13) + replicate('=', 40)
-			end
+		set @bIsChanged = 1
+		set @nThisLineNumber = 0
+		set @nLastLineNumber = 0
+		set @nUkeyLine = 0
 
-		set @cSubject = 'Object [' + @cDatabaseName + '].[' + @cObjectName + '] was ' +
-			case when (select count(*) from #then) = 0 --or isnull(@dYMD_then, '') = isnull(@dYMD_now, '')
-				then 'added'
-				else 'changed'
-				end + ' ' +
-				'at ' + convert(varchar(20), isnull(@dYMD_now, getDate()), 120) + '.'
+		while exists (select top 1 ukey from #then where ukey > @nUkeyLine)
+		begin
+			set @nThisLineNumber = null
 
-		update #then
-			set isChanged = 1
-			from #then a
-			left outer join #now b on notification.dbo.fn_removeFormatting(a.codeLine) = notification.dbo.fn_removeFormatting(b.codeLine)
-				and a.ukey = b.ukey
-			where b.ukey is null
+			select top 1
+				@nThisLineNumber = b.ukey
+				from #then a
+				join #now b on notification.dbo.fn_removeFormatting(a.codeLine) = notification.dbo.fn_removeFormatting(b.codeLine)
+					and b.ukey > @nLastLineNumber
+				where a.ukey = @nThisUkey
+				order by b.ukey
+
+			if @nThisLineNumber is null
+				update #then set isChanged = 1 where ukey = @nUkeyLine
+			else
+				set @nLastLineNumber = @nThisLineNumber
+
+			set @nUkeyLine = @nUkeyLine + 1
+		end
+
+		set @nThisLineNumber = 0
+		set @nLastLineNumber = 0
+		set @nUkeyLine = 0
+
+		while exists (select top 1 ukey from #now where ukey > @nUkeyLine)
+		begin
+			set @nThisLineNumber = null
+
+			select top 1
+				@nThisLineNumber = b.ukey
+				from #now a
+				join #then b on notification.dbo.fn_removeFormatting(a.codeLine) = notification.dbo.fn_removeFormatting(b.codeLine)
+					and b.ukey > @nLastLineNumber
+				where a.ukey = @nThisUkey
+				order by b.ukey
+
+			if @nThisLineNumber is null
+				update #now set isChanged = 1 where ukey = @nUkeyLine
+			else
+				set @nLastLineNumber = @nThisLineNumber
+
+			set @nUkeyLine = @nUkeyLine + 1
+		end
+
+		if (select count(*) from #then where isChanged = 1) = 0
+			set @bIsChanged = 0
+		if (select count(*) from #now where isChanged = 1) = 0
+			set @bIsChanged = 0
 
 		update #now
 			set isChanged = 1
@@ -240,30 +275,53 @@ begin
 				and a.ukey = b.ukey
 			where b.ukey is null
 
-		if (select count(*) from #then) > 0 --and isnull(@dYMD_then, '') <> isnull(@dYMD_now, '')
+		if @@rowcount = 0
+			set @bIsChanged = 0
+
+		if @bisChanged = 1
 		begin
-			select @cMessage = isnull(@cMessage, '') + char(13) +
-				right('00000' + convert(varchar(5), isnull(ukey, 0)), 5) + ': ' +
-				replace(replace(isnull(codeLine, ''), char(13), space(0)), char(10), space(0))
-				from #then
-				where isChanged = 1
-				order by ukey
+			set @cMessage = case
+				when (select count(*) from #then) = 0 --or isnull(@dYMD_then, '') = isnull(@dYMD_now, '')
+					then 'Object [' + isnull(@cDatabaseName, '') + '].[' + isnull(@cObjectName, '') + '] was added ' +
+						'around ' + convert(varchar(20), isnull(@dYMD_now, ''), 120) + '.' + char(13) + char(13)
+				else 'Object [' + isnull(@cDatabaseName, '') + '].[' + isnull(@cObjectName, '') + '] was changed ' +
+						'between ' + convert(varchar(20), isnull(@dYMD_then, ''), 120) + ' ' +
+						'and ' + convert(varchar(20), isnull(@dYMD_now, ''), 120) + '.' + char(13) + char(13) +
+						'Old object text (' + convert(varchar(20), @dYMD_then, 120) + '):' + char(13) + replicate('=', 40)
+				end
+
+			set @cSubject = 'Object [' + @cDatabaseName + '].[' + @cObjectName + '] was ' +
+				case when (select count(*) from #then) = 0 --or isnull(@dYMD_then, '') = isnull(@dYMD_now, '')
+					then 'added'
+					else 'changed'
+					end + ' ' +
+					'at ' + convert(varchar(20), isnull(@dYMD_now, getDate()), 120) + '.'
+
+			if (select count(*) from #then) > 0 --and isnull(@dYMD_then, '') <> isnull(@dYMD_now, '')
+			begin
+				select @cMessage = isnull(@cMessage, '') + char(13) +
+					right('00000' + convert(varchar(5), isnull(ukey, 0)), 5) + ': ' +
+					replace(replace(isnull(codeLine, ''), char(13), space(0)), char(10), space(0))
+					from #then
+					where isChanged = 1
+					order by ukey
+			end
+
+			if (select count(*) from #now) > 0
+			begin
+				set @cMessage = @cMessage + char(13) + char(13) + 'New object text (' + convert(varchar(20), @dYMD_now, 120) + '):' + char(13) + replicate('=', 40)
+
+				select @cMessage = isnull(@cMessage, '') + char(13) +
+					right('00000' + convert(varchar(5), isnull(ukey, 0)), 5) + ': ' +
+					replace(replace(isnull(codeLine, ''), char(13), space(0)), char(10), space(0))
+					from #now
+					where isChanged = 1
+					order by ukey
+			end
+
+			if @cMessage <> ''
+				insert into #messages (serverName, [subject], [message]) values (@cServerName, @cSubject, @cMessage)
 		end
-
-		if (select count(*) from #now) > 0
-		begin
-			set @cMessage = @cMessage + char(13) + char(13) + 'New object text (' + convert(varchar(20), @dYMD_now, 120) + '):' + char(13) + replicate('=', 40)
-
-			select @cMessage = isnull(@cMessage, '') + char(13) +
-				right('00000' + convert(varchar(5), isnull(ukey, 0)), 5) + ': ' +
-				replace(replace(isnull(codeLine, ''), char(13), space(0)), char(10), space(0))
-				from #now
-				where isChanged = 1
-				order by ukey
-		end
-
-		if @cMessage <> ''
-			insert into #messages (serverName, [subject], [message]) values (@cServerName, @cSubject, @cMessage)
 
 
 		-- because of the way we handle multi-line objects, we must remove any other mention of this object
