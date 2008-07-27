@@ -1,6 +1,6 @@
-use [weblogs]
-go
+use weblogs
 
+GO
 --select * from dm_sources
 --
 --exec pr_importWeblogs 1
@@ -122,7 +122,7 @@ begin
 	delete #filesToImport
 		from #filesToImport a
 		join dm_sourceFiles b on a.filePath = b.sourceFile
-			and b.errors >= 5
+			and b.errors >= 10
 
 	-- get rid of anything more than six months old
 	delete from #filesToImport
@@ -469,8 +469,30 @@ begin
 					set errors = isnull(errors, 0) + 1
 					where ukey = @nUkeySourceFile
 
+			if @cModifiedFile <> @cThisFile and @bDeleteFile = 1
+			begin
+				set @cSQLString = 'del "' + @cModifiedFile + '"'
+				print @cSQLString
+
+				exec master..xp_cmdshell @cSQLString
+			end
+
+			set @bDeleteFile = 0
+
 			continue
 		end catch
+
+
+		if @cModifiedFile <> @cThisFile and @bDeleteFile = 1
+		begin
+			set @cSQLString = 'del "' + @cModifiedFile + '"'
+			print @cSQLString
+
+			exec master..xp_cmdshell @cSQLString
+		end
+
+		set @bDeleteFile = 0
+
 
 		set @nRowsLoaded = (select count(*) from fact_weblogs_stage)
 
@@ -631,16 +653,6 @@ begin
 		insert into fact_weblogs_stage_hist (stepName) values ('Truncating stage table')
 
 		truncate table fact_weblogs_stage
-
-		if @cModifiedFile <> @cThisFile and @bDeleteFile = 1
-		begin
-			set @cSQLString = 'del "' + @cModifiedFile + '"'
-			print @cSQLString
-
-			exec master..xp_cmdshell @cSQLString
-		end
-
-		set @bDeleteFile = 0
 
 		update dm_sourceFiles set rowsLoaded = @nRowsLoaded where ukey = @nUkeySourceFile
 	end
