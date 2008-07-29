@@ -1,3 +1,8 @@
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
 -- select top 100 * from messagesSent order by ymd desc
 
 ALTER       procedure [dbo].[pr_monitorBigBrother]
@@ -564,7 +569,7 @@ begin
 		from #allJobs a
 		join msdb..sysjobs b (nolock) on a.job_id = b.job_id
 		left outer join  #jobAverageRuntimes d on a.job_id = d.job_id
-		left outer join msdb..sycategories c on a.category_id = c.category_id
+--		left outer join msdb..sycategories c on a.category_id = c.category_id
 		where running = 1
 			and d.job_id is null
 			-- must have been running for more than 60 minutes before I care about it
@@ -1150,7 +1155,7 @@ begin
 	-- set the server to sleep that stuck us
 	update dm_servers
 		set eventLogCheckSleepUntil = dateAdd(hour, 1, getDate()),
-			lastEventLogCheck = case when dateDiff(day, lastEventLogCheck, getDate()) > 7 then dateAdd(week, -1, getDate()) else lastEventLogCheck end
+			lastEventLogCheck = case when dateDiff(day, a.lastEventLogCheck, getDate()) > 7 then dateAdd(week, -1, getDate()) else a.lastEventLogCheck end
 		from dm_servers a
 		join #stuckEventLogCheck b on a.serverName = b.serverName
 
