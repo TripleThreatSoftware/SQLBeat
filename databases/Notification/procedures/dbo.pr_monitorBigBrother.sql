@@ -1,6 +1,4 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
+USE [Notification]
 GO
 
 -- select top 100 * from messagesSent order by ymd desc

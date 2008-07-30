@@ -1,16 +1,10 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
+use [notification]
 GO
 
 ALTER procedure [dbo].[pr_sendAlerts] (@cUserName varchar(100) = '', @bIsPreview bit = 0)
 as
 begin
 	set nocount off
-
---declare @cUserName varchar(100), @bIsPreview bit
---set @cUserName = null
---set @bIsPreview = 0
 
 	declare @bIsBusinessHours bit
 	declare @nUkeyMessage int
@@ -80,7 +74,7 @@ begin
 				or isnull(b.ukey_group, 0) = 0
 --				or isnull(d.ukey_group, 0) = 0
 				)
-			and a.ymd >= dateAdd(hour, -24, getdate())
+			and a.ymd >= dateAdd(hour, -72, getdate())
 
 	delete #messages
 		from #messages a
@@ -153,12 +147,12 @@ begin
 
 		-- rate limiter!
 
-		if (select count(*) from #messagesToSend) > 100
+		if (select count(*) from #messagesToSend) > 500
 		begin
 			-- panic! email Cole, do not send these out
 
-			set @cThisSubject = 'SQLBeat (' + @@servername + '): More than 100 messages are queued to send'
-			set @cThisMessage = 'There are ' + convert(varchar(20), (select count(*) from #messagesToSend)) + ' messages in the hopper to send.'
+			set @cThisSubject = 'SQLBeat (' + @@servername + '): More than 500 messages are queued to send'
+			set @cThisMessage = 'There are ' + convert(varchar(20), (select count(*) from #messagesToSend)) + ' messages in the hopper to send for ' + @@servername + '.'
 
 			exec pr_sendMessage '', 'cole@sqlbeat.com', 'More than 100 messages are queued to send', @cThisMessage
 		end
