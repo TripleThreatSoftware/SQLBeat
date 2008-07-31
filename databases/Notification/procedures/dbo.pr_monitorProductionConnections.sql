@@ -1,4 +1,6 @@
-use [notification]
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
 GO
 
 ALTER procedure [dbo].[pr_monitorProductionConnections]
@@ -284,14 +286,8 @@ begin
 
 			from #results
 
-			where (
-					(numActiveConnections_delta <= -75 or numActiveConnections_delta >= 200)
-					or ((numWaitingConnections_oledb_delta >= 100 and numWaitingConnections_oledb_now >= 5))
-					or ((secondsElapsed_avg_oledb_delta >= 200 and secondsElapsed_avg_oledb_now > 15 and numWaitingConnections_oledb_now >= 3))
-					or ((secondsElapsed_max_oledb_delta >= 200 and secondsElapsed_max_oledb_now > 30 and numWaitingConnections_oledb_now >= 5))
-					or ((secondsElapsed_avg_delta >= 200 and secondsElapsed_avg_now > 15))
-					or ((secondsElapsed_max_delta >= 200 and secondsElapsed_max_now > 30))
-				)
+			where
+				(numActiveConnections_delta >= 200 or numWaitingConnections_oledb_delta >= 200)
 				and serverName = @cThisServerName
 
 		if @@rowcount > 0
