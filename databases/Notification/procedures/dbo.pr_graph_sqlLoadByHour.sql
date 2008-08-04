@@ -33,7 +33,9 @@ begin
 		identity(int) as ukey
 		into #activity
 		from (
-			select spid, hostname, dbname, programName, login_time, ymd, lastBatchTime, sum(cpuTime) as cpuTime, sum(diskIO) as diskIO
+			select spid, hostname, dbname, programName, login_time, ymd, lastBatchTime,
+				sum(convert(bigint, cpuTime)) as cpuTime,
+				sum(convert(bigint, diskIO)) as diskIO
 				from notification.dbo.processLog (nolock)
 				where serverName = @cServerName
 					and ymd >= @dStartDate

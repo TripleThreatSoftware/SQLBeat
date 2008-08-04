@@ -23,12 +23,12 @@ begin
 	declare @cAxisLabels_y varchar(8000)
 	declare @cURLString varchar(8000)
 	declare @cLegend varchar(1000)
-	declare @nMaxValue decimal(20,6)
-	declare @nAvgValue decimal(20,6)
+	declare @nMaxValue decimal(30,6)
+	declare @nAvgValue decimal(30,6)
 	declare @cSeriesName varchar(200)
 	declare @cSetName varchar(200)
-	declare @nMaxSeriesValue decimal(20,6)
-	declare @nMinSeriesValue decimal(20,6)
+	declare @nMaxSeriesValue decimal(30,6)
+	declare @nMinSeriesValue decimal(30,6)
 	declare @nNumDataPoints decimal(10,2)
 
 	set @cURLString = 'http://chart.apis.google.com/chart?chs=' + convert(varchar(20), @nWidth) + 'x' + convert(varchar(20), @nHeight) + '&chd=t:'
@@ -122,16 +122,16 @@ begin
 			else
 				set @cLegend = @cLegend + @cSeriesName + '-' + @cSetName + '|'
 
-			if @bAbsoluteYAxis = 0
+			if @bAbsoluteYAxis = 0 and isnull(@nMaxValue, 0) <> 0
 				select @cDataPoints = @cDataPoints +
-					convert(varchar(20), convert(decimal(10,1),  isnull(axis_y/@nMaxValue, 0)*100)) + ','
+					convert(varchar(20), convert(decimal(20,1),  isnull(axis_y/@nMaxValue, 0)*100)) + ','
 					from #dataValues
 					where seriesName = @cSeriesName
 						and setName = @cSetName
 					order by sortOrder
 			else
 				select @cDataPoints = @cDataPoints +
-					convert(varchar(20), convert(decimal(10,1),  isnull((axis_y - @nMinSeriesValue)/(@nMaxValue - @nMinSeriesValue), 0)*100)) + ','
+					convert(varchar(20), convert(decimal(20,1),  isnull((axis_y - @nMinSeriesValue)/(@nMaxValue - @nMinSeriesValue), 0)*100)) + ','
 					from #dataValues
 					where seriesName = @cSeriesName
 						and setName = @cSetName
@@ -149,7 +149,7 @@ begin
 		group by seriesName, setName
 		order by count(*) desc
 
-	select axis_x, identity(int) as ukey
+	select axis_x, identity(bigint) as ukey
 		into #xAxis
 		from #dataValues
 		where seriesName = @cSeriesName
