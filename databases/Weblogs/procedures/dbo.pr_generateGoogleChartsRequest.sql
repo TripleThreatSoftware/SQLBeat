@@ -1,10 +1,8 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
+use [notification]
 GO
 
 
-ALTER procedure [dbo].[pr_generateGoogleChartsRequest] (@nWidth int, @nHeight int, @bRelativeToTotal bit = 0, @bAbsoluteYAxis bit = 0, @bShowPie bit = 0)
+ALTER procedure [dbo].[pr_generateGoogleChartsRequest] (@nWidth int, @nHeight int, @bRelativeToTotal bit = 0, @bAbsoluteYAxis bit = 0, @bShowPie bit = 0, @bLeavePeaks bit = 0)
 as
 begin
 
@@ -61,7 +59,7 @@ begin
 
 		if @bRelativeToTotal = 0
 		begin
-			if @nMaxValue > @nAvgValue * 10
+			if @nMaxValue > @nAvgValue * 10 and @bLeavePeaks = 0
 			begin
 				set @nMaxValue = @nAvgValue * 10
 
