@@ -1,6 +1,3 @@
-USE [Notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 07/23/2008 13:44:00 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
