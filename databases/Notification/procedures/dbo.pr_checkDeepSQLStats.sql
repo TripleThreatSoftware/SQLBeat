@@ -1,7 +1,11 @@
-SET ANSI_NULLS ON
+use [notification]
+go
+
+update dm_servers set lastDeepSQL2005Check = ''
 GO
-SET QUOTED_IDENTIFIER ON
-GO
+--***********************************************************************************************************************************************
+--***********************************************************************************************************************************************
+
 
 ALTER procedure [dbo].[pr_checkDeepSQLStats]
 as
@@ -142,6 +146,8 @@ begin
 			dbo.fn_returnDigits(keyValue, 1) as buffers
 			from #results
 			where keyName = 'Buffer Cache Contents'
+				and charindex('.', subkeyName) > 0
+				and charindex(' index', subkeyName) > 0
 
 		insert into deepSQLStats_cpuTasks (ymd, ukey_server, serverName, cpuNumber, numTasks, numTasksWaiting)
 		select
@@ -153,6 +159,8 @@ begin
 			dbo.fn_returnDigits(substring(keyValue, charindex('with ', keyValue) + 5, 99), 1) as numTasksWaiting
 			from #results (nolock)
 			where keyName = 'CPU Scheduler'
+				and charindex(' tasks', keyvalue) > 0
+				and charindex('with ', keyValue) > 0
 
 
 		insert into deepSQLStats_cpuConsumers (ymd, ukey_server, servername, bufferContents, numExecutions, numMinutes, numCPUSeconds, readingType)
@@ -167,7 +175,9 @@ begin
 			subKeyName as readingType
 			from #results (nolock)
 			where keyName = 'CPU Time Consumers'
-
+				and charindex(':::', keyValue) > 0
+				and charindex(' executions', keyValue) > 0
+				and charindex('consumed ', keyValue) > 0
 
 		insert into deepSQLStats_diskIOConsumers (ymd, ukey_server, servername, bufferContents, numExecutions, numMinutes, diskIOUnits, readingType)
 		select
@@ -182,6 +192,10 @@ begin
 			subKeyName as readingType
 			from #results (nolock)
 			where keyName = 'Disk IO Consumers'
+				and charindex(':::', keyValue) > 0
+				and charindex(' executions', keyValue) > 0
+				and charindex('over ', keyValue) > 0
+				and charindex('consumed ', keyValue) > 0
 
 		insert into deepSQLStats_unindexedTables (ymd, ukey_server, serverName, databaseName, tableName, tableScans)
 		select
@@ -199,6 +213,8 @@ begin
 					from #results (nolock)
 					where keyName = 'Indexing'
 						and subkeyName = 'Tables not indexed'
+						and charindex('against', keyValue) > 0
+						and charindex(' ', keyValue) > 0
 				) a
 
 		insert into deepSQLStats_indexesNotOptimal (ymd, ukey_server, serverName, databaseName, tableName, indexNumber, isClustered, tableScans, indexSeeks)
@@ -220,6 +236,9 @@ begin
 					from #results (nolock)
 					where keyName = 'Indexing'
 						and subkeyName = 'Indexes not being used'
+						and charindex('against', keyValue) > 0
+						and charindex(' ', keyValue) > 0
+						and charindex('vs ', keyValue) > 0
 				) a
 
 		insert into deepSQLStats_indexesNotUsed (ymd, ukey_server, serverName, databaseName, tableName, indexName, numUpdates)
@@ -240,6 +259,8 @@ begin
 					where keyName = 'Indexing'
 						and subkeyName = 'Indexes updated but not accessed'
 						and keyValue not like '%(NO INDEX)%'
+						and charindex('updated ', keyValue) > 0
+						and charindex(' ', keyValue) > 0
 				) a
 
 		insert into deepSQLStats_memoryAllocation (ymd, ukey_server, serverName, memoryType, allocated, warning)
