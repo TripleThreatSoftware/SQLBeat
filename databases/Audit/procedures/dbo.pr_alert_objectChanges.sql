@@ -1,10 +1,8 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
+use audit
 GO
 
 
--- exec pr_alert_objectChanges '2008-07-23', null
+-- exec pr_alert_objectChanges '2008-08-18 00:00:00.000', '2008-08-18 10:00:00.000'
 ALTER procedure [dbo].[pr_alert_objectChanges] (@dStartDate dateTime = null, @dEndDate dateTime = null)
 as
 begin
@@ -32,6 +30,22 @@ begin
 		having min(ymd_firstSeen) = max(ymd_firstSeen)
 			and min(ymd_firstSeen) >= @dStartDate
 			and min(ymd_firstSeen) <= @dEndDate
+
+	-- if there are more than 100 changes, consider it "added"
+	insert into #addedDatabases (serverName, databaseName, ymd_firstSeen)
+	select a.*
+		from (
+			select
+				serverName, databaseName, min(ymd_firstSeen) as ymd_firstSeen
+				from auditData_objectText
+				where isCurrent = 1
+					and ymd_firstSeen between @dStartDate and @dEndDate
+				group by serverName, databaseName
+				having count(*) > 100
+			) a
+		left outer join #addedDatabases b on a.serverName = b.serverName
+			and a.databaseName = b.databaseName
+		where b.serverName is null
 
 	select serverName, databaseName, max(ymd_lastSeen) as ymd_lastSeen
 		into #droppedDatabases
@@ -119,6 +133,7 @@ begin
 	declare @bIsChanged bit
 	declare @nThisLineNumber int
 	declare @nLastLineNumber int
+	declare @cCarryOver varchar(8000)
 
 	create table #then (codeLine varchar(8000), ukey int identity, isChanged bit default 0)
 	create table #now (codeLine varchar(8000), ukey int identity, isChanged bit default 0)
@@ -150,6 +165,8 @@ begin
 
 --		print 'Changed: ' + @cObjectName + ' ' + convert(varchar(20), isnull(@nCheckSumThen, 0)) + '/' + convert(varchar(20), isnull(@nCheckSumNow, 0))
 
+		set @cCarryOver = ''
+
 		-- if the object has some history
 		if exists (select top 1 ukey from #droppedObjects where serverName = @cServerName and databaseName = @cDatabaseName and objectName = @cObjectName)
 		begin
@@ -176,6 +193,15 @@ begin
 						and ukey > @nUkeyLine
 					order by ukey
 
+				set @cThisLine = @cCarryOver + @cThisLine
+				set @cCarryOver = ''
+
+				if right(@cThisLine, 1) <> char(13)
+				begin
+					set @cCarryOver = reverse(substring(reverse(@cThisLine), 1, charindex(char(13), reverse(@cThisLine)) - 1))
+					set @cThisLine = left(@cThisLine, len(@cThisLine) - charindex(char(13), reverse(@cThisLine)))
+				end
+
 				insert into #then (codeLine)
 				select listItem
 					from notification.dbo.fn_makeTableFromList(@cThisLine, char(13))
@@ -188,6 +214,7 @@ begin
 --		delete from #droppedObjects where serverName = @cServerName and databaseName = @cDatabaseName and objectName = @cObjectName
 
 		set @nUkeyLine = 0
+		set @cCarryOver = ''
 
 		while exists (
 			select top 1 ukey
@@ -208,6 +235,15 @@ begin
 					and ukey > @nUkeyLine
 				order by ukey
 
+			set @cThisLine = @cCarryOver + @cThisLine
+			set @cCarryOver = ''
+
+			if right(@cThisLine, 1) <> char(13)
+			begin
+				set @cCarryOver = reverse(substring(reverse(@cThisLine), 1, charindex(char(13), reverse(@cThisLine)) - 1))
+				set @cThisLine = left(@cThisLine, len(@cThisLine) - charindex(char(13), reverse(@cThisLine)))
+			end
+
 			insert into #now (codeLine)
 			select listItem
 				from notification.dbo.fn_makeTableFromList(@cThisLine, char(13))
@@ -227,8 +263,8 @@ begin
 				@nThisLineNumber = b.ukey
 				from #then a
 				join #now b on notification.dbo.fn_removeFormatting(a.codeLine) = notification.dbo.fn_removeFormatting(b.codeLine)
-					and b.ukey > @nLastLineNumber
-				where a.ukey = @nThisUkey
+					and b.ukey >= @nLastLineNumber
+				where a.ukey = @nUkeyLine
 				order by b.ukey
 
 			if @nThisLineNumber is null
@@ -252,7 +288,7 @@ begin
 				from #now a
 				join #then b on notification.dbo.fn_removeFormatting(a.codeLine) = notification.dbo.fn_removeFormatting(b.codeLine)
 					and b.ukey > @nLastLineNumber
-				where a.ukey = @nThisUkey
+				where a.ukey = @nUkeyLine
 				order by b.ukey
 
 			if @nThisLineNumber is null
@@ -268,18 +304,9 @@ begin
 		if (select count(*) from #now where isChanged = 1) = 0
 			set @bIsChanged = 0
 
-		update #now
-			set isChanged = 1
-			from #now a
-			left outer join #then b on notification.dbo.fn_removeFormatting(a.codeLine) = notification.dbo.fn_removeFormatting(b.codeLine)
-				and a.ukey = b.ukey
-			where b.ukey is null
-
-		if @@rowcount = 0
-			set @bIsChanged = 0
-
 		if @bisChanged = 1
 		begin
+
 			set @cMessage = case
 				when (select count(*) from #then) = 0 --or isnull(@dYMD_then, '') = isnull(@dYMD_now, '')
 					then 'Object [' + isnull(@cDatabaseName, '') + '].[' + isnull(@cObjectName, '') + '] was added ' +

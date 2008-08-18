@@ -1,6 +1,5 @@
-use [installedsoftware]
-go
-
+use installedSoftware
+GO
 -- exec pr_rpt_installedSoftwareChanges '2008-02-01', '2008-06-20'
 -- exec pr_rpt_installedSoftwareChanges
 
@@ -60,6 +59,11 @@ begin
 			and d.isEnabled = 1
 		where c.ukey is null
 		order by d.serverName, details, b.programName
+
+	delete from #changeHistory
+		where details = 'Installed'
+			and isdate(installDate) = 1
+			and not (convert(dateTime, installDate) between @dStartDate and @dEndDate)
 
 	select *,
 		identity(int) as ukey

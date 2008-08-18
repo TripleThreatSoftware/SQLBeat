@@ -1,6 +1,4 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
+use [notification]
 GO
 
 ALTER procedure [dbo].[pr_monitorProductionConnections]
@@ -27,7 +25,7 @@ begin
 	declare @dStartDate3 dateTime
 	declare @dEndDate3 dateTime
 
-	set @nNumMinutes = 30
+	set @nNumMinutes = 90
 
 	set @dEndDate = getDate()
 	set @dStartDate = dateAdd(minute, -@nNumMinutes, @dEndDate)
@@ -287,7 +285,12 @@ begin
 			from #results
 
 			where
-				(numActiveConnections_delta >= 200 or numWaitingConnections_oledb_delta >= 200)
+				(
+					numActiveConnections_delta >= 300
+					or numActiveConnections_delta <= 25
+					or numWaitingConnections_delta >= 300
+					or numWaitingConnections_oledb_delta >= 300
+					)
 				and serverName = @cThisServerName
 
 		if @@rowcount > 0

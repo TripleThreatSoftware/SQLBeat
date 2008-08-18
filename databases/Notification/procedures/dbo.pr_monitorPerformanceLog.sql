@@ -1,8 +1,6 @@
-SET ANSI_NULLS ON
+use [notification]
 GO
-SET QUOTED_IDENTIFIER ON
-GO
--- exec pr_monitorPerformanceLog 4
+-- exec pr_monitorPerformanceLog
 ALTER procedure [dbo].[pr_monitorPerformanceLog]
 as
 begin
@@ -12,7 +10,7 @@ begin
 	declare @dStartDate dateTime
 	declare @dEndDate dateTime
 
-	set @dStartDate = dateAdd(hour, -12, getDate())
+	set @dStartDate = dateAdd(hour, -48, getDate())
 	set @dEndDate = getDate()
 
 --	set @dStartDate = '2007-11-12'
@@ -171,7 +169,7 @@ begin
 
 	-- these are the timeStamps that were out of tolerance
 	select a.serverName + ' @ ' + convert(varchar(20), a.ymd, 120) as serverName,
-		left(replace(objectName, 'SQLServer:', '') + space(18), 18) + ' ' +
+		left(replace(e.objectName, 'SQLServer:', '') + space(18), 18) + ' ' +
 		left(instanceName + space(25), 25) + ' ' +
 		left(replace(replace(d.counterName, '/sec', '/s'), 'per second', '/s') + space(25), 25) + ' ' +
 		right(space(6) + case
@@ -189,9 +187,7 @@ begin
 			when currentValue < .05 then convert(varchar(20), convert(decimal(20,4), avgValue))
 			else convert(varchar(20), convert(decimal(20,2), avgValue))
 			end, 6) + ' ' +
-		right(space(5) + convert(varchar(20), convert(int, relativeToAverage)), 5) + '% ' +
-		right(space(5) + convert(varchar(20), convert(int, relativeToAverage_lastHour)), 5) + '% ' +
-		right(space(5) + convert(varchar(20), convert(int, relativeToPrevious)), 5) + '% ' + char(13) as messageText
+		char(13) as messageText
 
 		into #output
 		from #results a
@@ -202,8 +198,29 @@ begin
 		join dm_performanceCounters d on a.ukey_counter = d.ukey
 			and right(d.counterName, 4) <> 'Base'
 		join dm_performanceObjects e on a.ukey_object = e.ukey
-		where (relativeToAverage > 250 or relativeToMax > 250)
-			and relativeToPrevious <> 0
+		where
+			(
+				(relativeToAverage > 250 or relativeToMax > 250)
+				and relativeToPrevious <> 0
+				)
+			or (
+				e.objectName in ('SQLServer:Buffer Manager', 'SQLServer:Buffer Node', 'SQLServer:Buffer Partition')
+				and d.counterName = 'Free Pages'
+				and convert(bigint, currentValue) < 1000
+				)
+			or (
+				d.counterName = 'Page life expectancy'
+				and convert(bigint, currentValue) < 300
+				)
+			or (
+				e.objectName in ('SQLServer:Buffer Manager')
+				and d.counterName = 'Buffer Cache Hit Ratio'
+				and convert(decimal(20,6), currentValue) < .95
+				)
+			or (
+				d.counterName like '%page splits%'
+				and convert(decimal(20,6), currentValue) >= 0.5
+				)
 
 	declare @cThisMessage varchar(8000)
 	declare @cThisSubject varchar(2000)
@@ -225,9 +242,7 @@ begin
 			left('Now' + space(6), 6) + ' ' +
 			left('Prev' + space(6), 6) + ' ' +
 			left('Avg' + space(6), 6) + ' ' +
-			left('Avg' + space(6), 6) + ' ' +
-			left('1hr' + space(6), 6) + ' ' +
-			left('Prev' + space(6), 6) + char(13) +
+			char(13) +
 
 			replicate('=', 18) + ' ' +
 			replicate('=', 25) + ' ' +
@@ -235,9 +250,7 @@ begin
 			replicate('=', 6) + ' ' +
 			replicate('=', 6) + ' ' +
 			replicate('=', 6) + ' ' +
-			replicate('=', 6) + ' ' +
-			replicate('=', 6) + ' ' +
-			replicate('=', 6) + ' ' + char(13)
+			char(13)
 
 		select @cThisMessage = @cThisMessage + messageText
 			from #output

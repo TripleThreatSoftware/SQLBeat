@@ -1,10 +1,10 @@
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[pr_pingServer]') AND type in (N'P', N'PC'))
-BEGIN
-EXEC dbo.sp_executesql @statement = N'-- select top 100 * from pingResults order by ymd desc
--- exec pr_pingServer ''sqlserver\instance1''
+use [notification]
+GO
+-- select top 100 * from pingResults order by ymd desc
+-- exec pr_pingServer 'sqlserver\instance1'
 -- update pingResults set sqlPingResults = pingResults where sqlPingResults is null
 -- alter table pingResults drop column pingResults
-CREATE           procedure [pr_pingServer] (@cServerName varchar(100))
+ALTER           procedure [dbo].[pr_pingServer] (@cServerName varchar(100))
 as
 begin
 	declare @cServerNamePart varchar(100)
@@ -36,9 +36,9 @@ begin
 	set @bIsSQLPingable = 1
 	set @bIsBusinessHours = (select dbo.fn_isBusinessHours())
 
-	set @cRouterMessage = ''''
-	set @cServerMessage = ''''
-	set @cSQLMessage = ''''
+	set @cRouterMessage = ''
+	set @cServerMessage = ''
+	set @cSQLMessage = ''
 
 	create table #sqlPing (results varchar(500))
 
@@ -64,32 +64,32 @@ begin
 	--*********************************************************************************************************
 
 	set @cServerNamePart = @cServerName
-	set @cInstanceNamePart = ''''
+	set @cInstanceNamePart = ''
 
-	if charindex(''\'', @cServerName) > 0
+	if charindex('\', @cServerName) > 0
 	begin
-		set @cServerNamePart = left(@cServerName, charindex(''\'', @cServerName) - 1)
-		set @cInstanceNamePart = right(@cServerName, len(@cServerName) - charindex(''\'', @cServerName))
+		set @cServerNamePart = left(@cServerName, charindex('\', @cServerName) - 1)
+		set @cInstanceNamePart = right(@cServerName, len(@cServerName) - charindex('\', @cServerName))
 	end
 
 --	--*********************************************************************************************************
---	-- if it''s a store, ping the router first
+--	-- if it's a store, ping the router first
 --	--*********************************************************************************************************
---	if @bIsStoreMachine = 1 and right(@cServerName, 2) = ''.3''
+--	if @bIsStoreMachine = 1 and right(@cServerName, 2) = '.3'
 --	begin
 --		truncate table #sqlPing
 --
---		set @cCommandline = ''ping '' + left(@cServerNamePart, len(@cServerNamePart) - 2) + ''.1''
+--		set @cCommandline = 'ping ' + left(@cServerNamePart, len(@cServerNamePart) - 2) + '.1'
 --
 --		insert into #sqlPing
 --		exec master..xp_cmdshell @cCommandline
 --
---		set @cRouterMessage = ''''
+--		set @cRouterMessage = ''
 --
---		select @cRouterMessage = @cRouterMessage + isnull(results, '''') + char(13) --+ case when results like ''%reply from%'' then char(13) else '''' end
+--		select @cRouterMessage = @cRouterMessage + isnull(results, '') + char(13) --+ case when results like '%reply from%' then char(13) else '' end
 --			from #sqlPing
 --
---		if (@cRouterMessage not like ''%received = 4%'' and @cRouterMessage not like ''%received = 3%'') or @cRouterMessage like ''%ttl expired in transit%''
+--		if (@cRouterMessage not like '%received = 4%' and @cRouterMessage not like '%received = 3%') or @cRouterMessage like '%ttl expired in transit%'
 --			set @bIsRouterPingable = 0
 --		else
 --			set @bIsRouterPingable = 1
@@ -102,17 +102,17 @@ begin
 	begin
 		truncate table #sqlPing
 
-		set @cCommandline = ''ping '' + @cServerNamePart
+		set @cCommandline = 'ping ' + @cServerNamePart
 
 		insert into #sqlPing
 		exec master..xp_cmdshell @cCommandline
 
-		set @cServerMessage = ''''
+		set @cServerMessage = ''
 
-		select @cServerMessage = @cServerMessage + isnull(results, '''') + char(13) --+ case when results like ''%reply from%'' then char(13) else '''' end
+		select @cServerMessage = @cServerMessage + isnull(results, '') + char(13) --+ case when results like '%reply from%' then char(13) else '' end
 			from #sqlPing
 
-		if (@cServerMessage not like ''%received = 4%'' and @cServerMessage not like ''%received = 3%'') or @cServerMessage like ''%ttl expired in transit%''
+		if (@cServerMessage not like '%received = 4%' and @cServerMessage not like '%received = 3%' and @cServerMessage not like '%received = 2%') or @cServerMessage like '%ttl expired in transit%'
 			set @bIsServerPingable = 0
 		else
 			set @bIsServerPingable = 1
@@ -130,37 +130,44 @@ begin
 	begin
 		truncate table #sqlPing
 
-		set @cCommandline = ''c:\code\sqlping '' + @cServerNamePart
+		declare @cSQLPingLocation varchar(200)
+		set @cSQLPingLocation = (select settingValue from dm_settings where settingName = 'SQLPing Location')
 
-		insert into #sqlPing
-		exec master..xp_cmdshell @cCommandline
+		if isnull(@cSQLPingLocation, '') <> ''
+		begin
 
-		if (select count(*) from #sqlPing where results = ''ServerName:'' + @cServerNamePart or results like ''ServerName:'' + @cFriendlyName + ''%'') > 0
-		begin
-			set @bIsSQLPingable = 1
-			if (@cInstanceNamePart <> ''''
-				and (select count(*) from #sqlPing where results = ''InstanceName:'' + @cInstanceNamePart) = 0)
-				set @bIsSQLPingable = 0
-		end
-		else
-		begin
-			-- try a second time
-			truncate table #sqlPing
+			set @cCommandline = @cSQLPingLocation + '\sqlping ' + @cServerNamePart
 
 			insert into #sqlPing
 			exec master..xp_cmdshell @cCommandline
 
-			if (select count(*) from #sqlPing where results = ''ServerName:'' + @cServerNamePart or results like ''ServerName:'' + @cFriendlyName + ''%'') > 0
+			if (select count(*) from #sqlPing where results = 'ServerName:' + @cServerNamePart or results like 'ServerName:' + @cFriendlyName + '%') > 0
 			begin
 				set @bIsSQLPingable = 1
-				if (@cInstanceNamePart <> ''''
-					and (select count(*) from #sqlPing where results = ''InstanceName:'' + @cInstanceNamePart) = 0)
+				if (@cInstanceNamePart <> ''
+					and (select count(*) from #sqlPing where results = 'InstanceName:' + @cInstanceNamePart) = 0)
 					set @bIsSQLPingable = 0
 			end
-		end
+			else
+			begin
+				-- try a second time
+				truncate table #sqlPing
 
-		select @cSQLMessage = @cSQLMessage + isnull(results, '''') + char(13)
-			from #sqlPing
+				insert into #sqlPing
+				exec master..xp_cmdshell @cCommandline
+
+				if (select count(*) from #sqlPing where results = 'ServerName:' + @cServerNamePart or results like 'ServerName:' + @cFriendlyName + '%') > 0
+				begin
+					set @bIsSQLPingable = 1
+					if (@cInstanceNamePart <> ''
+						and (select count(*) from #sqlPing where results = 'InstanceName:' + @cInstanceNamePart) = 0)
+						set @bIsSQLPingable = 0
+				end
+			end
+
+			select @cSQLMessage = @cSQLMessage + isnull(results, '') + char(13)
+				from #sqlPing
+		end
 	end
 
 	update dm_servers with (rowlock)
@@ -185,12 +192,12 @@ begin
 
 	if (@bIsSQLPingable = 0 or @bIsServerPingable = 0 or @bIsRouterPingable = 0) and @bIsEnabled = 1
 	begin
-		set @cThisSubject = ''Server '' + @cFriendlyName + '' is not accessible at '' + convert(varchar(40), getDate(), 120) + ''!''
+		set @cThisSubject = 'Server ' + @cFriendlyName + ' is not accessible at ' + convert(varchar(40), getDate(), 120) + '!'
 
 		set @nTimesUnavailable = (
 				select count(*) + 1
 					from notificationLog  (nolock)
-					where subject like ''Server '' + @cFriendlyName + '' is not accessible%''
+					where subject like 'Server ' + @cFriendlyName + ' is not accessible%'
 						and (serverName = @cServerName or serverName = @cFriendlyName)
 						and ymd >= dateAdd(minute, -15, getDate())
 				)
@@ -198,18 +205,18 @@ begin
 		if @nTimesUnavailable is null
 			set @nTimesUnavailable = 1
 
-		set @cThisMessage = ''Contact could not be made with '' + @cFriendlyName +
+		set @cThisMessage = 'Contact could not be made with ' + @cFriendlyName +
 			char(13) +
 			char(13) +
-			''In the last 15 minutes, contact could not be made on '' + convert(varchar(20), @nTimesUnavailable) + '' separate attempts.'' +
+			'In the last 15 minutes, contact could not be made on ' + convert(varchar(20), @nTimesUnavailable) + ' separate attempts.' +
 			char(13)
 
 		set @cThisMessage = @cThisMessage + char(13) +
---			''Router Results : '' + char(13) + @cRouterMessage + char(13) + char(13) +
-			''Server Results : '' + char(13) + @cServerMessage + char(13) + char(13) +
-			''SQLPing Results : '' + char(13) + @cSQLMessage
+--			'Router Results : ' + char(13) + @cRouterMessage + char(13) + char(13) +
+			'Server Results : ' + char(13) + @cServerMessage + char(13) + char(13) +
+			'SQLPing Results : ' + char(13) + @cSQLMessage
 
-		-- if it''s business hours, or this is the third one we''ve seen in the last 90 minutes then raise the alert
+		-- if it's business hours, or this is the third one we've seen in the last 90 minutes then raise the alert
 		if @bIsBusinessHours = 1
 			or (
 				@bIsBusinessHours = 0
@@ -231,10 +238,3 @@ begin
 	else
 		return 1
 end
-'
-END
-GO
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
