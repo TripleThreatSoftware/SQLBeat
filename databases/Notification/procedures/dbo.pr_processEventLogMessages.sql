@@ -1,3 +1,11 @@
+USE [Notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_processEventLogMessages]    Script Date: 08/20/2008 10:24:15 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
 -- create table eventLog_stage_hist (ukey_group int, ymd dateTime default getDate(), step varchar(200))
 -- pr_processEventLogMessages 1
 -- select * from eventLog_history order by ymd desc
@@ -110,6 +118,18 @@ begin
 					and message not like '%Security policies were propagated with warning%'
 					and message not like '%Group Policy client-side extension Security failed to log RSOP%'
 					and not (message like '%rsop%' and message like '%hostingmodel%')
+
+					and message not like '%landesk%'
+					and message not like '%time service%'
+					and message not like '%local activation permission%'
+					and message not like '%profile cannot be loaded%'
+
+					and message not like '%http server is terminating%'
+					and message not like '%JIT Debugging%'
+					and message not like '%waiting for a transaction response%'
+					and message not like '%performance counter data collection%'
+					and message not like '%open procedure name%'
+
 
 					and isnull(a.message, '') <> ''
 			) a

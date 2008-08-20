@@ -1,5 +1,10 @@
 USE [Notification]
 GO
+/****** Object:  StoredProcedure [dbo].[pr_monitorBigBrother]    Script Date: 08/20/2008 10:52:30 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 
 -- select top 100 * from messagesSent order by ymd desc
 
@@ -580,6 +585,8 @@ begin
 			and isnull(b.[name], '') not like '%sqlautomation%'
 			and isnull(b.[name], '') not like '%sqlbeat%'
 
+	-- because other things may be running on the monitor box, don't do this step any more!
+
 	-- if we found some long running jobs, kill 'em off if they're over five times normal runtime
 	if (select count(*) from #results where isLongRunningJob = 1) > 0
 	begin
@@ -595,14 +602,9 @@ begin
 				left outer join #jobAverageRuntimes d on a.job_id = d.job_id
 				where a.running = 1
 					and datePart(year, a.startTime) <> 1900
-					and not isnull(rtrim(ltrim(b.name)), '') like '%log shipping%'
-					and not isnull(rtrim(ltrim(b.name)), '') like '%transaction log%'
-					and b.[name] not like '%trim history%'
-					and b.[name] not like '%eventlog check%'
-					and b.[name] not like '%configuration check%'
-					and b.[name] not like '%import weblogs%'
+					and b.[name] like '%monitor websites%'
 					and b.[name] > @cThisJob
-					and minutesRunning > 180
+					and minutesRunning > 15
 					and (
 						d.job_id is null
 						or (
@@ -619,14 +621,9 @@ begin
 				left outer join #jobAverageRuntimes d on a.job_id = d.job_id
 				where a.running = 1
 					and datePart(year, a.startTime) <> 1900
-					and not isnull(rtrim(ltrim(b.name)), '') like '%log shipping%'
-					and not isnull(rtrim(ltrim(b.name)), '') like '%transaction log%'
-					and b.[name] not like '%trim history%'
-					and b.[name] not like '%eventlog check%'
-					and b.[name] not like '%configuration check%'
-					and b.[name] not like '%import weblogs%'
+					and b.[name] like '%monitor websites%'
 					and b.[name] > @cThisJob
-					and minutesRunning > 180
+					and minutesRunning > 15
 					and (
 						d.job_id is null
 						or (
@@ -1008,12 +1005,12 @@ begin
 	--*********************************************************************************************************************
 	insert into #results (message, severity, subject)
 	select 'Error checking services on ' + isnull(serverName, 'N/A') + '.' + char(13) + char(13) +
-			isnull(serviceName, 'N/A') + char(13) + char(13) +
+			isnull(max(serviceName), 'N/A') + char(13) + char(13) +
 			'Further service checks DISABLED.' as message,
 		1 as severity,
-		'Service check error for ' + isnull(serverName, 'N/A') + ' at ' + right(convert(varchar(20), ymd, 120), 8) as subject
+		'Service check error for ' + isnull(serverName, 'N/A') + ' at ' + right(convert(varchar(20), min(ymd), 120), 8) as subject
 		from serviceLog
-		where ymd >= dateAdd(minute, -@nMinutesBackToLook, getDate())
+		where ymd >= dateAdd(minute, -180, getDate())
 			and (
 				(serviceName like '%SQL Native Client%'
 					and serviceName not like '%sspi content%'
@@ -1021,6 +1018,8 @@ begin
 					and serviceName not like '%unable to establish connection%'
 				)
 			)
+		group by serverName
+		having count(*) > 5
 
 	update dm_servers
 		set serviceCheck = 0
@@ -1028,7 +1027,7 @@ begin
 		join (
 			select isnull(serverName, '') as serverName
 				from serviceLog
-				where ymd >= dateAdd(minute, -@nMinutesBackToLook, getDate())
+				where ymd >= dateAdd(minute, -180, getDate())
 					and (
 						(serviceName like '%SQL Native Client%'
 							and serviceName not like '%sspi content%'
@@ -1036,6 +1035,8 @@ begin
 							and serviceName not like '%unable to establish connection%'
 						)
 					)
+				group by serverName
+				having count(*) > 5
 			) b on a.serverName = b.serverName
 
 	-- insert into hist_monitorBigBrother (stepName) values ('Service monitor checked')
@@ -1067,18 +1068,18 @@ begin
 
 		where a.serverName is not null
 			and isnull(a.message, '') <> 'END'
-			and dateDiff(minute, a.ymd, getDate()) > 60
+			and dateDiff(minute, a.ymd, getDate()) > 30
 			and e.[name] is not null
 
-	insert into #results (subject, message, severity, serverName)
-	select
-		'Job "' + jobName + '" has been stuck on ' + serverName + ' for ' + convert(varchar(20), minutesStuck) + ' minutes (since ' + convert(varchar(19), ymd, 120) + ').' as subject,
-		'Job "' + jobName + '" has been stuck on ' + serverName + ' for ' + convert(varchar(20), minutesStuck) + ' minutes (since ' + convert(varchar(19), ymd, 120) + ').' + char(13) + char(13) +
-			'Step       : ' + notes + char(13) +
-			'Last Check : ' + convert(varchar(19), lastConfigurationCheck, 120)-- + char(13) +
-			as message,
-		2 as severity, serverName
-		from #stuckConfigCheck
+--	insert into #results (subject, message, severity, serverName)
+--	select
+--		'Job "' + jobName + '" has been stuck on ' + serverName + ' for ' + convert(varchar(20), minutesStuck) + ' minutes (since ' + convert(varchar(19), ymd, 120) + ').' as subject,
+--		'Job "' + jobName + '" has been stuck on ' + serverName + ' for ' + convert(varchar(20), minutesStuck) + ' minutes (since ' + convert(varchar(19), ymd, 120) + ').' + char(13) + char(13) +
+--			'Step       : ' + notes + char(13) +
+--			'Last Check : ' + convert(varchar(19), lastConfigurationCheck, 120)-- + char(13) +
+--			as message,
+--		2 as severity, serverName
+--		from #stuckConfigCheck
 
 	-- set the server to sleep that stuck us
 	update dm_servers
@@ -1088,23 +1089,22 @@ begin
 
 	set @cThisJob = ''
 
---	while exists (select top 1 jobName from #stuckConfigCheck where jobName > @cThisJob and minutesStuck > case when dateDiff(day, lastConfigurationCheck, getDate()) > 1 then 90 else 60 end)
---	begin
---		select top 1 @cThisJob = jobName ,
---			@dStartTime = startTime
---			from #stuckConfigCheck
---			where jobName > @cThisJob
---				and minutesStuck > case when dateDiff(day, lastConfigurationCheck, getDate()) > 1 then 90 else 60 end
---			order by jobName
---
---		exec msdb..sp_stop_job @job_name = @cThisJob
---
+	while exists (select top 1 jobName from #stuckConfigCheck where jobName > @cThisJob)
+	begin
+		select top 1 @cThisJob = jobName ,
+			@dStartTime = startTime
+			from #stuckConfigCheck
+			where jobName > @cThisJob
+			order by jobName
+
+		exec msdb..sp_stop_job @job_name = @cThisJob
+
 --		insert into #results (message, severity, subject) values
 --			(
 --				'Job ' + @cThisJob + ', started at ' + convert(varchar(20), @dStartTime) + ', sent a STOP command at ' + convert(varchar(20), getDate(), 120) + '.',
 --				2,
 --				'Job ' + @cThisJob + ', started at ' + convert(varchar(20), @dStartTime) + ', sent a STOP command.')
---	end
+	end
 
 	drop table #stuckConfigCheck
 

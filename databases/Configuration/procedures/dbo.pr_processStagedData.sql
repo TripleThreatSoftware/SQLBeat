@@ -1,4 +1,9 @@
-use [configuration]
+USE [Configuration]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_processStagedData]    Script Date: 08/20/2008 10:41:40 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
 GO
 --alter table runs_stage add ukey_group int
 --alter table runs_log add ukey_group int
@@ -70,54 +75,66 @@ begin
 	drop table #runResults
 	delete from runs_stage with (rowlock) where ukey_group = @nUkeyGroup
 
-	update notification.dbo.dm_servers with (rowlock)
-		set configurationCheck = 0,
-			eventLogCheck = 0
-		from notification.dbo.dm_servers a
-		join runs_log b (nolock) on a.serverName = b.serverName
-			and b.ymd >= @dRunStart
-			and b.message like '%error%'
-			and b.message like '%connecting to wmi%'
-			and b.ukey_group = @nUkeyGroup
-		where a.ukey_group = @nUkeyGroup
+	select serverName, min(ymd) as ymd
+		into #disableServers
+		from runs_log
+		where ukey_group = @nUkeyGroup
+			and ymd >= dateAdd(hour, -2, getDate())
+			and (
+				(message like '%error%' and message like '%connecting to wmi%' and message not like '%runtime error%')
+				or message like '%object required%'
+				)
+		group by serverName
+		having count(*) >= 5
+
+	-- don't bother if the server is already disabled
+	delete #disableServers
+		from #disableServers a
+		join notification.dbo.dm_servers b on a.serverName = b.serverName
+			and b.configurationCheck = 0
+			and b.eventLogCheck = 0
 
 	update notification.dbo.dm_servers with (rowlock)
 		set configurationCheck = 0,
 			eventLogCheck = 0
 		from notification.dbo.dm_servers a
-		join runs_log b (nolock) on a.serverName = b.serverName
-			and b.ymd >= @dRunStart
-			and b.message like '%object required%'
-			and b.ukey_group = @nUkeyGroup
+		join #disableServers b (nolock) on a.serverName = b.serverName
 		where a.ukey_group = @nUkeyGroup
 
-	insert into notification.dbo.notificationLog_stage (serverName, isConnectivity, severity, subject, message)
-	select
-		a.serverName,
-		1 as isConnectivity,
-		2 as severity,
-		'Unable to connect to ' + isnull(a.serverName, '') + ' using WMI at ' + convert(varchar(20), min(a.ymd), 120) + '.' as subject,
-		isnull(a.message, '') + char(13) + char(13) +
-			'Future connections using WMI are DISABLED.'
-		from runs_log a (nolock)
-		where a.ymd >= @dRunStart
-			and a.message like '%error%'
-			and a.message like '%connecting to wmi%'
-			and a.message not like '%runtime error%'
-			and a.ukey_group = @nUkeyGroup
-		group by a.serverName, a.message
+	declare @cServerName varchar(200)
+	declare @cMessage varchar(4000)
 
-	insert into notification.dbo.notificationLog_stage (serverName, isConnectivity, severity, subject, message)
-	select
-		a.serverName,
-		1 as isConnectivity,
-		2 as severity,
-		'Had issues reading ' + isnull(a.serverName, '') + ' using WMI at ' + convert(varchar(20), min(a.ymd), 120) + '.' as subject,
-		isnull(a.message, '') + char(13) + char(13) +
-			'Future connections using WMI are DISABLED.'
-		from runs_log a (nolock)
-		where a.ymd >= @dRunStart
-			and a.message like '%object required%'
-			and a.ukey_group = @nUkeyGroup
-		group by a.serverName, a.message
+	set @cServerName = ''
+	set @cMessage = ''
+
+	while exists (select top 1 servername from #disableServers where serverName >= @cServerName)
+	begin
+		select top 1
+			@cServerName = serverName
+			from #disableServers
+			where serverName >= @cServerName
+			order by serverName
+
+		set @cMessage = ''
+
+		select @cMessage = @cMessage + char(13) + message
+			from runs_log a
+			where serverName = @cServerName
+				and ukey_group = @nUkeyGroup
+				and ymd >= dateAdd(hour, -1, getDate())
+			order by ymd
+
+		insert into notification.dbo.notificationLog_stage (serverName, isConnectivity, severity, subject, message)
+		select
+			@cServerName,
+			1 as isConnectivity,
+			2 as severity,
+			'Unable to connect to ' + @cServerName + ' using WMI at ' + convert(varchar(20), getDate(), 120) + '.' as subject,
+			isnull(@cMessage, '') + char(13) + char(13) +
+				'Future connections using WMI are DISABLED.'
+
+	end
+
+	drop table #disableServers
+
 end

@@ -1,6 +1,11 @@
-use installedSoftware
+USE [InstalledSoftware]
 GO
--- exec pr_rpt_installedSoftwareChanges '2008-02-01', '2008-06-20'
+/****** Object:  StoredProcedure [dbo].[pr_rpt_installedSoftwareChanges]    Script Date: 08/20/2008 09:41:41 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- exec pr_rpt_installedSoftwareChanges '2008-08-10', '2008-08-22'
 -- exec pr_rpt_installedSoftwareChanges
 
 ALTER procedure [dbo].[pr_rpt_installedSoftwareChanges] (@dStartDate dateTime = null, @dEndDate dateTime = null)
@@ -13,13 +18,29 @@ begin
 	set @dStartDate = isnull(@dStartDate, dateAdd(hour, -48, getDate()))
 	set @dEndDate = isnull(@dEndDate, getDate())
 
+	select ukey_server, ukey_run, count(*) as numItems
+		into #installHistory
+		from runs a
+		join runs_data b on a.ukey = b.ukey_run
+		where a.ymd between @dStartDate and @dEndDate
+		group by ukey_server, ukey_run
+
+	delete #installHistory
+		from #installHistory a
+		join (
+			select ukey_server, numItems
+				from #installHistory
+				group by ukey_server, numItems
+				having count(*) = 1
+			) b on a.ukey_server = b.ukey_server
+				and a.numItems = b.numItems
+
 	select ukey_server,
-		min(case when a.ymd >= @dStartDate and a.ymd <= @dEndDate then a.ukey else null end) as ukey_lastRun,
-		max(case when a.ymd >= @dStartDate and a.ymd <= @dEndDate then a.ukey else null end) as ukey_thisrun
+		min(ukey_run) as ukey_lastRun,
+		max(ukey_run) as ukey_thisrun
 		into #runHistory
-		from runs a (nolock)
-		join (select distinct ukey_run, ukey_server from runs_data (nolock) ) b on a.ukey = b.ukey_run
-		group by b.ukey_server
+		from #installHistory
+		group by ukey_server
 
 	-- installed since last check
 	select d.serverName, 'Installed' as details,
@@ -60,10 +81,10 @@ begin
 		where c.ukey is null
 		order by d.serverName, details, b.programName
 
-	delete from #changeHistory
-		where details = 'Installed'
-			and isdate(installDate) = 1
-			and not (convert(dateTime, installDate) between @dStartDate and @dEndDate)
+--	delete from #changeHistory
+--		where details = 'Installed'
+--			and isdate(installDate) = 1
+--			and not (convert(dateTime, installDate) between @dStartDate and @dEndDate)
 
 	select *,
 		identity(int) as ukey
@@ -75,6 +96,8 @@ begin
 	declare @cThisServer varchar(200)
 
 	set @cThisServer = ''
+
+select * from #results
 
 	while exists (select top 1 ukey from #results where serverName > @cThisServer)
 	begin
@@ -109,14 +132,15 @@ begin
 		print @cThisSubject
 		print @cThisMessage
 
-		insert into notification..notificationLog_stage (serverName, subject, message, severity, isInstalledSoftware) values (
-			@cThisServer, @cThisSubject, @cThisMessage, 2, 1)
+--		insert into notification..notificationLog_stage (serverName, subject, message, severity, isInstalledSoftware) values (
+--			@cThisServer, @cThisSubject, @cThisMessage, 2, 1)
 
 	end
 
 	drop table #runHistory
 	drop table #results
 	drop table #changeHistory
+	drop table #installHistory
 end
 -- select top 100 * from notification..notificationLog order by ukey desc
 -- delete from notification..notificationLog where ukey in (29609,29608,29607)

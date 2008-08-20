@@ -1,8 +1,13 @@
-use audit
+USE [Audit]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_alert_objectChanges]    Script Date: 08/20/2008 13:40:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
 GO
 
 
--- exec pr_alert_objectChanges '2008-08-18 00:00:00.000', '2008-08-18 10:00:00.000'
+-- exec pr_alert_objectChanges null, null
 ALTER procedure [dbo].[pr_alert_objectChanges] (@dStartDate dateTime = null, @dEndDate dateTime = null)
 as
 begin
@@ -196,7 +201,7 @@ begin
 				set @cThisLine = @cCarryOver + @cThisLine
 				set @cCarryOver = ''
 
-				if right(@cThisLine, 1) <> char(13)
+				if right(@cThisLine, 1) <> char(13) and charindex(char(13), @cThisLine) > 1
 				begin
 					set @cCarryOver = reverse(substring(reverse(@cThisLine), 1, charindex(char(13), reverse(@cThisLine)) - 1))
 					set @cThisLine = left(@cThisLine, len(@cThisLine) - charindex(char(13), reverse(@cThisLine)))
@@ -238,7 +243,7 @@ begin
 			set @cThisLine = @cCarryOver + @cThisLine
 			set @cCarryOver = ''
 
-			if right(@cThisLine, 1) <> char(13)
+			if right(@cThisLine, 1) <> char(13) and charindex(char(13), reverse(@cThisLine)) > 1
 			begin
 				set @cCarryOver = reverse(substring(reverse(@cThisLine), 1, charindex(char(13), reverse(@cThisLine)) - 1))
 				set @cThisLine = left(@cThisLine, len(@cThisLine) - charindex(char(13), reverse(@cThisLine)))
