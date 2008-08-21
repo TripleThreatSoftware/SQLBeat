@@ -200,13 +200,14 @@ begin
 		join dm_performanceObjects e on a.ukey_object = e.ukey
 		where
 			(
-				(relativeToAverage > 250 or relativeToMax > 250)
+				(relativeToAverage > 500)
 				and relativeToPrevious <> 0
+				and e.objectName not like '%buffer partition%'
 				)
 			or (
 				e.objectName in ('SQLServer:Buffer Manager', 'SQLServer:Buffer Node', 'SQLServer:Buffer Partition')
 				and d.counterName = 'Free Pages'
-				and convert(bigint, currentValue) < 1000
+				and convert(bigint, currentValue) < 100
 				)
 			or (
 				d.counterName = 'Page life expectancy'
