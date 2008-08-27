@@ -1,8 +1,13 @@
-use [notification]
+USE [Notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_generateGoogleChartsRequest]    Script Date: 08/27/2008 15:21:46 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
 GO
 
 
-ALTER procedure [dbo].[pr_generateGoogleChartsRequest] (@nWidth int, @nHeight int, @bRelativeToTotal bit = 0, @bAbsoluteYAxis bit = 0, @bShowPie bit = 0, @bLeavePeaks bit = 0)
+ALTER procedure [dbo].[pr_generateGoogleChartsRequest] (@nWidth int, @nHeight int, @bRelativeToTotal bit = 0, @bAbsoluteYAxis bit = 0, @bShowPie bit = 0)
 as
 begin
 
@@ -21,12 +26,12 @@ begin
 	declare @cAxisLabels_y varchar(8000)
 	declare @cURLString varchar(8000)
 	declare @cLegend varchar(1000)
-	declare @nMaxValue decimal(30,6)
-	declare @nAvgValue decimal(30,6)
+	declare @nMaxValue decimal(20,6)
+	declare @nAvgValue decimal(20,6)
 	declare @cSeriesName varchar(200)
 	declare @cSetName varchar(200)
-	declare @nMaxSeriesValue decimal(30,6)
-	declare @nMinSeriesValue decimal(30,6)
+	declare @nMaxSeriesValue decimal(20,6)
+	declare @nMinSeriesValue decimal(20,6)
 	declare @nNumDataPoints decimal(10,2)
 
 	set @cURLString = 'http://chart.apis.google.com/chart?chs=' + convert(varchar(20), @nWidth) + 'x' + convert(varchar(20), @nHeight) + '&chd=t:'
@@ -59,7 +64,7 @@ begin
 
 		if @bRelativeToTotal = 0
 		begin
-			if @nMaxValue > @nAvgValue * 10 and @bLeavePeaks = 0
+			if @nMaxValue > @nAvgValue * 10
 			begin
 				set @nMaxValue = @nAvgValue * 10
 
@@ -70,16 +75,17 @@ begin
 			end
 
 			-- anything that doesn't hit at least 5% of the highest reading, ignore
-			delete #dataValues
-				from #dataValues a
-				join (
-					select setName, max(axis_y) as maxValue
-						from #dataValues
-						where seriesName = @cSeriesName
-						group by setName
-						having (max(axis_y) / @nMaxValue) < .05
-					) b on a.setName = b.setName
-				where a.seriesName = @cSeriesName
+			if @nMaxValue <> 0
+				delete #dataValues
+					from #dataValues a
+					join (
+						select setName, max(axis_y) as maxValue
+							from #dataValues
+							where seriesName = @cSeriesName
+							group by setName
+							having (max(axis_y) / @nMaxValue) < .05
+						) b on a.setName = b.setName
+					where a.seriesName = @cSeriesName
 		end
 		else
 		begin
@@ -120,16 +126,16 @@ begin
 			else
 				set @cLegend = @cLegend + @cSeriesName + '-' + @cSetName + '|'
 
-			if @bAbsoluteYAxis = 0 and isnull(@nMaxValue, 0) <> 0
+			if @bAbsoluteYAxis = 0
 				select @cDataPoints = @cDataPoints +
-					convert(varchar(20), convert(decimal(20,1),  isnull(axis_y/@nMaxValue, 0)*100)) + ','
+					convert(varchar(20), convert(decimal(10,1),  case when @nMaxValue <> 0 then isnull(axis_y/@nMaxValue, 0)*100 else 0 end)) + ','
 					from #dataValues
 					where seriesName = @cSeriesName
 						and setName = @cSetName
 					order by sortOrder
 			else
 				select @cDataPoints = @cDataPoints +
-					convert(varchar(20), convert(decimal(20,1),  isnull((axis_y - @nMinSeriesValue)/(@nMaxValue - @nMinSeriesValue), 0)*100)) + ','
+					convert(varchar(20), convert(decimal(10,1),  case when @nMaxValue <> 0 then isnull((axis_y - @nMinSeriesValue)/(@nMaxValue - @nMinSeriesValue), 0)*100 else 0 end)) + ','
 					from #dataValues
 					where seriesName = @cSeriesName
 						and setName = @cSetName
@@ -147,7 +153,7 @@ begin
 		group by seriesName, setName
 		order by count(*) desc
 
-	select axis_x, identity(bigint) as ukey
+	select axis_x, identity(int) as ukey
 		into #xAxis
 		from #dataValues
 		where seriesName = @cSeriesName

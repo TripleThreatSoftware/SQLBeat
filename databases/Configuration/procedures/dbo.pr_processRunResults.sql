@@ -1,4 +1,6 @@
-/****** Object:  StoredProcedure [dbo].[pr_processRunResults]    Script Date: 07/09/2008 11:17:38 ******/
+USE [Configuration]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_processRunResults]    Script Date: 08/27/2008 09:28:40 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -292,6 +294,10 @@ begin
 		from #results
 		where counterName = 'win32_service'
 			and keyName = 'state'
+			and instanceName not like '%shadow copy%'
+			and instanceName not like '%application management%'
+			and instanceName not like '%background intelligent transfer service%'
+			and instanceName not like '%web proxy auto-discovery%'
 
 	-- disk subsystem status changes
 	insert into #messageStage (serverName, subject, message, isDriveSpace)
@@ -340,6 +346,7 @@ begin
 			and keyName not like '%ErrorsFromASPPreprocessor%'
 			and keyName not like '%ErrorsPerSec%'
 			and keyName not in ('ErrorsAccessPermissions', 'ErrorsGrantedAccess', 'ErrorsLogon', 'SessionsErroredOut')
+			and counterName not in ('Win32_process')
 
 	-- any changed local groups or users
 	insert into #messageStage (serverName, subject, message)
@@ -436,20 +443,20 @@ begin
 				)
 			)
 
-	-- changes to hardware
-	insert into #messageStage (serverName, subject, message)
-	select a.serverName,
-		'Hardware has been changed on ' + a.serverName + '.' as subject,
-		case
-			when a.details = 'NEW' then 'Device ' + isnull(instanceName, 'N/A') + ' was added to ' + counterName + '.'
-			when a.details = 'REMOVED' then 'Device ' + isnull(instanceName, 'N/A') + ' was removed from ' + counterName + '.'
-			else 'Device "' + counterName + isnull('.' + instanceName, '') + '" property "' + keyName + '" changed from "' + isnull(a.oldValue, 'N/A') + '" to "' + isnull(a.newValue, 'N/A') + '".'
-			end
-		from #results a
-		where counterName in ('Win32_Processor', 'Win32_BIOS', 'Win32_PhysicalMemory',
-			'Win32_DiskDrive', 'Win32_IDEController', 'Win32_ComputerSystem', 'Win32_ComputerSystemProduct', 'Win32_DiskPartition',
-			'Win32_SCSIController', 'Win32_SystemEnclosure') -- 'Win32_PnPDevice', 'Win32_AllocatedResource',
-			and keyName not in ('loadPercentage', 'BiosCharacteristics', 'SCSIPort', 'SCSITargetId')
+--	-- changes to hardware
+--	insert into #messageStage (serverName, subject, message)
+--	select a.serverName,
+--		'Hardware has been changed on ' + a.serverName + '.' as subject,
+--		case
+--			when a.details = 'NEW' then 'Device ' + isnull(instanceName, 'N/A') + ' was added to ' + counterName + '.'
+--			when a.details = 'REMOVED' then 'Device ' + isnull(instanceName, 'N/A') + ' was removed from ' + counterName + '.'
+--			else 'Device "' + counterName + isnull('.' + instanceName, '') + '" property "' + keyName + '" changed from "' + isnull(a.oldValue, 'N/A') + '" to "' + isnull(a.newValue, 'N/A') + '".'
+--			end
+--		from #results a
+--		where counterName in ('Win32_Processor', 'Win32_BIOS', 'Win32_PhysicalMemory',
+--			'Win32_DiskDrive', 'Win32_IDEController', 'Win32_ComputerSystem', 'Win32_ComputerSystemProduct', 'Win32_DiskPartition',
+--			'Win32_SCSIController', 'Win32_SystemEnclosure') -- 'Win32_PnPDevice', 'Win32_AllocatedResource',
+--			and keyName not in ('loadPercentage', 'BiosCharacteristics', 'SCSIPort', 'SCSITargetId')
 
 	-- changes to windows shares
 	insert into #messageStage (serverName, subject, message)
@@ -464,25 +471,25 @@ begin
 		where counterName in ('Win32_Share')
 
 	-- changes to startup commands
-	insert into #messageStage (serverName, subject, message)
-	select a.serverName,
-		case
-			when details = 'NEW'
-				then 'New startup command "' + instanceName + '" created on ' + a.serverName + '.'
-			when details = 'REMOVED'
-				then 'Startup command "' + instanceName + '" removed on ' + a.serverName + '.'
-			else 'Startup command "' + instanceName + '" has been changed on ' + a.serverName + '.'
-			end as subject,
-		case
-			when details = 'NEW'
-				then 'Property "' + keyName + '" was set to "' + isnull(a.newValue, 'N/A') + '".'
-			when details = 'REMOVED'
-				then 'Property "' + keyName + '" value was "' + isnull(a.oldValue, 'N/A') + '".'
-			else 'Property "' + keyName + '" was changed from "' + isnull(a.oldValue, 'N/A') + '" to "' + isnull(a.newValue, 'N/A') + '".'
-			end
-		from #results a
-		where counterName in ('Win32_StartupCommand')
-			and instanceName not in ('ctfmon.exe', 'desktop.exe')
+--	insert into #messageStage (serverName, subject, message)
+--	select a.serverName,
+--		case
+--			when details = 'NEW'
+--				then 'New startup command "' + instanceName + '" created on ' + a.serverName + '.'
+--			when details = 'REMOVED'
+--				then 'Startup command "' + instanceName + '" removed on ' + a.serverName + '.'
+--			else 'Startup command "' + instanceName + '" has been changed on ' + a.serverName + '.'
+--			end as subject,
+--		case
+--			when details = 'NEW'
+--				then 'Property "' + keyName + '" was set to "' + isnull(a.newValue, 'N/A') + '".'
+--			when details = 'REMOVED'
+--				then 'Property "' + keyName + '" value was "' + isnull(a.oldValue, 'N/A') + '".'
+--			else 'Property "' + keyName + '" was changed from "' + isnull(a.oldValue, 'N/A') + '" to "' + isnull(a.newValue, 'N/A') + '".'
+--			end
+--		from #results a
+--		where counterName in ('Win32_StartupCommand')
+--			and instanceName not in ('ctfmon.exe', 'desktop.exe')
 
 	declare @cThisServer varchar(200)
 	declare @cThisSubject varchar(500)
@@ -544,4 +551,3 @@ begin
 
 	insert into runs_log (message, ukey_group) values ('PRR: Done!', @nUkeyGroup)
 end
-GO

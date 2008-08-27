@@ -1,10 +1,5 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
--- exec pr_graph_connectionsByHour 'spiderxps\sqlbeat'
-
-ALTER procedure [dbo].[pr_graph_connectionsByHour] (@cServerName varchar(100))
+-- exec pr_graph_connectionsByHour 'sqlcluster01'
+alter procedure [dbo].[pr_graph_connectionsByHour] (@cServerName varchar(100))
 as
 begin
 	if @cServerName is null
@@ -20,9 +15,9 @@ begin
 				count(distinct ymd) as numPolls,
 				count(*) as totalConnections,
 				sum(case when command <> 'awaiting command' then 1 else 0 end) as activeConnections
-				from processLog (nolock)
+				from notification..processLog (nolock)
 				where serverName = @cServerName
-					and ymd >= dateAdd(hour, -24, getDate())
+					and ymd >= dateAdd(hour, -12, getDate())
 				group by datePart(day, ymd), datePart(hour, ymd)
 			) a
 
@@ -45,7 +40,7 @@ begin
 
 	set @nAxisMax_y = ( select isnull(max(axis_y), 0) from #dataValues )
 
-	set @cURLString = 'http://chart.apis.google.com/chart?chs=809x350&chd=t:'
+	set @cURLString = 'http://chart.apis.google.com/chart?chs=400x150&chd=t:'
 
 	set @cDatapoints = ''
 	set @cAxisLabels_x = ''
@@ -74,12 +69,11 @@ begin
 				convert(varchar(20), case when @nAxisMax_y >= 5 then convert(bigint, @nAxisMax_y*.25) else convert(decimal(10,1), @nAxisMax_y*.25) end) + '|' +
 				convert(varchar(20), case when @nAxisMax_y >= 5 then convert(bigint, @nAxisMax_y*.50) else convert(decimal(10,1), @nAxisMax_y*.50) end) + '|' +
 				convert(varchar(20), case when @nAxisMax_y >= 5 then convert(bigint, @nAxisMax_y*.75) else convert(decimal(10,1), @nAxisMax_y*.75) end) + '|' +
-				convert(varchar(20), case when @nAxisMax_y >= 5 then convert(bigint, @nAxisMax_y) else convert(decimal(10,1), @nAxisMax_y) end) + -- y axis ranges
+				convert(varchar(20), case when @nAxisMax_y >= 5 then convert(bigint, @nAxisMax_y) else convert(decimal(10,1), @nAxisMax_y) end) -- y axis ranges
 
 --		'&cht=p3' + -- 3d pie chart
 --		'&chl=' + @cAxisLabels + -- with these wedge names
-
-		'&chtt=Active Connections (' + @cServerName + ')' -- with this title
+--		'&chtt=Active Connections (' + @cServerName + ')' -- with this title
 
 	select @cURLString as graphURL
 

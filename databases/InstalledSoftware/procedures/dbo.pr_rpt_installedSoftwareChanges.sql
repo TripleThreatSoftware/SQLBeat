@@ -1,11 +1,11 @@
 USE [InstalledSoftware]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_rpt_installedSoftwareChanges]    Script Date: 08/20/2008 09:41:41 ******/
+/****** Object:  StoredProcedure [dbo].[pr_rpt_installedSoftwareChanges]    Script Date: 08/27/2008 12:44:56 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
--- exec pr_rpt_installedSoftwareChanges '2008-08-10', '2008-08-22'
+-- exec pr_rpt_installedSoftwareChanges '2008-08-20', '2008-08-28'
 -- exec pr_rpt_installedSoftwareChanges
 
 ALTER procedure [dbo].[pr_rpt_installedSoftwareChanges] (@dStartDate dateTime = null, @dEndDate dateTime = null)
@@ -97,7 +97,7 @@ begin
 
 	set @cThisServer = ''
 
-select * from #results
+--select * from #results
 
 	while exists (select top 1 ukey from #results where serverName > @cThisServer)
 	begin
@@ -132,8 +132,8 @@ select * from #results
 		print @cThisSubject
 		print @cThisMessage
 
---		insert into notification..notificationLog_stage (serverName, subject, message, severity, isInstalledSoftware) values (
---			@cThisServer, @cThisSubject, @cThisMessage, 2, 1)
+		insert into notification..notificationLog_stage (serverName, subject, message, severity, isInstalledSoftware) values (
+			@cThisServer, @cThisSubject, @cThisMessage, 2, 1)
 
 	end
 

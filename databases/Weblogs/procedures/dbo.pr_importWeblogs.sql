@@ -1,5 +1,9 @@
-use weblogs
-
+USE [Weblogs]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_importWeblogs]    Script Date: 08/27/2008 09:14:46 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
 GO
 --select * from dm_sources
 --
@@ -75,16 +79,21 @@ begin
 	insert into #filesToImport (dirString)
 	exec master..xp_cmdshell @cSQLString
 
-	if @@error <> 0 or (select count(*) from #filesToImport where dirString = 'access is denied.') > 0
+	if @@error <> 0 or (select count(*) from #filesToImport where dirString like '%access%denied%' or dirString like '%logon failure%') > 0
 	begin
 		set @cThisSubject = 'Unable to read from ' + @cWeblogPath + '.'
 		set @cThisMessage = 'Received Access is denied reading ' + @cWeblogPath + '.'
+
+		select @cThisMessage = @cThisMessage + char(13) + isnull(dirString, '')
+			from #filesToImport
 
 		print @cThisMessage
 
 		insert into fact_weblogs_stage_hist (stepName) values (left(@cThisMessage, 5000))
 
 		insert into notification..notificationLog_stage (servername, severity, subject, message) values (@cWeblogPath, 2, @cThisSubject, @cThisMessage)
+
+		update dm_sources set isEnabled = 0 where ukey = @nUkeySource
 	end
 
 	insert into fact_weblogs_stage_hist (stepName) values ('Updating information on found files')
