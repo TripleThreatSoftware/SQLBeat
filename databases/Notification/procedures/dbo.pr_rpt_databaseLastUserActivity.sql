@@ -1,12 +1,12 @@
 use [notification]
-go
+GO
 
-create procedure pr_rpt_databaseLastUserActivity (@cServerName varchar(200))
+ALTER procedure [dbo].[pr_rpt_databaseLastUserActivity] (@cServerName varchar(200))
 as
 begin
 
 	select a.dbName,
-		isnull(b.ymd, c.ymd) as lastUserActivity
+		isnull(b.ymd, c.ymd) as ymd
 		from (
 			select dbName, max(ymd) as ymd
 				from databaseFileSizeLog (nolock)
@@ -34,5 +34,3 @@ begin
 		order by a.dbName
 
 end
-
-go
