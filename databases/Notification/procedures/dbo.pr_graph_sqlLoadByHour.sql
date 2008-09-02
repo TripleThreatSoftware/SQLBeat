@@ -1,8 +1,10 @@
-use notification
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
 GO
 -- exec pr_graph_sqlLoadByHour 'mssql-ny'
 
-alter procedure [dbo].[pr_graph_sqlLoadByHour] (@cServerName varchar(100))
+ALTER procedure [dbo].[pr_graph_sqlLoadByHour] (@cServerName varchar(100), @nGraphWidth int = 800)
 as
 begin
 
@@ -294,7 +296,7 @@ begin
 		where b.setName is null
 
 	insert into #results (overallLoad)
-	exec pr_generateGoogleChartsRequest @nWidth = 1000, @nHeight = 300, @bRelativeToTotal = 0
+	exec pr_generateGoogleChartsRequest @nWidth = @nGraphWidth, @nHeight = null, @bRelativeToTotal = 0
 
 
 	--********************************************************************************************************************************

@@ -1,6 +1,3 @@
-USE [Notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_generateGoogleChartsRequest]    Script Date: 08/27/2008 15:21:46 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -10,6 +7,14 @@ GO
 ALTER procedure [dbo].[pr_generateGoogleChartsRequest] (@nWidth int, @nHeight int, @bRelativeToTotal bit = 0, @bAbsoluteYAxis bit = 0, @bShowPie bit = 0)
 as
 begin
+	if isnull(@nHeight, 0) = 0
+		set @nHeight = 300
+
+	if @nWidth > 1000
+		set @nWidth = 1000
+
+	if @nWidth * @nHeight > 300000
+		set @nHeight = 300000 / @nWidth
 
 	--************************************************************************************
 	-- generate the google charts request string based on #dataValues
