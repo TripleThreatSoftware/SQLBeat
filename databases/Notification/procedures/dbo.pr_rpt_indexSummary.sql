@@ -1,7 +1,7 @@
 use [notification]
 go
 
-create procedure pr_rpt_indexSummary (@cServerName varchar(200) = '')
+alter procedure pr_rpt_indexSummary (@cServerName varchar(200) = '', @nNumHours int = 24)
 as
 begin
 	select serverName, max(ymd) as ymd
@@ -14,7 +14,7 @@ begin
 	select serverName, min(ymd) as ymd
 		into #previousRun
 		from indexPerformanceLog (nolock)
-		where ymd >= dateAdd(hour, -24, getDate())
+		where ymd >= dateAdd(hour, -@nNumHours, getDate())
 			and ymd < dateAdd(hour, -1, getDate())
 			and (serverName = @cServerName or isnull(@cServerName, '') = '')
 		group by servername

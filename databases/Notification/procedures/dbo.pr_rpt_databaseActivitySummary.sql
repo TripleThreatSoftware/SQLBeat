@@ -1,149 +1,136 @@
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[pr_rpt_databaseActivitySummary]') AND type in (N'P', N'PC'))
-BEGIN
-EXEC dbo.sp_executesql @statement = N'-- pr_rpt_databaseActivitySummary ''10.3.10.110'', null, null
-CREATE procedure [pr_rpt_databaseActivitySummary] (@cServerName varchar(100), @dStartDate dateTime, @dEndDate dateTime)
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- pr_rpt_databaseActivitySummary 'uatmssql02', null, null
+ALTER procedure [dbo].[pr_rpt_databaseActivitySummary] (@cServerName varchar(100) = '')
 as
 begin
 
---declare @cServerName varchar(100)
---declare @dStartDate dateTime
---declare @dEndDate dateTime
---set @cServerName = ''10.3.10.110''
+--	declare @cServerName varchar(100)
+--	set @cServerName = 'funmssql02'
 
+	select serverName, max(ymd) as ymd
+		into #latestRun
+		from indexPerformanceLog (nolock)
+		where (serverName = @cServerName or isnull(@cServerName, '') = '')
+		group by servername
+		having max(ymd) >= dateAdd(hour, -1, getDate())
 
-	set @dStartDate = isnull(@dStartDate, dateAdd(week, -1, getDate()))
-	set @dEndDate = isnull(@dEndDate, getDate())
---
---	if dateDiff(hour, @dStartDate, @dEndDate) > 48
---		set @dStartDate = dateAdd(hour, -48, @dEndDate)
+	select serverName, min(ymd) as ymd
+		into #previousRun
+		from indexPerformanceLog (nolock)
+		where ymd >= dateAdd(week, -1, getDate())
+			and ymd < dateAdd(hour, -1, getDate())
+			and (serverName = @cServerName or isnull(@cServerName, '') = '')
+		group by servername
 
-	create table #scans (ymd dateTime, databaseName varchar(200), tableName varchar(200), indexNumber int,
-		tableScans bigint default 0, indexSeeks bigint default 0,
-		delta_tableScans bigint default 0, delta_indexSeeks bigint default 0, lastCheck dateTime default '''', lastBufferReading dateTime default '''',
-		buffers bigint default null, delta_buffers bigint default 0)
+	select serverName, max(ymd) as ymd
+		into #latestTableSizeData
+		from tableSizeLog (nolock)
+		where (serverName = @cServerName or isnull(@cServerName, '') = '')
+		group by servername
 
-	insert into #scans (ymd, databaseName, tableName, indexNumber, tableScans, indexSeeks)
-	select ymd, databaseName, tableName, 0, tableScans, 0 as indexSeeks
-		from deepSQLStats_unindexedTables
-		where serverName = @cServerName
-			and ymd >= @dStartDate
-			and ymd < @dEndDate
+	select
+		a.ymd, a.serverName, a.ukey_server, a.databaseName, a.tableName,
+		case when isnull(a.indexName, '') in ('', '0') then 'NO INDEX' else a.indexName end as indexName,
+		a.user_updates, a.user_seeks, a.user_scans, a.user_lookups,
 
-	insert into #scans (ymd, databaseName, tableName, indexNumber, tableScans, indexSeeks)
-	select ymd, databaseName, tableName, indexNumber, tableScans, indexSeeks
-		from deepSQLStats_indexesNotOptimal
-		where serverName = @cServerName
-			and ymd >= @dStartDate
-			and ymd < @dEndDate
+		a.user_updates - isnull(d.user_updates, 0) as user_updates_week,
+		a.user_seeks - isnull(d.user_seeks, 0) as user_seeks_week,
+		a.user_scans - isnull(d.user_scans, 0) as user_scans_week,
+		a.user_lookups - isnull(d.user_lookups, 0) as user_lookups_week,
 
-	update #scans
-		set buffers = b.buffers
-		from #scans a
-		join deepSQLStats_bufferCache b on b.serverName = @cServerName
+		d.ymd as lastScan,
+		convert(bigint, c.rows) as numRows
+
+		into #performanceSummary
+
+		from indexPerformanceLog a (nolock)
+		join #latestRun b on a.serverName = b.serverName
+			and a.ymd = b.ymd
+		left outer join (
+			select a.serverName, a.databaseName, a.tableName, a.rows
+				from tableSizeLog a (nolock)
+				join #latestTableSizeData b on a.serverName = b.serverName
+					and a.ymd = b.ymd
+			) c on a.serverName = c.serverName
+				and a.databaseName = c.databaseName
+				and a.tableName = c.tableName
+		left outer join (
+			select a.*
+				from indexPerformanceLog a (nolock)
+				join #previousRun b on a.serverName = b.serverName
+					and a.ymd = b.ymd
+			) d on a.serverName = d.serverName
+				and a.databasename = d.databaseName
+				and a.tableName = d.tableName
+				and a.indexName = d.indexName
+
+	-- lose any inactive databases
+	delete #performanceSummary
+		from #performanceSummary a
+		join (
+			select serverName, databaseName
+				from #performanceSummary
+				group by serverName, databaseName
+				having sum(isnull(user_updates, 0) + isnull(user_seeks, 0) + isnull(user_scans, 0) + isnull(user_lookups, 0)) = 0
+			) b on a.serverName = b.serverName
+				and a.databaseName = b.databaseName
+
+	select serverName, databaseName, tableName, indexNumber, buffers, identity(int) as ukey, convert(int, 0) as bufferDelta
+		into #bufferHistory
+		from deepSQLStats_bufferCache
+		where ymd >= dateAdd(week, -1, getDate())
+			and (serverName = @cServerName or isnull(@cServerName, '') = '')
+			and left(tableName, 3) <> 'sys'
+		order by serverName, databaseName, tableName, indexNumber, ymd
+
+	update a
+		set bufferDelta = a.buffers - isnull(b.buffers, 0)
+		from #bufferHistory a
+		left outer join #bufferHistory b on a.ukey = b.ukey + 1
+			and a.serverName = b.serverName
 			and a.databaseName = b.databaseName
 			and a.tableName = b.tableName
 			and a.indexNumber = b.indexNumber
-			and convert(varchar(16), a.ymd) = convert(varchar(16), b.ymd)
 
-	create clustered index ix_tmp_scans on #scans (databaseName, tableName, indexNumber, ymd) with fillfactor = 100
-
-	update #scans
-		set lastCheck = b.lastCheck
-		from #scans a
+	update #bufferHistory
+		set bufferDelta = 0
+		from #bufferHistory a
 		join (
-			select a.ymd, a.databaseName, a.tableName, a.indexNumber, max(b.ymd) as lastCheck
-				from #scans a
-				join #scans b on a.databaseName = b.databaseName
-					and a.tableName = b.tableName
-					and a.indexNumber = b.indexNumber
-					and b.ymd < a.ymd
-				group by a.ymd, a.databaseName, a.tableName, a.indexNumber
-			) b on a.ymd = b.ymd
+			select serverName, databaseName, tableName, indexNumber, min(ukey) as ukey
+				from #bufferHistory
+				group by serverName, databaseName, tableName, indexNumber
+			) b on a.serverName = b.serverName
 				and a.databaseName = b.databaseName
 				and a.tableName = b.tableName
 				and a.indexNumber = b.indexNumber
+				and a.ukey = b.ukey
 
-	update #scans
-		set lastBufferReading = b.lastBufferReading
-		from #scans a
-		join (
-			select a.ymd, a.databaseName, a.tableName, a.indexNumber, max(b.ymd) as lastBufferReading
-				from #scans a
-				join #scans b on a.databaseName = b.databaseName
-					and a.tableName = b.tableName
-					and a.indexNumber = b.indexNumber
-					and b.ymd < a.ymd
-					and b.buffers is not null
-				group by a.ymd, a.databaseName, a.tableName, a.indexNumber
-			) b on a.ymd = b.ymd
-				and a.databaseName = b.databaseName
-				and a.tableName = b.tableName
-				and a.indexNumber = b.indexNumber
-
-	update a
-		set delta_tableScans = a.tableScans - b.tableScans,
-			delta_indexSeeks = a.indexSeeks - b.indexSeeks
-		from #scans a
-		join #scans b on a.databaseName = b.databaseName
-			and a.tableName = b.tableName
-			and a.indexNumber = b.indexNumber
-			and a.lastCheck = b.ymd
-		where a.tableScans >= b.tableScans
-			and a.indexSeeks >= b.indexSeeks
-
-	update a
-		set delta_buffers = isnull(a.buffers, 0) - isnull(b.buffers, 0)
-		from #scans a
-		join #scans b on a.databaseName = b.databaseName
-			and a.tableName = b.tableName
-			and a.indexNumber = b.indexNumber
-			and a.lastBufferReading = b.ymd
-		where a.buffers is not null
-
---	select top 50
---		databaseName, tableName, indexNumber,
---		sum(delta_tableScans) as tableScans,
---		sum(delta_indexSeeks) as indexSeeks,
---		sum(abs(delta_buffers)) as bufferChanges
---		from (
---			select databaseName, tableName, indexNumber, ymd,
---				max(delta_tableScans) as delta_tableScans,
---				max(delta_indexSeeks) as delta_indexSeeks,
---				max(delta_buffers) as delta_buffers
---				from #scans
---				where databaseName <> ''distribution''
---				group by databaseName, tableName, indexNumber, ymd
---			) a
---		group by databaseName, tableName, indexNumber
---		having sum(delta_tableScans) <> 0 or sum(delta_indexSeeks) <> 0 or sum(abs(delta_buffers)) <> 0
---		order by sum(delta_tableScans) + sum(delta_indexSeeks) + sum(abs(delta_buffers)) desc
-
-	select top 50
-		databaseName,
-		sum(delta_tableScans) as tableScans,
-		sum(delta_indexSeeks) as indexSeeks,
-		sum(abs(delta_buffers)) as bufferChanges
+	-- not used
+	select a.*, b.bufferDelta
 		from (
-			select
-				databaseName,
-				delta_tableScans,
-				delta_indexSeeks,
-				delta_buffers
-				from (
-					select databaseName, tableName, indexNumber, ymd,
-						max(delta_tableScans) as delta_tableScans,
-						max(delta_indexSeeks) as delta_indexSeeks,
-						max(delta_buffers) as delta_buffers
-						from #scans
-						where databaseName <> ''distribution''
-						group by databaseName, tableName, indexNumber, ymd
-					) a
+			select serverName, databaseName,
+				sum(numRows) as numRows,
+				sum(user_updates_week) as user_updates_week,
+				sum(user_seeks_week) as user_seeks_week,
+				sum(user_scans_week) as user_scans_week,
+				sum(user_lookups_week) as user_lookups_week
+				from #performanceSummary
+				group by serverName, databaseName
 			) a
-		group by databaseName
-		having sum(delta_tableScans) <> 0 or sum(delta_indexSeeks) <> 0 or sum(abs(delta_buffers)) <> 0
-		order by sum(delta_tableScans) + sum(delta_indexSeeks) + sum(abs(delta_buffers)) desc
+		left outer join (
+			select serverName, databaseName, sum(bufferDelta) as bufferDelta
+				from #bufferHistory
+				group by serverName, databaseName
+			) b on a.serverName = b.serverName
+				and a.databaseName = b.databaseName
+		order by a.servername, a.databaseName
 
-	drop table #scans
-end'
-END
-GO
+	drop table #latestRun
+	drop table #latestTableSizeData
+	drop table #previousRun
+	drop table #performanceSummary
+
+end
