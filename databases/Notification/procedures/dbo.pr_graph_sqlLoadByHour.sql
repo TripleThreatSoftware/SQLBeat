@@ -53,7 +53,15 @@ begin
 
 	if @@rowcount = 0
 	begin
-		select '' as graphURL
+		select
+			'images/not-available.jpg' as diskIO,
+			'images/not-available.jpg' as cpuTime,
+
+			'images/not-available.jpg' as diskIO_pie,
+			'images/not-available.jpg' as cpuTime_pie,
+
+			'images/not-available.jpg' as overallLoad
+
 		return
 	end
 

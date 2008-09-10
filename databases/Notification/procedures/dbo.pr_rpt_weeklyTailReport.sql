@@ -1,3 +1,11 @@
+USE [Notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_rpt_weeklyTailReport]    Script Date: 09/10/2008 09:18:32 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
 ALTER procedure [dbo].[pr_rpt_weeklyTailReport]
 as
 begin
@@ -16,7 +24,7 @@ begin
 	--*********************************************************************************************
 	-- Servers unpingable
 	--*********************************************************************************************
-	create table #outages (serverName varchar(100), startDate dateTime, endDate dateTime)
+	create table #outages (serverName varchar(100), startDate dateTime, endDate dateTime, pingsDown int)
 
 	select distinct serverName
 		into #activeServers
@@ -44,6 +52,8 @@ begin
 					and a.ymd > @dLatestViewData
 			) a
 		where a.isServerPingable = 0
+
+	create clustered index ix_tmp_outages on #outages (servername, startDate) with fillfactor = 100
 
 	update #outages
 		set endDate = b.endDate
@@ -76,6 +86,65 @@ begin
 			) b on a.serverName = b.serverName
 				and a.startDate = b.startDate
 		where a.endDate is null
+
+	update #outages
+		set pingsDown = b.pingsDown
+		from #outages a
+		join (
+			select a.serverName, a.startDate, count(*) as pingsDown
+				from #outages a
+				join v_pingLog_all b on a.serverName = b.serverName
+					and b.ymd >= a.startDate
+					and b.ymd < a.endDate
+					and b.isServerPingable = 0
+				group by a.serverName, a.startDate
+			) b on a.serverName = b.serverName
+				and a.startDate = b.startDate
+
+	update #outages
+		set pingsDown = isnull(a.pingsDown, 0) + b.pingsDown
+		from #outages a
+		join (
+			select a.serverName, a.startDate, count(*) as pingsDown
+				from #outages a
+				join pingLog b on a.serverName = b.serverName
+					and b.ymd >= a.startDate
+					and b.ymd < a.endDate
+					and b.ymd >= @dLatestViewData
+					and b.isServerPingable = 0
+				group by a.serverName, a.startDate
+			) b on a.serverName = b.serverName
+				and a.startDate = b.startDate
+
+	delete from #outages where pingsDown = 1
+
+	insert into #tailDetail (serverName, eventDetail, startDate, endDate, ukey_group)
+	select c.groupName,
+		convert(varchar(20), count(distinct a.serverName)) + ' servers were down ' +
+			'for ' + convert(varchar(20), sum(pingsDown)) + ' PING attempts, ' +
+			'a total of ' + convert(varchar(20), sum(dateDiff(minute, startDate, endDate))) + ' server minutes ' +
+			'beginning this hour.',
+		min(startDate), max(endDate),
+		c.ukey
+		from #outages a
+		join notification..dm_servers b on a.serverName = b.serverName
+		join notification..dm_serverGroups c on b.ukey_group = c.ukey
+		group by c.ukey, c.groupName, convert(varchar(10), a.startDate, 120), datePart(hour, a.startDate)
+		having count(distinct a.serverName) >= 5
+
+	delete #outages
+		from #outages a
+		join notification..dm_servers b on a.serverName = b.serverName
+		join (
+			select c.ukey as ukey_group, min(a.startDate) as startDate, max(a.endDate) as endDate
+				from #outages a
+				join notification..dm_servers b on a.serverName = b.serverName
+				join notification..dm_serverGroups c on b.ukey_group = c.ukey
+				group by c.ukey, convert(varchar(10), a.startDate, 120), datePart(hour, a.startDate)
+				having count(distinct a.serverName) >= 2
+			) d on b.ukey_group = d.ukey_group
+				and a.startDate >= d.startDate
+				and a.endDate <= d.endDate
 
 	insert into #tailDetail (serverName, eventDetail, startDate, endDate, ukey_group)
 	select a.serverName,
@@ -202,36 +271,38 @@ begin
 			and ymd > @dLatestViewData
 		order by ymd
 
---	insert into #tailDetail (serverName, eventDetail, startDate, endDate)
---	select
---		left(substring(subject, charindex('with ', subject) + 5, 99), charindex(' ', substring(subject, charindex('with ', subject) + 5, 99)) - 1) as serverName,
---		'Communication momentarily interrupted at ' + convert(varchar(20), a.ymd, 120) + '.',
---		ymd as startDate,
---		ymd as endDate
---		from v_notificationLog_all a (nolock)
---		where
---			serverName = @@serverName
---			and subject like '%lost communication%'
+	insert into #tailDetail (serverName, eventDetail, startDate, endDate)
+	select
+		left(substring(subject, charindex('with ', subject) + 5, 99), charindex(' ', substring(subject, charindex('with ', subject) + 5, 99)) - 1) as serverName,
+		'Communication momentarily interrupted at ' + convert(varchar(20), a.ymd, 120) + '.',
+		ymd as startDate,
+		ymd as endDate
+		from v_notificationLog_all a (nolock)
+		where
+			serverName = @@serverName
+			and subject like '%lost communication%'
 --			and message not like '%transaction log%'
 --			and message not like '%disk space%'
---			and ymd >= @dStartDate
---		order by ymd
+			and ymd >= @dStartDate
+			and serverName in (select serverName from dm_servers a join dm_serverGroups b on a.ukey_group = b.ukey and b.isProduction = 1)
+		order by ymd
 
---	insert into #tailDetail (serverName, eventDetail, startDate, endDate)
---	select
---		left(substring(subject, charindex('with ', subject) + 5, 99), charindex(' ', substring(subject, charindex('with ', subject) + 5, 99)) - 1) as serverName,
---		'Communication momentarily interrupted at ' + convert(varchar(20), a.ymd, 120) + '.',
---		ymd as startDate,
---		ymd as endDate
---		from notificationLog a (nolock)
---		where
---			serverName = @@serverName
---			and subject like '%lost communication%'
+	insert into #tailDetail (serverName, eventDetail, startDate, endDate)
+	select
+		left(substring(subject, charindex('with ', subject) + 5, 99), charindex(' ', substring(subject, charindex('with ', subject) + 5, 99)) - 1) as serverName,
+		'Communication momentarily interrupted at ' + convert(varchar(20), a.ymd, 120) + '.',
+		ymd as startDate,
+		ymd as endDate
+		from notificationLog a (nolock)
+		where
+			serverName = @@serverName
+			and subject like '%lost communication%'
 --			and message not like '%transaction log%'
 --			and message not like '%disk space%'
---			and ymd >= @dStartDate
---			and ymd > @dLatestViewData
---		order by ymd
+			and ymd >= @dStartDate
+			and ymd > @dLatestViewData
+			and serverName in (select serverName from dm_servers a join dm_serverGroups b on a.ukey_group = b.ukey and b.isProduction = 1)
+		order by ymd
 
 	--*********************************************************************************************
 	-- Other big issues
@@ -240,21 +311,26 @@ begin
 	create table #otherErrors (serverName varchar(100), subject varchar(500), ymd dateTime, ukey_group int)
 
 	insert into #otherErrors (serverName, subject, ymd, ukey_group)
-	select a.serverName,
-		keyValue, ymd, b.ukey_group
-		from deepSQLStats (nolock) a
-		join dm_servers b on a.serverName = b.serverName
-		where subkeyName like '%disk io waiting%'
-			and ymd >= @dStartDate
-			and keyValue not like '% 0ms%'
-			and keyValue not like '% 15ms%'
+	select a.computerName, left(a.message, 500), a.timeWritten, b.ukey_group
+		from eventLog (nolock) a
+		join dm_servers b (nolock) on a.computerName = b.serverName
+		where a.message like '%logon servers%'
+
+--	insert into #otherErrors (serverName, subject, ymd, ukey_group)
+--	select a.serverName,
+--		keyValue, ymd, b.ukey_group
+--		from deepSQLStats (nolock) a
+--		join dm_servers b on a.serverName = b.serverName
+--		where subkeyName like '%disk io waiting%'
+--			and ymd >= @dStartDate
+--			and keyValue not like '% 0ms%'
+--			and keyValue not like '% 15ms%'
 
 	insert into #otherErrors (serverName, subject, ymd, ukey_group)
 	select
 		a.serverName,
 		case
-			when subject like 'EventLog @%:%'
-				then substring(subject, charindex(':', subject) + 5, 500)
+			when subject like 'EventLog @%:%' then substring(subject, charindex(':', subject) + 5, 500)
 			else left(subject, 500)
 			end as subject,
 		case
@@ -270,12 +346,21 @@ begin
 				severity = 1
 				or message like '%Event log service was started%'
 				or subject like '%temperature%'
+				or subject like '%cluster node%'
+				or subject like '%cluster service%'
+				or subject like '%system memory%'
+				or message like '%thermal%'
+				or message like '%disk%full%'
+				or message like '%intrusion%'
 				or subject like '%memory module%'
 				or subject like '%array controller%'
 				or subject like '%degraded%'
 				or subject like '%i/o%'
 				or subject like '%drive%is down to'
 				or subject like '%CPU load has triggered an alert%'
+				or subject like '%corrupt%'
+				or message like '%restart of computer%'
+				or message like '%drive array%'
 				)
 			and isConnectivity = 0
 			and a.serverName <> @@serverName
@@ -303,12 +388,21 @@ begin
 				severity = 1
 				or message like '%Event log service was started%'
 				or subject like '%temperature%'
+				or subject like '%cluster node%'
+				or subject like '%cluster service%'
+				or subject like '%system memory%'
+				or message like '%thermal%'
+				or message like '%disk%full%'
+				or message like '%intrusion%'
 				or subject like '%memory module%'
 				or subject like '%array controller%'
 				or subject like '%degraded%'
 				or subject like '%i/o%'
-				or subject like '%drive%is down to%'
+				or subject like '%drive%is down to'
 				or subject like '%CPU load has triggered an alert%'
+				or subject like '%corrupt%'
+				or message like '%restart of computer%'
+				or message like '%drive array%'
 				)
 			and isConnectivity = 0
 			and a.serverName <> @@serverName
@@ -318,18 +412,19 @@ begin
 
 	insert into #tailDetail (serverName, eventDetail, startDate, endDate, ukey_group)
 	select serverName,
-		case
+		left(case
 			when subject like '%temperature%' or subject like '%thermal%' then 'Server temperature exceeded thresholds'
 			when subject like '%array controller%' or subject like '%degraded%' then 'Disk subsystem failure'
 			when subject like '%drive%is down to' then 'Disk space below threshold'
-			when subject like '%CPU load has triggered an alert%' then 'CPU utilization above threshold'
+			when subject like '%CPU load has triggered an alert%' or subject like 'cpu load is%' then 'CPU utilization above threshold'
 
 			when subject like '%event log service was%' or subject like '%initiated the restart%' or subject like '%system is shutting down%' then 'Rebooted'
 
 			when subject like '%shutdown%was%unexpected%' or subject like '%unexpected%shutdown%' then 'Unexpected Shutdown'
 
 			else subject
-			end + ' (' + max(subject)  + ')'  --substring(max(subject), charindex(':', max(subject)) + 1, 200)
+			end +
+			' (' + max(subject)  + ')', 1000)  --substring(max(subject), charindex(':', max(subject)) + 1, 200)
 			as eventDetail,
 		min(ymd) as startDate,
 		max(ymd) as endDate,
@@ -339,7 +434,7 @@ begin
 			when subject like '%temperature%' or subject like '%thermal%' then 'Server temperature exceeded thresholds'
 			when subject like '%array controller%' or subject like '%degraded%' then 'Disk subsystem failure'
 			when subject like '%drive%is down to' then 'Disk space below threshold'
-			when subject like '%CPU load has triggered an alert%' then 'CPU utilization above threshold'
+			when subject like '%CPU load has triggered an alert%' or subject like 'cpu load is%' then 'CPU utilization above threshold'
 
 			when subject like '%event log service was%' or subject like '%initiated the restart%' or subject like '%system is shutting down%' then 'Rebooted'
 

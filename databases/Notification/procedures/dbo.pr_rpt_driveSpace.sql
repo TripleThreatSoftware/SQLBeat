@@ -1,6 +1,6 @@
 USE [Notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_rpt_driveSpace]    Script Date: 06/18/2008 13:10:20 ******/
+/****** Object:  StoredProcedure [dbo].[pr_rpt_driveSpace]    Script Date: 09/10/2008 15:10:38 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -125,21 +125,27 @@ begin
 			and driveSpace_3 > driveSpace_today
 			and percentDrop_3 > 5
 
-	set @nThisUkey = 0
+	insert into notificationLog(serverName, subject, message, severity)
+	select serverName, subject, message, 2
+		from @messages
 
-	while exists (select top 1 ukey from @messages where ukey > @nThisUkey)
-	begin
-		select top 1
-			@nThisUkey = ukey ,
-			@cThisSubject = subject,
-			@cThisMessage = message
 
-			from @messages
-			where ukey > @nThisUkey
-			order by ukey
 
-		exec pr_sendMessage '', 'DBA', @cThisSubject, @cThisMessage
-	end
+--	set @nThisUkey = 0
+--
+--	while exists (select top 1 ukey from @messages where ukey > @nThisUkey)
+--	begin
+--		select top 1
+--			@nThisUkey = ukey ,
+--			@cThisSubject = subject,
+--			@cThisMessage = message
+--
+--			from @messages
+--			where ukey > @nThisUkey
+--			order by ukey
+--
+--		exec pr_sendMessage '', 'DBA', @cThisSubject, @cThisMessage
+--	end
 
 
 end
