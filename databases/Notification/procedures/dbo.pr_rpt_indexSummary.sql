@@ -1,7 +1,9 @@
-use [notification]
-go
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 
-alter procedure pr_rpt_indexSummary (@cServerName varchar(200) = '', @nNumHours int = 24)
+ALTER procedure [dbo].[pr_rpt_indexSummary] (@cServerName varchar(200) = '', @nNumHours int = 24)
 as
 begin
 	select serverName, max(ymd) as ymd
@@ -26,7 +28,9 @@ begin
 		group by servername
 
 	select
-		a.*,
+		a.servername, a.databaseName, a.tableName,
+		left(a.indexName, 40) as indexName,
+		a.user_updates, a.user_seeks, a.user_scans,a.user_lookups,
 
 		a.user_updates - isnull(d.user_updates, 0) as user_updates_24,
 		a.user_seeks - isnull(d.user_seeks, 0) as user_seeks_24,

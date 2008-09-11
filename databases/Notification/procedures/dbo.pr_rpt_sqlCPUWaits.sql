@@ -1,17 +1,16 @@
-create procedure [dbo].[pr_rpt_sqlCPUWaits] (@cServerName varchar(100), @dStartDate dateTime, @dEndDate dateTime)
+-- exec pr_rpt_sqlCPUWaits '10.3.10.110', 720
+
+ALTER procedure [dbo].[pr_rpt_sqlCPUWaits] (@cServerName varchar(100), @nNumHours int = 12)
 as
 begin
 
-	set @dStartDate = isnull(@dStartDate, dateAdd(week, -1, getDate()))
-	set @dEndDate = isnull(@dEndDate, getDate())
-
-	select 'CPU ' + convert(varchar(20), cpuNumber) as subkeyName, numTasksWaiting, ymd
+	select serverName, 'CPU ' + convert(varchar(20), cpuNumber) as subkeyName, numTasksWaiting, ymd
 		from deepSQLStats_cputasks (nolock)
-		where serverName = @cServerName
-			and ymd >= @dStartDate
-			and ymd <= @dEndDate
+		where
+			(serverName = @cServername or isnull(@cServerName, '') = '')
+			and ymd >= dateAdd(hour, -@nNumHours, getdate())
 			and numTasksWaiting > 0
-		order by ymd, subkeyName
+		order by serverName, ymd, subkeyName
 
 
 

@@ -33,7 +33,7 @@ begin
 
 	select
 		a.ymd, a.serverName, a.ukey_server, a.databaseName, a.tableName,
-		case when isnull(a.indexName, '') in ('', '0') then 'NO INDEX' else a.indexName end as indexName,
+		case when isnull(a.indexName, '') in ('', '0') then 'NO INDEX' else left(a.indexName, 40) end as indexName,
 		a.user_updates, a.user_seeks, a.user_scans, a.user_lookups,
 
 		a.user_updates - isnull(d.user_updates, 0) as user_updates_week,

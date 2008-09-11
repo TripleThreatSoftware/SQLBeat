@@ -16,7 +16,7 @@ begin
 		overallLoad varchar(8000))
 
 	declare @dStartDate dateTime
-	set @dStartDate = dateAdd(hour, -48, getDate())
+	set @dStartDate = dateAdd(hour, -24, getDate())
 
 	set nocount on
 
@@ -45,7 +45,7 @@ begin
 					and hostname <> convert(varchar(100), @@serverName)
 					and lastBatchTime is not null
 					and spid >= 50
-					and ymd < convert(varchar(13), getDate(), 120) + ':00:00.000'
+--					and ymd < convert(varchar(13), getDate(), 120) + ':00:00.000'
 				group by spid, hostname, dbname, programName, login_time, ymd, lastBatchTime
 			) a
 		group by spid, hostname, programName, login_time, lastBatchTime, dbName
@@ -111,17 +111,33 @@ begin
 					then datePart(hour, lastBatchTime) - 12
 					else datePart(hour, lastBatchTime)
 					end) +
-			case
-				when datePart(hour, lastBatchTime) >= 13
-				then 'p'
-				else 'a'
-			end
-			as axis_x,
+				case
+					when datePart(minute, lastBatchTime) between 0 and 14 then ' 00'
+					when datePart(minute, lastBatchTime) between 15 and 29 then ' 15'
+					when datePart(minute, lastBatchTime) between 30 and 44 then ' 30'
+					when datePart(minute, lastBatchTime) between 45 and 60 then ' 45'
+					end +
+				case
+					when datePart(hour, lastBatchTime) >= 13
+					then 'p'
+					else 'a'
+				end
+				as axis_x,
 		sum(cpuTime_delta) as axis_y
 
 		from #activity
-		group by dbName, convert(varchar(10), lastbatchTime, 120), datePart(hour, lastBatchTime)
-		order by dbName, convert(varchar(10), lastbatchTime, 120), datePart(hour, lastBatchTime)
+		group by dbName, convert(varchar(10), lastbatchTime, 120), datePart(hour, lastBatchTime), case
+					when datePart(minute, lastBatchTime) between 0 and 14 then ' 00'
+					when datePart(minute, lastBatchTime) between 15 and 29 then ' 15'
+					when datePart(minute, lastBatchTime) between 30 and 44 then ' 30'
+					when datePart(minute, lastBatchTime) between 45 and 60 then ' 45'
+					end
+		order by dbName, convert(varchar(10), lastbatchTime, 120), datePart(hour, lastBatchTime), case
+					when datePart(minute, lastBatchTime) between 0 and 14 then ' 00'
+					when datePart(minute, lastBatchTime) between 15 and 29 then ' 15'
+					when datePart(minute, lastBatchTime) between 30 and 44 then ' 30'
+					when datePart(minute, lastBatchTime) between 45 and 60 then ' 45'
+					end
 
 	delete #dataValues
 		from #dataValues a
@@ -161,6 +177,12 @@ begin
 					else datePart(hour, lastBatchTime)
 					end) +
 			case
+					when datePart(minute, lastBatchTime) between 0 and 14 then ' 00'
+					when datePart(minute, lastBatchTime) between 15 and 29 then ' 15'
+					when datePart(minute, lastBatchTime) between 30 and 44 then ' 30'
+					when datePart(minute, lastBatchTime) between 45 and 60 then ' 45'
+					end +
+			case
 				when datePart(hour, lastBatchTime) >= 13
 				then 'p'
 				else 'a'
@@ -169,8 +191,18 @@ begin
 		sum(diskIO_delta) as axis_y
 
 		from #activity
-		group by dbName, convert(varchar(10), lastbatchTime, 120), datePart(hour, lastBatchTime)
-		order by dbName, convert(varchar(10), lastbatchTime, 120), datePart(hour, lastBatchTime)
+		group by dbName, convert(varchar(10), lastbatchTime, 120), datePart(hour, lastBatchTime), case
+					when datePart(minute, lastBatchTime) between 0 and 14 then ' 00'
+					when datePart(minute, lastBatchTime) between 15 and 29 then ' 15'
+					when datePart(minute, lastBatchTime) between 30 and 44 then ' 30'
+					when datePart(minute, lastBatchTime) between 45 and 60 then ' 45'
+					end
+		order by dbName, convert(varchar(10), lastbatchTime, 120), datePart(hour, lastBatchTime), case
+					when datePart(minute, lastBatchTime) between 0 and 14 then ' 00'
+					when datePart(minute, lastBatchTime) between 15 and 29 then ' 15'
+					when datePart(minute, lastBatchTime) between 30 and 44 then ' 30'
+					when datePart(minute, lastBatchTime) between 45 and 60 then ' 45'
+					end
 
 	delete #dataValues
 		from #dataValues a
@@ -250,6 +282,12 @@ begin
 					else datePart(hour, lastBatchTime)
 					end) +
 			case
+					when datePart(minute, lastBatchTime) between 0 and 14 then ' 00'
+					when datePart(minute, lastBatchTime) between 15 and 29 then ' 15'
+					when datePart(minute, lastBatchTime) between 30 and 44 then ' 30'
+					when datePart(minute, lastBatchTime) between 45 and 60 then ' 45'
+					end +
+			case
 				when datePart(hour, lastBatchTime) >= 13
 				then 'p'
 				else 'a'
@@ -258,8 +296,18 @@ begin
 		sum(cpuTime_delta) as axis_y
 
 		from #activity
-		group by convert(varchar(10), lastbatchTime, 120), datePart(hour, lastBatchTime)
-		order by convert(varchar(10), lastbatchTime, 120), datePart(hour, lastBatchTime)
+		group by convert(varchar(10), lastbatchTime, 120), datePart(hour, lastBatchTime), case
+					when datePart(minute, lastBatchTime) between 0 and 14 then ' 00'
+					when datePart(minute, lastBatchTime) between 15 and 29 then ' 15'
+					when datePart(minute, lastBatchTime) between 30 and 44 then ' 30'
+					when datePart(minute, lastBatchTime) between 45 and 60 then ' 45'
+					end
+		order by convert(varchar(10), lastbatchTime, 120), datePart(hour, lastBatchTime), case
+					when datePart(minute, lastBatchTime) between 0 and 14 then ' 00'
+					when datePart(minute, lastBatchTime) between 15 and 29 then ' 15'
+					when datePart(minute, lastBatchTime) between 30 and 44 then ' 30'
+					when datePart(minute, lastBatchTime) between 45 and 60 then ' 45'
+					end
 
 	insert into #dataValues (setName, seriesName, axis_x, axis_y)
 	select
@@ -272,6 +320,12 @@ begin
 					else datePart(hour, lastBatchTime)
 					end) +
 			case
+					when datePart(minute, lastBatchTime) between 0 and 14 then ' 00'
+					when datePart(minute, lastBatchTime) between 15 and 29 then ' 15'
+					when datePart(minute, lastBatchTime) between 30 and 44 then ' 30'
+					when datePart(minute, lastBatchTime) between 45 and 60 then ' 45'
+					end +
+			case
 				when datePart(hour, lastBatchTime) >= 13
 				then 'p'
 				else 'a'
@@ -280,8 +334,18 @@ begin
 		sum(diskIO_delta) as axis_y
 
 		from #activity
-		group by convert(varchar(10), lastbatchTime, 120), datePart(hour, lastBatchTime)
-		order by convert(varchar(10), lastbatchTime, 120), datePart(hour, lastBatchTime)
+		group by convert(varchar(10), lastbatchTime, 120), datePart(hour, lastBatchTime), case
+					when datePart(minute, lastBatchTime) between 0 and 14 then ' 00'
+					when datePart(minute, lastBatchTime) between 15 and 29 then ' 15'
+					when datePart(minute, lastBatchTime) between 30 and 44 then ' 30'
+					when datePart(minute, lastBatchTime) between 45 and 60 then ' 45'
+					end
+		order by convert(varchar(10), lastbatchTime, 120), datePart(hour, lastBatchTime), case
+					when datePart(minute, lastBatchTime) between 0 and 14 then ' 00'
+					when datePart(minute, lastBatchTime) between 15 and 29 then ' 15'
+					when datePart(minute, lastBatchTime) between 30 and 44 then ' 30'
+					when datePart(minute, lastBatchTime) between 45 and 60 then ' 45'
+					end
 
 	delete #dataValues
 		from #dataValues a

@@ -1,9 +1,14 @@
--- exec pr_rpt_diskQueuesByHour 'mssql-ny'
-alter procedure pr_rpt_diskQueuesByHour (@cServerName varchar(100))
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- exec pr_rpt_diskQueuesByHour 'ttssvr'
+ALTER procedure [dbo].[pr_rpt_diskQueuesByHour] (@cServerName varchar(100))
 as
 begin
 --	declare @cServerName varchar(100)
 --	set @cServerName = 'mssql-ny'
+	set nocount on
 
 	declare @dStartDate dateTime
 	declare @dEndDate dateTime

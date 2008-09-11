@@ -1,15 +1,20 @@
-USE [Notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_generateGoogleChartsRequest]    Script Date: 09/10/2008 15:34:34 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
 
 
-ALTER procedure [dbo].[pr_generateGoogleChartsRequest] (@nWidth int, @nHeight int, @bRelativeToTotal bit = 0, @bAbsoluteYAxis bit = 0, @bShowPie bit = 0)
+ALTER procedure [dbo].[pr_generateGoogleChartsRequest] (@nWidth int, @nHeight int, @bRelativeToTotal bit = 0, @bAbsoluteYAxis bit = 0, @bShowPie bit = 0, @bLeavePeaks bit = 0)
 as
 begin
+	if isnull(@nHeight, 0) = 0
+		set @nHeight = 300
+
+	if @nWidth > 1000
+		set @nWidth = 1000
+
+	if @nWidth * @nHeight > 300000
+		set @nHeight = 300000 / @nWidth
 
 	--************************************************************************************
 	-- generate the google charts request string based on #dataValues
@@ -64,7 +69,7 @@ begin
 
 		if @bRelativeToTotal = 0
 		begin
-			if @nMaxValue > @nAvgValue * 10
+			if @nMaxValue > @nAvgValue * 10 and @bLeavePeaks = 0
 			begin
 				set @nMaxValue = @nAvgValue * 10
 
@@ -74,7 +79,7 @@ begin
 						and seriesName = @cSeriesName
 			end
 
-			-- anything that doesn't hit at least 10% of the highest reading, ignore
+			-- anything that doesn't hit at least 5% of the highest reading, ignore
 			if @nMaxValue <> 0
 				delete #dataValues
 					from #dataValues a
@@ -83,7 +88,7 @@ begin
 							from #dataValues
 							where seriesName = @cSeriesName
 							group by setName
-							having (max(axis_y) / @nMaxValue) < .10
+							having (max(axis_y) / @nMaxValue) < .05
 						) b on a.setName = b.setName
 					where a.seriesName = @cSeriesName
 		end
@@ -108,6 +113,9 @@ begin
 
 		print 'Working on series: ' + @cSeriesName
 		print 'Max value: ' + convert(varchar(20), @nMaxvalue)
+
+		if isnull(@nMinSeriesValue, 0) = isnull(@nMaxValue, 0)
+			set @nMinSeriesValue = 0
 
 		set @cSetName = ''
 
