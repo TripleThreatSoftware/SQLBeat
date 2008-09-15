@@ -9,7 +9,7 @@ begin
 
 	create table #results (ukey int identity, ukey_server int, serverName varchar(100), groupName varchar(100), numDatabases int, databaseDelta varchar(50), logSize varchar(50),
 		uniqueUsers int default 0, activeDatabases int default 0, driveSpaceAvailable varchar(50), driveSpaceDelta varchar(50), errors int default 0,
-		lastDeepScan varchar(14), lastDetailedCheck varchar(14), lowestDriveSpace varchar(20))
+		lastDeepScan varchar(14), lastDetailedCheck varchar(14), lowestDriveSpace varchar(20), uptime decimal(10,2))
 
 	insert into #results (serverName, ukey_server)
 	select serverName, ukey
@@ -207,8 +207,27 @@ begin
 		join dm_servers b (nolock) on a.serverName = b.serverName
 		join dm_serverGroups c (nolock) on b.ukey_group = c.ukey
 
-	select *
-		from #results
+	select a.* , b.availability
+		from #results a
+		left outer join (
+			select a.*,
+				convert(decimal(10,2), convert(decimal(15,10), droppedPings)/convert(decimal(15,10), totalPings) * 100) as failureRate,
+				convert(decimal(10,2), convert(decimal(15,10), (totalPings - droppedPings))/convert(decimal(15,10), totalPings) * 100) as availability
+				from (
+					select
+						a.serverName,
+						min(a.ymd) as earliestData,
+						max(a.ymd) as latestData,
+						min(case when a.isServerPingable = 0 or a.isSQLPingable = 0 or a.isRouterPingable = 0 then a.ymd else null end) as earliestDrop,
+						max(case when a.isServerPingable = 0 or a.isSQLPingable = 0 or a.isRouterPingable = 0 then a.ymd else null end) as latestDrop,
+						max(case when a.isServerPingable = 1 and a.isRouterPingable = 1 then a.ymd else null end) as latestSuccess,
+						count(distinct case when a.isServerPingable = 0 or a.isSQLPingable = 0 or a.isRouterPingable = 0 then a.ukey else null end) as droppedPings,
+						count(*) as totalPings
+						from pingLog a (nolock)
+						where a.ymd >= dateAdd(hour, -24, getDate())
+						group by a.serverName
+					) a
+			) b on a.serverName = b.serverName
 
 	drop table #results
 	drop table #databaseReadings

@@ -1,0 +1,2 @@
+drop procedure pr_dashboard_returnTopAlerts
+go
