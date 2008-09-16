@@ -1,8 +1,9 @@
 use [audit]
-GO
+go
 
 
--- exec pr_alert_objectChanges '2008-08-18 00:00:00.000', '2008-08-18 10:00:00.000'
+
+-- exec pr_alert_objectChanges '2008-09-15 00:00:00.000', '2008-09-16 10:00:00.000'
 ALTER procedure [dbo].[pr_alert_objectChanges] (@dStartDate dateTime = null, @dEndDate dateTime = null)
 as
 begin
@@ -199,7 +200,7 @@ begin
 				set @cThisLine = @cCarryOver + @cThisLine
 				set @cCarryOver = ''
 
-				if right(@cThisLine, 1) <> char(13)
+				if right(@cThisLine, 1) <> char(13) and charindex(char(13), @cThisLine) > 0
 				begin
 					set @cCarryOver = reverse(substring(reverse(@cThisLine), 1, charindex(char(13), reverse(@cThisLine)) - 1))
 					set @cThisLine = left(@cThisLine, len(@cThisLine) - charindex(char(13), reverse(@cThisLine)))
@@ -241,7 +242,7 @@ begin
 			set @cThisLine = @cCarryOver + @cThisLine
 			set @cCarryOver = ''
 
-			if right(@cThisLine, 1) <> char(13)
+			if right(@cThisLine, 1) <> char(13) and charindex(char(13), @cThisLine) > 0
 			begin
 				set @cCarryOver = reverse(substring(reverse(@cThisLine), 1, charindex(char(13), reverse(@cThisLine)) - 1))
 				set @cThisLine = left(@cThisLine, len(@cThisLine) - charindex(char(13), reverse(@cThisLine)))

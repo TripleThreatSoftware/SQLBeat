@@ -20,6 +20,8 @@ GO
 --	cProgramName varchar(100), cDatabaseName varchar(100), nMinWait int, bJustRunning bit, cLocks varchar(100),
 --	nMinRuntime int)
 
+
+-- exec pr_queryProcessLog @cServerName = 'mssql-ny', @nNumHours = 48, @cDatabaseName = 'ap', @nMinRuntime = 10
 ALTER procedure [dbo].[pr_queryProcessLog] (@cServerName varchar(100), @dStartDate dateTime = null, @dEndDate dateTime = null, @nNumHours int = 12,
 	@cHostName varchar(100) = '', @cLogin varchar(100) = '', @cBuffer varchar(500) = '', @bJustBlocking bit = 0, @nMinCPU int = 0, @nMinDisk int = 0,
 	@cProgramName varchar(100) = '', @cDatabaseName varchar(100) = '', @nMinWait int = 0, @bJustRunning bit = 0, @cLocks varchar(100) = '',
@@ -33,9 +35,9 @@ begin
 --		@nMinRuntime, getDate()
 
 	select
-		top 500
+		top 200
 		ymd, spid, lastBatchTime, hostName, login, dbName, command, cpuTime, diskIO, blockedBy, waitTime, lastWaitType,
-		replace(bufferContents, char(13), '<br>') as bufferContents,
+		dbo.fn_returnFormattedBuffer(bufferContents) as bufferContents,
 		replace(locks, char(13), '<br>') as locks
 		from processLog (nolock)
 		where (ymd >= @dStartDate or isnull(@dStartDate, '') = '' or datePart(year, @dStartDate) = 1900)

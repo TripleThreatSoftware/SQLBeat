@@ -1,16 +1,23 @@
--- pr_dashboard_returnAlerts
-create procedure [dbo].[pr_dashboard_returnAlerts] (@cServerName varchar(100) = '', @nNumHours int = 12)
+use [notification]
+go
+
+
+-- pr_dashboard_returnAlerts '10.2.1.156'
+ALTER procedure [dbo].[pr_dashboard_returnAlerts] (@cServerName varchar(100) = '', @nNumHours int = 12)
 as
 begin
+	declare @cAlternateName varchar(100)
+	set @cAlternateName = (select top 1 friendlyName from dm_servers where serverName = @cServerName)
 
 	select
 		servername,
 		convert(varchar(20), ymd, 120) as ymd,
 		subject
-		from notificationLog (nolock)
-		where severity = 1
-			and (serverName = @cServerName or isnull(@cServerName, '') = '')
+		from notificationLog (nolock) a
+		where (serverName = @cServerName or serverName = @cAlternateName or isnull(@cServerName, '') = '')
 			and ymd >= dateAdd(hour, -@nNumHours, getDate())
 		order by ymd desc
 
 end
+
+--select * from notificationLog where servername = 'vpdb16'
