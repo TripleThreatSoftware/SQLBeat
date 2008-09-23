@@ -1,7 +1,9 @@
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[pr_rpt_blockingQueries]') AND type in (N'P', N'PC'))
-BEGIN
-EXEC dbo.sp_executesql @statement = N'-- exec pr_rpt_blockingQueries ''doe-monitor-sql'', null, null
-CREATE procedure [pr_rpt_blockingQueries] (@cServerName varchar(100), @dStartDate dateTime, @dEndDate dateTime)
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- exec pr_rpt_blockingQueries 'doe-monitor-sql', null, null
+ALTER procedure [dbo].[pr_rpt_blockingQueries] (@cServerName varchar(100), @nNumHours int = 6)
 as
 begin
 
@@ -9,13 +11,7 @@ begin
 	--declare @dStartDate dateTime
 	--declare @dEndDate dateTime
 	--
-	--set @cServerName = ''doe-monitor-sql''
-
-	set @dStartDate = isnull(@dStartDate, dateAdd(hour, -12, getDate()))
-	set @dEndDate = isnull(@dEndDate, getDate())
-
-	if dateDiff(hour, @dStartDate, @dEndDate) > 12
-		set @dStartDate = dateAdd(hour, -12, @dEndDate)
+	--set @cServerName = 'doe-monitor-sql'
 
 	select
 		dbname, programName,
@@ -28,7 +24,7 @@ begin
 
 		from (
 			select spid, hostName, dbName, login, command, bufferContents,
-				case when programName like ''%jobstep%'' then ''SQLAgent - TSQL JobStep'' else programName end as programName,
+				case when programName like '%jobstep%' then 'SQLAgent - TSQL JobStep' else programName end as programName,
 				case when dateDiff(minute, lastBatchTime, startTime) > 30 then startTime else lastBatchTime end as lastBatchTime,
 				startTime, endTime
 				from (
@@ -36,8 +32,7 @@ begin
 						min(ymd) as startTime,
 						max(ymd) as endTime
 						from processLog (nolock)
-						where ymd >= @dStartDate
-							and ymd <= @dEndDate
+						where dateDiff(hour, ymd, getDate()) <= @nNumHours
 							and isBlocker = 1
 							and serverName = @cServerName
 						group by spid, lastBatchTime, dbName, hostname, login, command, bufferContents, programName
@@ -50,10 +45,3 @@ begin
 			dbname, bufferContents,
 			max(lastBatchTime) desc
 end
-'
-END
-GO
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO

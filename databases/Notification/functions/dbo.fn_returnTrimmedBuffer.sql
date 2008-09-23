@@ -1,3 +1,8 @@
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
 ALTER function [dbo].[fn_returnTrimmedBuffer] (@cBufferContents varchar(8000))
 returns varchar(500)
 as
@@ -134,6 +139,9 @@ begin
 --		set @cReturnString = left(@cReturnString, charindex('@', @cReturnString) - 1)
 
 --	set @cReturnString = convert(varchar(20), @nTrimCounter) + @cPrepend + @cReturnString
+
+	if @cReturnString in ('begin', 'select', '(', 'begin tran')
+		set @cReturnString = @cBufferContents
 
 	return @cReturnString
 end

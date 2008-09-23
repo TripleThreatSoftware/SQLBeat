@@ -46,7 +46,7 @@ begin
 	declare @cAxisLabels varchar(8000)
 	declare @cURLString varchar(8000)
 
-	set @cURLString = 'http://chart.apis.google.com/chart?chs=833x350&chd=t:'
+	set @cURLString = 'http://chart.apis.google.com/chart?chs=1000x300&chd=t:'
 
 	set @cDatapoints = ''
 	set @cAxisLabels = ''

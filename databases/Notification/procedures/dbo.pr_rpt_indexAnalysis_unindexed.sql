@@ -15,7 +15,7 @@ begin
 		from indexPerformanceLog (nolock)
 		where (serverName = @cServerName or isnull(@cServerName, '') = '')
 		group by servername
-		having max(ymd) >= dateAdd(hour, -1, getDate())
+		having max(ymd) >= dateAdd(day, -1, getDate())
 
 	select serverName, min(ymd) as ymd
 		into #previousRun
