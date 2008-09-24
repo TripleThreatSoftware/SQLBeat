@@ -1,3 +1,6 @@
+USE [Notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_graph_sqlLoadByHour]    Script Date: 09/24/2008 10:31:16 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -112,12 +115,6 @@ begin
 					else datePart(hour, lastBatchTime)
 					end) +
 				case
-					when datePart(minute, lastBatchTime) between 0 and 14 then ' 00'
-					when datePart(minute, lastBatchTime) between 15 and 29 then ' 15'
-					when datePart(minute, lastBatchTime) between 30 and 44 then ' 30'
-					when datePart(minute, lastBatchTime) between 45 and 60 then ' 45'
-					end +
-				case
 					when datePart(hour, lastBatchTime) >= 13
 					then 'p'
 					else 'a'
@@ -126,18 +123,8 @@ begin
 		sum(cpuTime_delta) as axis_y
 
 		from #activity
-		group by dbName, convert(varchar(10), lastbatchTime, 120), datePart(hour, lastBatchTime), case
-					when datePart(minute, lastBatchTime) between 0 and 14 then ' 00'
-					when datePart(minute, lastBatchTime) between 15 and 29 then ' 15'
-					when datePart(minute, lastBatchTime) between 30 and 44 then ' 30'
-					when datePart(minute, lastBatchTime) between 45 and 60 then ' 45'
-					end
-		order by dbName, convert(varchar(10), lastbatchTime, 120), datePart(hour, lastBatchTime), case
-					when datePart(minute, lastBatchTime) between 0 and 14 then ' 00'
-					when datePart(minute, lastBatchTime) between 15 and 29 then ' 15'
-					when datePart(minute, lastBatchTime) between 30 and 44 then ' 30'
-					when datePart(minute, lastBatchTime) between 45 and 60 then ' 45'
-					end
+		group by dbName, convert(varchar(10), lastbatchTime, 120), datePart(hour, lastBatchTime)
+		order by dbName, convert(varchar(10), lastbatchTime, 120), datePart(hour, lastBatchTime)
 
 	delete #dataValues
 		from #dataValues a
@@ -177,12 +164,6 @@ begin
 					else datePart(hour, lastBatchTime)
 					end) +
 			case
-					when datePart(minute, lastBatchTime) between 0 and 14 then ' 00'
-					when datePart(minute, lastBatchTime) between 15 and 29 then ' 15'
-					when datePart(minute, lastBatchTime) between 30 and 44 then ' 30'
-					when datePart(minute, lastBatchTime) between 45 and 60 then ' 45'
-					end +
-			case
 				when datePart(hour, lastBatchTime) >= 13
 				then 'p'
 				else 'a'
@@ -191,18 +172,8 @@ begin
 		sum(diskIO_delta) as axis_y
 
 		from #activity
-		group by dbName, convert(varchar(10), lastbatchTime, 120), datePart(hour, lastBatchTime), case
-					when datePart(minute, lastBatchTime) between 0 and 14 then ' 00'
-					when datePart(minute, lastBatchTime) between 15 and 29 then ' 15'
-					when datePart(minute, lastBatchTime) between 30 and 44 then ' 30'
-					when datePart(minute, lastBatchTime) between 45 and 60 then ' 45'
-					end
-		order by dbName, convert(varchar(10), lastbatchTime, 120), datePart(hour, lastBatchTime), case
-					when datePart(minute, lastBatchTime) between 0 and 14 then ' 00'
-					when datePart(minute, lastBatchTime) between 15 and 29 then ' 15'
-					when datePart(minute, lastBatchTime) between 30 and 44 then ' 30'
-					when datePart(minute, lastBatchTime) between 45 and 60 then ' 45'
-					end
+		group by dbName, convert(varchar(10), lastbatchTime, 120), datePart(hour, lastBatchTime)
+		order by dbName, convert(varchar(10), lastbatchTime, 120), datePart(hour, lastBatchTime)
 
 	delete #dataValues
 		from #dataValues a

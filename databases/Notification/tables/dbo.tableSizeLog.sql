@@ -1,3 +1,6 @@
-create table tableSizeLog (ymd dateTime default getDate(), serverName varchar(200),
-	databaseName varchar(200), tableName varchar(200), rows varchar(100), reserved varchar(50), data varchar(50), indexSize varchar(50), unused varchar(50))
-GO
+alter table tableSizeLog add ukey int identity
+go
+
+exec pr_partitionTableDaily 'tableSizeLog', 'ymd', 'serverName, databaseName, tableName, ukey', 0
+
+delete from tableSizeLog with (tablock) where ymd < dateAdd(day, -14, getDate())
