@@ -1,3 +1,8 @@
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER OFF
+GO
+
 ALTER procedure [dbo].[pr_checkObjects]
 as
 begin
@@ -30,6 +35,7 @@ begin
 			where serverName > @cServerName
 				and isEnabled = 1
 				and objectChangeCheck = 1
+				and isSQLBox = 1
 				and (lastObjectCheck is null or dateDiff(minute, lastObjectCheck, getDate()) > isnull(objectCheckMinuteInterval, 5))
 				and isServerPingable = 1
 		)
@@ -46,6 +52,7 @@ begin
 			where serverName > @cServerName
 				and isEnabled = 1
 				and objectChangeCheck = 1
+				and isSQLBox = 1
 				and (lastObjectCheck is null or dateDiff(minute, lastObjectCheck, getDate()) > isnull(objectCheckMinuteInterval, 5))
 				and isServerPingable = 1
 			order by servername
@@ -397,4 +404,3 @@ begin
 	drop table #indexes
 	drop table #foreignKeys
 end
-GO
