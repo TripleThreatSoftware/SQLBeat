@@ -1,14 +1,14 @@
 USE [InstalledSoftware]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_rpt_installedSoftwareChanges]    Script Date: 08/27/2008 12:44:56 ******/
+/****** Object:  StoredProcedure [dbo].[pr_rpt_installedSoftwareChanges]    Script Date: 10/01/2008 09:31:14 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
--- exec pr_rpt_installedSoftwareChanges '2008-08-20', '2008-08-28'
+-- exec pr_rpt_installedSoftwareChanges '2008-09-24', '2008-10-02', 1
 -- exec pr_rpt_installedSoftwareChanges
 
-ALTER procedure [dbo].[pr_rpt_installedSoftwareChanges] (@dStartDate dateTime = null, @dEndDate dateTime = null)
+ALTER procedure [dbo].[pr_rpt_installedSoftwareChanges] (@dStartDate dateTime = null, @dEndDate dateTime = null, @bReportOnly bit = 1)
 as
 begin
 
@@ -97,44 +97,47 @@ begin
 
 	set @cThisServer = ''
 
---select * from #results
-
-	while exists (select top 1 ukey from #results where serverName > @cThisServer)
+	if @bReportOnly = 1
+		select * from #results
+	else
 	begin
-		select top 1 @cThisServer = serverName from #results where serverName > @cThisServer
+		while exists (select top 1 ukey from #results where serverName > @cThisServer)
+		begin
+			select top 1 @cThisServer = serverName from #results where serverName > @cThisServer
 
-		set @cThisMessage = char(13) +
-			'The following items have changed since the last check' + char(13) + char(13) +
-			left('Server' + space(15), 15) + ' ' +
-			left('Details' + space(10), 10) + ' ' +
-			left('Program' + space(50), 50) + ' ' +
-			left('Date' + space(10), 10) + ' ' +
-			left('Version' + space(20), 20) + ' ' + char(13) +
+			set @cThisMessage = char(13) +
+				'The following items have changed since the last check' + char(13) + char(13) +
+				left('Server' + space(15), 15) + ' ' +
+				left('Details' + space(10), 10) + ' ' +
+				left('Program' + space(50), 50) + ' ' +
+				left('Date' + space(10), 10) + ' ' +
+				left('Version' + space(20), 20) + ' ' + char(13) +
 
-			replicate('=', 15) + ' ' +
-			replicate('=', 10) + ' ' +
-			replicate('=', 50) + ' ' +
-			replicate('=', 10) + ' ' +
-			replicate('=', 20) + ' ' + char(13)
+				replicate('=', 15) + ' ' +
+				replicate('=', 10) + ' ' +
+				replicate('=', 50) + ' ' +
+				replicate('=', 10) + ' ' +
+				replicate('=', 20) + ' ' + char(13)
 
-		select
-			@cThisMessage = @cThisMessage +
-				left(isnull(serverName, '-') + space(15), 15) + ' ' +
-				left(isnull(details, '-') + space(10), 10) + ' ' +
-				left(isnull(programName, '-') + space(50), 50) + ' ' +
-				left(isnull(installDate, '-') + space(10), 10) + ' ' +
-				left(isnull(version, '-') + space(20), 20) + ' ' + char(13)
-			from #results
-			where serverName = @cThisServer
+			select
+				@cThisMessage = @cThisMessage +
+					left(isnull(serverName, '-') + space(15), 15) + ' ' +
+					left(isnull(details, '-') + space(10), 10) + ' ' +
+					left(isnull(programName, '-') + space(50), 50) + ' ' +
+					left(isnull(installDate, '-') + space(10), 10) + ' ' +
+					left(isnull(version, '-') + space(20), 20) + ' ' + char(13)
+				from #results
+				where serverName = @cThisServer
 
-		set @cThisSubject = 'Installed software changes for ' + convert(varchar(10), getDate(), 120)
+			set @cThisSubject = 'Installed software changes for ' + convert(varchar(10), getDate(), 120)
 
-		print @cThisSubject
-		print @cThisMessage
+			print @cThisSubject
+			print @cThisMessage
 
-		insert into notification..notificationLog_stage (serverName, subject, message, severity, isInstalledSoftware) values (
-			@cThisServer, @cThisSubject, @cThisMessage, 2, 1)
+			insert into notification..notificationLog_stage (serverName, subject, message, severity, isInstalledSoftware) values (
+				@cThisServer, @cThisSubject, @cThisMessage, 2, 1)
 
+		end
 	end
 
 	drop table #runHistory
