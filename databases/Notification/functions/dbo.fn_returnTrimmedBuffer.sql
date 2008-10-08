@@ -1,7 +1,4 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
+--select dbo.fn_returnTrimmedBuffer(' /* Object: Stored Procedure dbo.usp_CFA_Select_ProgramInformation  */ -- ================================================================================================== -- Author:Vinayak Pai -- Created date: 10/19/2007 -- Description:SP to be utilised for GetProgramCode in BudgetDA -- ================================================================================================== CREATE    PROCEDURE [dbo].[usp_CFA_Select_ProgramInformation] @AppFundID int AS BEGIN SET NOCOUNT ON;  SELECT B.PROGRAM_CODE, B.CATEG ORY_ID, ISNULL(B.DC_SIGNOFF_FLAG,0) AS DC_SIGNOFF_FLAG, ISNULL(B.INCLUDE_BUDGETRULES,0) AS INCLUDE_BUDGETRULES, ISNULL(B.VALIDATE_PLAN_STATUS,0) AS VALIDATE_PLAN_STATUS, A.PROGRAM_ID, A.APP_FUND_ID, B.FISCALYEAR, CASE WHEN A.AMENDMENT_NUM = 0 THEN "Original" ELSE "Ame ndment No. " + CONVERT(VARCHAR,A.AMENDMENT_NUM) END AS PROGRAM_TYPE, B.[PROGRAM_NAME], A.APP_TYPE_IND, CASE WHEN A.APP_TYPE_IND = 1 THEN "Single District" ELSE "Consortium" END AS APPLIED_AS, ISNULL(C.fname,"") + " " + ISNULL(C.lname,"") AS [name], LTRIM(RTRI M(A.CONTACT_ID)) AS CONTACT_ID, CASE WHEN A.APP_FUND_ID = A.ORG_APP_FUND_ID THEN 1 ELSE 0 END AS consort_status, A.ORG_APP_FUND_ID, B.CATEGORY_ID, D.STATUS_DESC, A.APP_ID, A.LAST_SIGNOFF_DATE, A.SUPER_SIGNOFF_DATE, MAIN_ALL_SYSTEM.SYSTEM_ID + " - " + SYSTEM_NAME AS [SYSTEM] FROM CFA_APP_FUND A INNER JOIN CFA_PROGRAM_CODES_FY B ON B.PROGRAM_ID = A.PROGRAM_ID LEFT OUTER JOIN WEB_USERS C ON C.[USER_ID] = A.CONTACT_ID INNER JOIN CFA_STATUS D ON D.STATUS_ID = A.STATUS INNER JOIN CFA_APPLICATION ON A.APP_ID = CFA_APPLICATION.APP_ ID INNER JOIN MAIN_ALL_SYSTEM ON CFA_APPLICATION.SYSTEM_ID = MAIN_ALL_SYSTEM.SYSTEM_ID WHERE A.Active = 1 AND A.APP_FUND_ID = @AppFundID  END ')
 
 ALTER function [dbo].[fn_returnTrimmedBuffer] (@cBufferContents varchar(8000))
 returns varchar(500)
@@ -113,10 +110,10 @@ begin
 				'FUNCTI' + space(1) + 'ON', 'FUNCTION'),
 				'FUNCTIO' + space(1) + 'N', 'FUNCTION')
 
-	set @cWorkingBuffer = replace(@cBufferContents, space(1), space(0))
-
 	if left(@cBufferContents, 2) = '/*'
-		set @cBufferContents = substring(@cBufferContents, charindex('*/', @cBufferContents) + 2, 500)
+		set @cBufferContents = substring(@cBufferContents, charindex('*/', @cBufferContents) + 2, 8000)
+
+	set @cWorkingBuffer = replace(@cBufferContents, space(1), space(0))
 
 	if (
 			(patindex('%createprocedure%', @cWorkingBuffer) < patindex('%insertinto%', @cWorkingBuffer) or patindex('%insertinto%', @cWorkingBuffer) = 0)
@@ -136,7 +133,7 @@ begin
 		set @cBufferContents = replace(replace(replace(replace(@cBufferContents, 'createprocedure', '~~'), 'createproc', '~~'), 'createfunction', '~~'), 'createfunc', '~~')
 
 		if charindex('~~', @cBufferContents) > 0
-			set @cBufferContents = substring(@cBufferContents, charindex('~~', @cBufferContents) + 2, 500)
+			set @cBufferContents = substring(@cBufferContents, charindex('~~', @cBufferContents) + 2, 8000)
 
 		if charindex('$$', @cBufferContents) > 0
 			set @cBufferContents = substring(@cBufferContents, 1, charindex('$$', @cBufferContents) - 1)
@@ -222,8 +219,8 @@ begin
 
 --	if charindex('"', @cReturnString) > 1
 --		set @cReturnString = left(@cReturnString, charindex('"', @cReturnString) - 1)
---	if charindex('@', @cReturnString) > 1 and charindex('@@', @cReturnString) = 0
---		set @cReturnString = left(@cReturnString, charindex('@', @cReturnString) - 1)
+	if charindex('@', @cReturnString) > 1 and charindex('@@', @cReturnString) = 0
+		set @cReturnString = left(@cReturnString, charindex('@', @cReturnString) - 1)
 
 --	set @cReturnString = convert(varchar(20), @nTrimCounter) + @cPrepend + @cReturnString
 
