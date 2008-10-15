@@ -14,7 +14,6 @@ begin
 		where (serverName = @cServerName or isnull(@cServerName, '') = '')
 			and command <> 'awaiting command'
 			and (dateDiff(second, lastBatchTime, ymd) > 5 or waitTime > 1000 or isBlocked = 1 or isBlocker = 1)
-			and dbName like 'transactions%'
 			and ymd >= dateAdd(hour, -@nNumHours, getDate())
 			and hostname <> @@servername
 			and bufferContents not like '%repl%'
