@@ -1802,15 +1802,16 @@ union'
 		isJobFailure, isLogShippingJobFailure, isLongRunningJob, isBlocking, isLongRunningProcess,
 		isDriveSpace, isLogSize, isEventLog,
 		serverName)
-	select message,
+	select
+		left(message, 8000),
 		case
 			when @bIsOffHours = 1 and @nOffHoursPriority <> 1 then 2
 			else severity
 			end,
-		subject,
+		left(subject, 300),
 		isJobFailure, isLogShippingJobFailure, isLongRunningJob, isBlocking, isLongRunningProcess,
 		isDriveSpace, isLogSize, isEventLog,
-		case when isnull(isDriveSpace, 0) = 1 then @cServerNamePart else @cFriendlyName end
+		left(case when isnull(isDriveSpace, 0) = 1 then @cServerNamePart else @cFriendlyName end, 100)
 		from #results
 
 	drop table #results
