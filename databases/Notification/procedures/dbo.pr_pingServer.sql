@@ -1,7 +1,9 @@
-use [notification]
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
 GO
 -- select top 100 * from pingResults order by ymd desc
--- exec pr_pingServer 'sqlserver\instance1'
+-- exec pr_pingServer 'appweb01'
 -- update pingResults set sqlPingResults = pingResults where sqlPingResults is null
 -- alter table pingResults drop column pingResults
 ALTER           procedure [dbo].[pr_pingServer] (@cServerName varchar(100))
@@ -173,8 +175,8 @@ begin
 	update dm_servers with (rowlock)
 		set isServerPingable = @bIsServerPingable,
 			isSQLServiceRunning = @bIsSQLPingable,
-			lastPingCheck = getDate(),
-			isEnabled = case when @bIsServerPingable = 1 then 1 else isEnabled end
+			lastPingCheck = getDate()
+--			,isEnabled = case when @bIsServerPingable = 1 then 1 else isEnabled end
 		where serverName = @cServerName
 
 	insert into pingLog (serverName, friendlyName,
