@@ -1,6 +1,6 @@
 --exec pr_rpt_jobHistory 'mssql-ny', null, null
 
-alter procedure pr_rpt_jobHistory (@cServerName varchar(200), @dStartDate dateTime, @nMinuteInterval int = 10)
+CREATE procedure [dbo].[pr_rpt_jobHistory] (@cServerName varchar(200), @dStartDate dateTime, @nMinuteInterval int = 10)
 as
 begin
 
@@ -22,7 +22,7 @@ begin
 	declare @cThisServerName varchar(200)
 	declare @cSQLString nvarchar(4000)
 
-	set @cThisServerName = @@serverName
+	set @cThisServerName = (select settingValue from dm_settings where settingName = ''Current machine name'')
 
 	select top 1
 		@cUserName = userName,
@@ -110,6 +110,6 @@ begin
 
 end
 
-go
 
-grant exec on pr_rpt_jobHistory to sqlNotification
+
+GO

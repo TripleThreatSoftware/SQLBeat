@@ -1,6 +1,4 @@
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[pr_monitorFile]') AND type in (N'P', N'PC'))
-BEGIN
-EXEC dbo.sp_executesql @statement = N'-- exec pr_monitorFile ''\\appapps02\c$\AppServices\UnisonFolderSync\unisonFileSync.log'', ''Error'', ''appapps02''
+-- exec pr_monitorFile '\\appapps02\c$\AppServices\UnisonFolderSync\unisonFileSync.log', 'Error', 'appapps02'
 create procedure [pr_monitorFile] (@cFileToMonitor varchar(500), @cStringToFind varchar(100), @cServerName varchar(200))
 as
 begin
@@ -8,9 +6,9 @@ begin
 	--declare @cFileToMonitor varchar(500)
 	--declare @cStringToFind varchar(100)
 	--declare @cServerName varchar(200)
-	--set @cServerName = ''appapps02''
-	--set @cFileToMonitor = ''\\appapps02\c$\AppServices\UnisonFolderSync\unisonFileSync.log''
-	--set @cStringToFind = ''Error''
+	--set @cServerName = 'appapps02'
+	--set @cFileToMonitor = '\\appapps02\c$\AppServices\UnisonFolderSync\unisonFileSync.log'
+	--set @cStringToFind = 'Error'
 
 	set nocount on
 
@@ -24,15 +22,15 @@ begin
 	create table #results (resultLine varchar(8000))
 	truncate table ##fileMonitor
 
-			set @cSQLString = ''
+			set @cSQLString = '
 				bulk insert ##fileMonitor
-					from '''''' + @cFileToMonitor + ''''''
+					from ''' + @cFileToMonitor + '''
 					WITH
 					(
 						FIRSTROW = 1,
-						ROWTERMINATOR =''''\n'''',
+						ROWTERMINATOR =''\n'',
 						MAXERRORS = 1000
-					)''
+					)'
 
 			truncate table #results
 
@@ -51,7 +49,7 @@ begin
 	select *
 		into #linesFound
 		from #fileData
-		where fileLine like ''%'' + @cStringToFind + ''%''
+		where fileLine like '%' + @cStringToFind + '%'
 
 	set @nLineNumber = 0
 
@@ -62,11 +60,11 @@ begin
 			where lineNumber > @nLineNumber
 			order by lineNumber
 
-		set @cSubject = ''String "'' + @cStringToFind + ''" found in "'' + @cFileToMonitor + ''" at line '' + convert(varchar(20), @nLineNumber)
+		set @cSubject = 'String "' + @cStringToFind + '" found in "' + @cFileToMonitor + '" at line ' + convert(varchar(20), @nLineNumber)
 
-		set @cMessage = ''String "'' + @cStringToFind + ''" found in "'' + @cFileToMonitor + ''" at line '' + convert(varchar(20), @nLineNumber) + char(13) + char(13)
+		set @cMessage = 'String "' + @cStringToFind + '" found in "' + @cFileToMonitor + '" at line ' + convert(varchar(20), @nLineNumber) + char(13) + char(13)
 
-		select @cMessage = @cMessage + ''('' + convert(varchar(20), a.lineNumber) + '') '' + fileLine + char(13)
+		select @cMessage = @cMessage + '(' + convert(varchar(20), a.lineNumber) + ') ' + fileLine + char(13)
 			from #fileData a
 			where a.lineNumber >= @nLineNumber - 2
 					and a.lineNumber <= @nLineNumber + 2
@@ -80,17 +78,14 @@ begin
 
 	end
 
-	if exists (select top 1 [name] from tempdb..sysobjects where [name] = ''##filemonitor'')
+	if exists (select top 1 [name] from tempdb..sysobjects where [name] = '##filemonitor')
 		drop table ##fileMonitor
 
 	drop table #results
 	drop table #fileData
 	drop table #linesFound
 end
-'
-END
-GO
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
+
+
+
 GO

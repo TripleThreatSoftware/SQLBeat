@@ -1,9 +1,5 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
 -- exec pr_rpt_recompiledObjects 'funmssql02', null, null
-ALTER procedure [dbo].[pr_rpt_recompiledObjects] (@cServerName varchar(100), @nNumHours int = 6)
+CREATE procedure [dbo].[pr_rpt_recompiledObjects] (@cServerName varchar(100), @nNumHours int = 6)
 as
 begin
 
@@ -37,3 +33,7 @@ begin
 
 
 end
+
+
+
+GO

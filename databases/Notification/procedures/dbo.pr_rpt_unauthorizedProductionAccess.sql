@@ -1,11 +1,4 @@
-USE [Notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_rpt_unauthorizedProductionAccess]    Script Date: 06/18/2008 13:12:50 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER OFF
-GO
-ALTER         procedure [dbo].[pr_rpt_unauthorizedProductionAccess]
+CREATE         procedure [dbo].[pr_rpt_unauthorizedProductionAccess]
 as
 begin
 	declare @bTesting bit
@@ -78,3 +71,7 @@ SERVER              HOST           LOGIN     DATABASE       COMMAND             
 		exec pr_sendMessage '', 'DBA', @cThisSubject, @cThisMessage
 	end
 end
+
+
+
+GO

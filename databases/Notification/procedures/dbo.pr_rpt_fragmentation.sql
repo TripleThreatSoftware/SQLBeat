@@ -1,6 +1,4 @@
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[pr_rpt_fragmentation]') AND type in (N'P', N'PC'))
-BEGIN
-EXEC dbo.sp_executesql @statement = N'-- exec pr_rpt_fragmentation ''sqlcluster01'', null, null
+-- exec pr_rpt_fragmentation 'sqlcluster01', null, null
 CREATE procedure [pr_rpt_fragmentation] (@cServerName varchar(100))
 as
 begin
@@ -23,10 +21,7 @@ begin
 			and [rows] <> 0
 		group by dbName, objectName, indexName
 end
-'
-END
-GO
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
+
+
+
 GO

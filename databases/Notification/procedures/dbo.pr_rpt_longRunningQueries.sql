@@ -1,9 +1,3 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
--- exec pr_rpt_longRunningQueries
-
 ALTER procedure [dbo].[pr_rpt_longRunningQueries] (@cServerName varchar(200) = '', @nNumHours int = 6)
 as
 begin

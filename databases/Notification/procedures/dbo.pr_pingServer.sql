@@ -1,12 +1,8 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
 -- select top 100 * from pingResults order by ymd desc
 -- exec pr_pingServer 'appweb01'
 -- update pingResults set sqlPingResults = pingResults where sqlPingResults is null
 -- alter table pingResults drop column pingResults
-ALTER           procedure [dbo].[pr_pingServer] (@cServerName varchar(100))
+CREATE           procedure [dbo].[pr_pingServer] (@cServerName varchar(100))
 as
 begin
 	declare @cServerNamePart varchar(100)
@@ -240,3 +236,6 @@ begin
 	else
 		return 1
 end
+
+
+GO

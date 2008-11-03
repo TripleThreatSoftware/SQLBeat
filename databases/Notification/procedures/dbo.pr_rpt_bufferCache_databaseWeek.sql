@@ -1,4 +1,4 @@
-alter procedure pr_rpt_bufferCache_databaseWeek (@cServerName varchar(100) = '')
+CREATE procedure pr_rpt_bufferCache_databaseWeek (@cServerName varchar(100) = '')
 as
 begin
 
@@ -42,6 +42,7 @@ begin
 
 	drop table #bufferHistory
 end
-go
 
-grant exec on pr_rpt_bufferCache_databaseWeek to public
+
+
+GO

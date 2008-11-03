@@ -1,13 +1,9 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
 --select * from messageRules
 -- update messageRules set severity = 0
 
 -- exec pr_dashboard_returnMessageRules 'cole'
 
-ALTER procedure [dbo].[pr_dashboard_returnMessageRules] (@cUserName varchar(100) = '')
+CREATE procedure [dbo].[pr_dashboard_returnMessageRules] (@cUserName varchar(100) = '')
 as
 begin
 	select ukey,
@@ -65,3 +61,7 @@ begin
 			) a
 		order by sourceType, ruleDescription
 end
+
+
+
+GO

@@ -1,10 +1,6 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
 --exec pr_rpt_allTableSizes 'mssql-ny'
 
-ALTER procedure [dbo].[pr_rpt_allTableSizes] (@cServerName varchar(200))
+CREATE procedure [dbo].[pr_rpt_allTableSizes] (@cServerName varchar(200))
 as
 begin
 
@@ -117,3 +113,7 @@ begin
 	exec sp_executeSQL @cSQLString
 
 end
+
+
+
+GO

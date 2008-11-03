@@ -1,5 +1,5 @@
 -- exec pr_rpt_tableSizes 'spiderxps'
-ALTER procedure [dbo].[pr_rpt_tableSizes] (@cServerName varchar(100))
+CREATE procedure [dbo].[pr_rpt_tableSizes] (@cServerName varchar(100))
 as
 begin
 	set nocount on
@@ -10,3 +10,7 @@ begin
 			and ymd = (select max(ymd) from tableSizeLog where serverName = @cServerName)
 		order by databaseName, tableName
 end
+
+
+
+GO

@@ -1,13 +1,8 @@
-use [notification]
-go
-
-update dm_servers set lastDeepSQL2005Check = ''
-GO
 --***********************************************************************************************************************************************
 --***********************************************************************************************************************************************
 
 
-ALTER procedure [dbo].[pr_checkDeepSQLStats]
+CREATE procedure [dbo].[pr_checkDeepSQLStats]
 as
 begin
 
@@ -204,7 +199,8 @@ begin
 			substring(objectName, charindex('.', objectName) + 1, 99) as tableName,
 			tableScans
 			from (
-				select
+				s
+elect
 					ymd,
 					ukey_server,
 					serverName,
@@ -296,3 +292,6 @@ begin
 	drop table #performance
 	drop table #results
 end
+
+
+GO

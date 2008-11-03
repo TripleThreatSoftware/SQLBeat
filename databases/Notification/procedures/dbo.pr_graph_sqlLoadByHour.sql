@@ -1,10 +1,6 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
 -- exec pr_graph_sqlLoadByHour 'mssql-ny'
 
-ALTER procedure [dbo].[pr_graph_sqlLoadByHour] (@cServerName varchar(100), @nGraphWidth int = 800)
+CREATE procedure [dbo].[pr_graph_sqlLoadByHour] (@cServerName varchar(100), @nGraphWidth int = 800)
 as
 begin
 
@@ -234,7 +230,8 @@ begin
 	exec pr_generateGoogleChartsRequest @nWidth = 900, @nHeight = 300, @bRelativeToTotal = 0, @bShowPie = 1
 
 
-	--********************************************************************************************************************************
+	--*****************************************
+***************************************************************************************
 	-- Overall SQL load by Hour
 
 	truncate table #dataValues
@@ -357,3 +354,6 @@ begin
 	drop table #activity
 	drop table #results
 end
+
+
+GO

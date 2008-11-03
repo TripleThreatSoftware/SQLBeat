@@ -1,7 +1,3 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
 -- exec pr_queryProcessLog @cServerName = '10.3.10.110', @cDatabaseName = 'sandbox', @nNumHours = 720
 -- exec pr_queryProcessLog @cServerName = 'ttssvr', @nNumHours = 6
 
@@ -22,7 +18,7 @@ GO
 
 
 -- exec pr_queryProcessLog @cServerName = 'mssql-ny', @nNumHours = 48, @cDatabaseName = 'ap', @nMinRuntime = 10
-ALTER procedure [dbo].[pr_queryProcessLog] (@cServerName varchar(100), @dStartDate dateTime = null, @dEndDate dateTime = null, @nNumHours int = 12,
+CREATE procedure [dbo].[pr_queryProcessLog] (@cServerName varchar(100), @dStartDate dateTime = null, @dEndDate dateTime = null, @nNumHours int = 12,
 	@cHostName varchar(100) = '', @cLogin varchar(100) = '', @cBuffer varchar(500) = '', @bJustBlocking bit = 0, @nMinCPU int = 0, @nMinDisk int = 0,
 	@cProgramName varchar(100) = '', @cDatabaseName varchar(100) = '', @nMinWait int = 0, @bJustRunning bit = 0, @cLocks varchar(100) = '',
 	@nMinRuntime int = 0)
@@ -68,3 +64,7 @@ begin
 		order by ymd, spid
 
 end
+
+
+
+GO

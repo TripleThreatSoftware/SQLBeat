@@ -1,11 +1,4 @@
-USE [Notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_rpt_serverAvailabilitySummary]    Script Date: 06/18/2008 13:12:22 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-ALTER procedure [dbo].[pr_rpt_serverAvailabilitySummary]
+CREATE procedure [dbo].[pr_rpt_serverAvailabilitySummary]
 as
 begin
 
@@ -89,8 +82,7 @@ begin
 			replicate('=', 4) + ' ' +
 			replicate('=', 7) + ' ' +
 			replicate('=', 7) + ' ' +
-			replicate('=', 6) + ' ' +
-			replicate('=', 5) + ' ' +
+			replicate('=', 6) + ' ' +			replicate('=', 5) + ' ' +
 			replicate('=', 10)
 
 
@@ -135,3 +127,7 @@ begin
 
 	drop table #results
 end
+
+
+
+GO

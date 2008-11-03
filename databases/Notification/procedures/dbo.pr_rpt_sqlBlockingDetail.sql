@@ -11,7 +11,7 @@ begin
 		top 200
 		a.ymd, a.spid, a.dbname, a.command, a.cpuTime, a.diskIO, a.lastBatchTime, a.programName, a.blockedBy, a.lastWaitType,
 		a.waitTime, a.waitResource,
-		replace(left(a.bufferContents, 500), char(13), '<br>') as bufferContents,
+		dbo.fn_returnFormattedBuffer(a.bufferContents) as bufferContents,
 		replace(a.locks, char(13), '<br>') as locks
 		from processLog a (nolock)
 		where a.serverName = @cServerName

@@ -1,11 +1,4 @@
-USE [Notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_rpt_overallConnectivity]    Script Date: 06/18/2008 13:11:28 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-ALTER     procedure [dbo].[pr_rpt_overallConnectivity]
+CREATE     procedure [dbo].[pr_rpt_overallConnectivity]
 as
 begin
 
@@ -87,7 +80,8 @@ begin
 					convert(decimal(15,4), sum(case when a.isrouterPingable = 1 and a.isServerPingable = 1 and a.isSQLPingable = 1 and ymd >= dateAdd(hour, -24, getDate()) then 1 else 0 end)) as success_SQLPing_last24,
 					convert(decimal(15,4), sum(case when a.isrouterPingable = 1 and (a.isServerPingable = 0 or a.isSQLPingable = 0) and ymd >= dateAdd(hour, -24, getDate()) then 1 else 0 end)) as fail_SQLPing_last24,
 
-					convert(decimal(15,4), sum(case when a.isrouterPingable = 1 and a.isServerPingable = 1 and a.isSQLPingable = 1 and ymd >= dateAdd(week, -1, getDate()) then 1 else 0 end)) as success_SQLPing_lastWeek,
+					convert(decimal(15,4), sum(case when a.isrouterPingable = 1 and a.isServerPingable =
+ 1 and a.isSQLPingable = 1 and ymd >= dateAdd(week, -1, getDate()) then 1 else 0 end)) as success_SQLPing_lastWeek,
 					convert(decimal(15,4), sum(case when a.isrouterPingable = 1 and (a.isServerPingable = 0 or a.isSQLPingable = 0) and ymd >= dateAdd(week, -1, getDate()) then 1 else 0 end)) as fail_SQLPing_lastWeek,
 
 
@@ -132,3 +126,6 @@ begin
 		exec pr_sendMessage '', 'DBA', @cThisSubject, @cThisMessage
 	end
 end
+
+
+GO

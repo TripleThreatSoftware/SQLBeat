@@ -1,7 +1,3 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
 -- exec pr_graph_connectionsByHour 'spiderxps\sqlbeat', 1579
 -- exec pr_graph_connectionsByHour 'ttssvr', 775
 
@@ -9,7 +5,7 @@ GO
 -- select * from tmp_results
 -- drop table tmp_results
 
-ALTER procedure [dbo].[pr_graph_connectionsByHour] (@cServerName varchar(100), @nGraphWidth int = 800)
+CREATE procedure [dbo].[pr_graph_connectionsByHour] (@cServerName varchar(100), @nGraphWidth int = 800)
 as
 begin
 
@@ -70,3 +66,7 @@ begin
 
 	drop table #dataValues
 end
+
+
+
+GO

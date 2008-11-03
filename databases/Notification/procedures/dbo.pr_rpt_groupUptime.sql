@@ -106,3 +106,7 @@ begin
 	drop table #results
 	drop table #serverHistory
 end
+
+
+
+GO

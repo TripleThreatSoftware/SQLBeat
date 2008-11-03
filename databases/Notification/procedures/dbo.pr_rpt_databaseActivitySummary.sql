@@ -1,7 +1,3 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
 -- pr_rpt_databaseActivitySummary 'uatmssql02', null, null
 ALTER procedure [dbo].[pr_rpt_databaseActivitySummary] (@cServerName varchar(100) = '')
 as
@@ -134,3 +130,5 @@ begin
 	drop table #performanceSummary
 
 end
+
+go

@@ -1,4 +1,4 @@
-create procedure pr_rpt_databaseFileGrowthHistory (@cServerName varchar(100), @dStartDate dateTime)
+create procedure [pr_rpt_databaseFileGrowthHistory] (@cServerName varchar(100), @dStartDate dateTime)
 as
 begin
 
@@ -33,6 +33,6 @@ begin
 
 end
 
-go
 
-grant exec on pr_rpt_databaseFileGrowthHistory to sqlnotification
+
+GO

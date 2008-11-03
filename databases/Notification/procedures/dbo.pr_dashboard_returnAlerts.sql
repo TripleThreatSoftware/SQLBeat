@@ -1,9 +1,5 @@
-use [notification]
-go
-
-
 -- pr_dashboard_returnAlerts '10.2.1.156'
-ALTER procedure [dbo].[pr_dashboard_returnAlerts] (@cServerName varchar(100) = '', @nNumHours int = 12)
+CREATE procedure [dbo].[pr_dashboard_returnAlerts] (@cServerName varchar(100) = '', @nNumHours int = 12)
 as
 begin
 	declare @cAlternateName varchar(100)
@@ -21,3 +17,7 @@ begin
 end
 
 --select * from notificationLog where servername = 'vpdb16'
+
+
+
+GO

@@ -1,7 +1,5 @@
-use [notification]
-GO
 -- exec pr_monitorPerformanceLog
-ALTER procedure [dbo].[pr_monitorPerformanceLog]
+CREATE procedure [dbo].[pr_monitorPerformanceLog]
 as
 begin
 --	declare @nUkeyGroup int
@@ -185,7 +183,8 @@ begin
 		right(space(6) + case
 			when avgValue > 10 then convert(varchar(20), convert(bigint, avgValue))
 			when currentValue < .05 then convert(varchar(20), convert(decimal(20,4), avgValue))
-			else convert(varchar(20), convert(decimal(20,2), avgValue))
+			else convert(varchar(20), convert(decimal(20,2)
+, avgValue))
 			end, 6) + ' ' +
 		char(13) as messageText
 
@@ -276,3 +275,6 @@ begin
 	drop table #normalizedCounters
 
 end
+
+
+GO

@@ -1,8 +1,4 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-ALTER procedure [dbo].[pr_rpt_runningOutageReport]
+CREATE procedure [dbo].[pr_rpt_runningOutageReport]
 as
 begin
 	declare @cThisSubject varchar(500)
@@ -43,3 +39,7 @@ begin
 		exec pr_sendMessage '', 'DBA', @cThisSubject, @cThisMessage
 	end
 end
+
+
+
+GO

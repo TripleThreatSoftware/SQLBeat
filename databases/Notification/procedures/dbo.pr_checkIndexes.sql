@@ -1,7 +1,4 @@
-use [notification]
-go
-
-create procedure [dbo].[pr_checkIndexes]
+CREATE procedure [dbo].[pr_checkIndexes]
 as
 begin
 	set nocount on
@@ -141,4 +138,6 @@ begin
 	drop table #performance
 end
 
-go
+
+
+GO

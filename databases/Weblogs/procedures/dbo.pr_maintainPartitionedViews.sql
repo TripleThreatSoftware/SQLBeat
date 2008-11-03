@@ -1,6 +1,4 @@
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[pr_maintainPartitionedViews]') AND type in (N'P', N'PC'))
-BEGIN
-EXEC dbo.sp_executesql @statement = N'--********************************************************************
+--********************************************************************
 -- Purpose: To be run after the daily partition SP has completed
 -- to maintain the view which is used to access data from the daily
 -- partitions. This does not need to be run manually and will be called
@@ -103,7 +101,7 @@ begin
 	end
 
 	update #dm_ymd
-		set ymdString = convert(varchar(4), [year]) + dbo.fn_padl(month, 2, ''0'') + dbo.fn_padl(day, 2, ''0'')
+		set ymdString = convert(varchar(4), [year]) + dbo.fn_padl(month, 2, '0') + dbo.fn_padl(day, 2, '0')
 
 	set @nAYearAgo = (select top 1 left(ymdString, 6) from #dm_ymd where ymd = dateAdd(year, -1, convert(varchar(10), getDate(), 120)))
 	set @nLastMonthString = (select left(ymdString, 6) from #dm_ymd where ymd = dateAdd(month, -1, convert(varchar(10), getDate(), 120)))
@@ -117,7 +115,7 @@ begin
 		where left([name], len(db_name())) = db_name()
 			and [name] <> db_name()
 			and dbo.fn_returnDigits([name], 0) > 0
-			and [name] not in (''master'', ''model'', ''msdb'', ''northwind'')
+			and [name] not in ('master', 'model', 'msdb', 'northwind')
 			and (
 				status in (0, 8)
 				or (not status % 32 = 0 and not status % 64 = 0 and not status % 128 = 0 and not status % 512 = 0)
@@ -126,34 +124,34 @@ begin
 
 	set @nNumberOfDatabases = @@rowcount
 
---	print ''Processing '' + convert(varchar(20), @nNumberOfDatabases) + '' databases.''
+--	print 'Processing ' + convert(varchar(20), @nNumberOfDatabases) + ' databases.'
 
 	if @nNumberOfDatabases = 0
 		return
 
 	-- build a list of all tables in each of the archive databases
-	-- these are the tables we''ll try and make partitioned views for, if they exist in all the month databases
-	set @cDatabaseName = ''''
+	-- these are the tables we'll try and make partitioned views for, if they exist in all the month databases
+	set @cDatabaseName = ''
 	while exists (select top 1 * from #databases)
 	begin
 		select top 1 @cDatabaseName = dbname from #databases
 
-		set @cSQLString = ''select '''''' + @cDatabaseName + '''''', [name], '''''''' '' +
-			''from '' + @cDatabaseName + ''.dbo.sysobjects '' +
-			''where xtype = ''''U''''
-				and [name] not like ''''dt%''''''
+		set @cSQLString = 'select ''' + @cDatabaseName + ''', [name], '''' ' +
+			'from ' + @cDatabaseName + '.dbo.sysobjects ' +
+			'where xtype = ''U''
+				and [name] not like ''dt%'''
 
 		insert into #partitionTables (dbname, tablename, basename)
 		exec sp_executesql @cSQLString
 
---		print ''Adding '' + convert(varchar(20), @@rowcount) + '' tables from '' + @cDatabaseName
+--		print 'Adding ' + convert(varchar(20), @@rowcount) + ' tables from ' + @cDatabaseName
 
 		set @cSQLString =
-			''select '''''' + @cDatabaseName + '''''', sysobjects.name as tableName, syscolumns.name as fieldName, 0 as naturalOrder, systypes.name as dataType '' +
-			''	from '' + @cDatabaseName + ''.dbo.syscolumns as syscolumns '' +
-			''	join '' + @cDatabaseName + ''.dbo.sysobjects as sysobjects on sysobjects.id = syscolumns.id '' +
-			''		and sysobjects.xtype = ''''U'''' '' +
-			''	join '' + @cDatabaseName + ''.dbo.systypes as systypes on systypes.xtype = syscolumns.xtype ''
+			'select ''' + @cDatabaseName + ''', sysobjects.name as tableName, syscolumns.name as fieldName, 0 as naturalOrder, systypes.name as dataType ' +
+			'	from ' + @cDatabaseName + '.dbo.syscolumns as syscolumns ' +
+			'	join ' + @cDatabaseName + '.dbo.sysobjects as sysobjects on sysobjects.id = syscolumns.id ' +
+			'		and sysobjects.xtype = ''U'' ' +
+			'	join ' + @cDatabaseName + '.dbo.systypes as systypes on systypes.xtype = syscolumns.xtype '
 
 		insert into #allTableFields
 		exec sp_executeSQL @cSQLString
@@ -167,83 +165,84 @@ begin
 	update #allTableFields
 		set @nLastUkey = naturalOrder = @nLastUkey + 1
 
-	-- figure out the root name for each of the tables we''ve found across all databases
+	-- figure out the root name for each of the tables we've found across all databases
 	delete from #partitionTables
-		where tableName like ''%_daily%''
-			or tableName like ''%_old%''
-			or tableName like ''%reject%''
-			or tableName like ''%overlap%''
-			or tableName like ''archive_%''
+		where tableName like '%_daily%'
+			or tableName like '%_old%'
+			or tableName like '%reject%'
+			or tableName like '%overlap%'
+			or tableName like 'archive_%'
 
 	update #partitionTables
 		set basename = case
-			when charindex(''200'', tablename) > 0 then stuff(tablename, charindex(''200'', tablename), 8, '''')
+			when charindex('200', tablename) > 0 then stuff(tablename, charindex('200', tablename), 8, '')
 			else tablename
 			end
-		where tableName not like ''%week%''
+		where tableName not like '%week%'
 
 	update #partitionTables
-		set baseName = substring(tablename, 1, charindex(''_200'', tablename) - 1)
-		where tablename like ''%week%''
-			and charindex(''_200'', tablename) > 1
+		set baseName = substring(tablename, 1, charindex('_200', tablename) - 1)
+		where tablename like '%week%'
+			and charindex('_200', tablename) > 1
 
 	update #partitionTables
-		set baseName = left(baseName, len(baseName) - charindex(''_'', reverse(baseName)))
-		where charindex(''_'', reverse(baseName)) > 0
-			and isnumeric(right(baseName, charindex(''_'', reverse(baseName)) - 1)) = 1
+		set baseName = left(baseName, len(baseName) - charindex('_', reverse(baseName)))
+		where charindex('_', reverse(baseName)) > 0
+			and isnumeric(right(baseName, charindex('_', reverse(baseName)) - 1)) = 1
 
-	update #partitionTables set basename = left(basename, len(basename) - 1) where right(basename, 1) = ''_''
+	update #partitionTables set basename = left(basename, len(basename) - 1) where right(basename, 1) = '_'
 
-	update #partitionTables set basename = left(basename, len(basename) - 6) where basename like ''%_daily%'' and dbname = db_name()
+	update #partitionTables set basename = left(basename, len(basename) - 6) where basename like '%_daily%' and dbname = db_name()
 
 	delete from #partitionTables
 		where dbname = db_name()
 
 -- 	if @nNumberOfDatabases > 1
--- 		delete from #partitionTables where baseName in (select baseName from #partitionTables group by basename having count(distinct dbname) = 1)
+-- 		delete from #p
+artitionTables where baseName in (select baseName from #partitionTables group by basename having count(distinct dbname) = 1)
 
 	-- and then figure out which tables are in common with almost all the databases
 	insert into #partitionViews
 	select distinct basename
 		from #partitionTables
 
-	-- now, roll through each of the root names we''ve found to exist in enough places to be worthwhile
+	-- now, roll through each of the root names we've found to exist in enough places to be worthwhile
 	while exists (select top 1 * from #partitionViews)
 	begin
-		set @cVeryLongString1 = ''''
-		set @cVeryLongString2 = ''''
-		set @cVeryLongString3 = ''''
-		set @cVeryLongString4 = ''''
-		set @cVeryLongString5 = ''''
-		set @cVeryLongString6 = ''''
-		set @cVeryLongString7 = ''''
-		set @cVeryLongString8 = ''''
-		set @cVeryLongString9 = ''''
-		set @cVeryLongString10 = ''''
-		set @cVeryLongString11 = ''''
-		set @cVeryLongString12 = ''''
-		set @cVeryLongString13 = ''''
-		set @cVeryLongString14 = ''''
-		set @cVeryLongString15 = ''''
-		set @cVeryLongString16 = ''''
-		set @cVeryLongString17 = ''''
-		set @cVeryLongString18 = ''''
-		set @cVeryLongString19 = ''''
-		set @cVeryLongString20 = ''''
-		set @cVeryLongString21 = ''''
-		set @cVeryLongString22 = ''''
-		set @cVeryLongString23 = ''''
-		set @cVeryLongString24 = ''''
-		set @cVeryLongString25 = ''''
-		set @cVeryLongString26 = ''''
-		set @cVeryLongString27 = ''''
-		set @cVeryLongString28 = ''''
-		set @cVeryLongString29 = ''''
-		set @cVeryLongString30 = ''''
+		set @cVeryLongString1 = ''
+		set @cVeryLongString2 = ''
+		set @cVeryLongString3 = ''
+		set @cVeryLongString4 = ''
+		set @cVeryLongString5 = ''
+		set @cVeryLongString6 = ''
+		set @cVeryLongString7 = ''
+		set @cVeryLongString8 = ''
+		set @cVeryLongString9 = ''
+		set @cVeryLongString10 = ''
+		set @cVeryLongString11 = ''
+		set @cVeryLongString12 = ''
+		set @cVeryLongString13 = ''
+		set @cVeryLongString14 = ''
+		set @cVeryLongString15 = ''
+		set @cVeryLongString16 = ''
+		set @cVeryLongString17 = ''
+		set @cVeryLongString18 = ''
+		set @cVeryLongString19 = ''
+		set @cVeryLongString20 = ''
+		set @cVeryLongString21 = ''
+		set @cVeryLongString22 = ''
+		set @cVeryLongString23 = ''
+		set @cVeryLongString24 = ''
+		set @cVeryLongString25 = ''
+		set @cVeryLongString26 = ''
+		set @cVeryLongString27 = ''
+		set @cVeryLongString28 = ''
+		set @cVeryLongString29 = ''
+		set @cVeryLongString30 = ''
 
 		select top 1 @cThisViewName = viewname from #partitionViews
 
---		print ''Processing view: '' + @cThisViewName
+--		print 'Processing view: ' + @cThisViewName
 
 		-- and figure out which archive databases have tables which would contribute to the larger view
 		truncate table #viewTables
@@ -255,14 +254,14 @@ begin
 		set @nNumberOfTables = (select count(*) from #viewTables)
 
 		-- and for these, build a list of fields they all have in common
-		set @cFieldList = ''*''
+		set @cFieldList = '*'
 		insert into #fields
 		select fieldName, count(*), max(naturalOrder) as naturalOrder
 			from #allTableFields
 			join #viewTables on #viewTables.dbname = #alltablefields.dbname and #viewTables.tablename = #alltablefields.tablename
 			group by fieldName
 
---		This was originally just here to compensate for tables having different fields, but it seems they''re out of order too
+--		This was originally just here to compensate for tables having different fields, but it seems they're out of order too
 --		so now this code needs to run all the time .. booger ..
 		if (select count(*) from #fields where occurs <> @nNumberOfTables) > 0
 		begin
@@ -270,7 +269,7 @@ begin
 		end
 
 		-- if any tables have more than the minimum set of fields, make sure to note them as special
-		-- and build a field list to become part of it''s specific select clause
+		-- and build a field list to become part of it's specific select clause
 		insert into #specialTables
 		select distinct #allTableFields.dbname, #allTableFields.tablename
 			from #allTableFields
@@ -279,22 +278,22 @@ begin
 			where basename = @cThisViewName
 				and #fields.fieldName is null
 
-		set @cFieldList = ''''
+		set @cFieldList = ''
 		while exists (select top 1 * from #fields order by naturalOrder)
 		begin
 			select top 1 @cFieldName = fieldName from #fields order by naturalOrder
-			set @cFieldList = @cFieldList + case when len(@cFieldList) > 0 then '','' else '''' end + @cFieldName
+			set @cFieldList = @cFieldList + case when len(@cFieldList) > 0 then ',' else '' end + @cFieldName
 			delete from #fields where fieldName = @cFieldName
 		end
 
 		--***********************************************************************************************
 		-- This makes the _lastMonth view
 
-		set @cFullViewname = ''v_'' + @cThisViewName + ''_lastMonth''
+		set @cFullViewname = 'v_' + @cThisViewName + '_lastMonth'
 
 		set @cSQLString =
-			''if exists (select * from dbo.sysobjects where id = object_id(N''''[dbo].['' + @cFullViewName + '']'''') and OBJECTPROPERTY(id, N''''IsView'''') = 1) '' +
-				''drop view [dbo].['' + @cFullViewName + '']''
+			'if exists (select * from dbo.sysobjects where id = object_id(N''[dbo].[' + @cFullViewName + ']'') and OBJECTPROPERTY(id, N''IsView'') = 1) ' +
+				'drop view [dbo].[' + @cFullViewName + ']'
 		exec(@cSQLString)
 
 		select top 1 @cLastMonthDBName = dbName, @cLastMonthTableName = tableName
@@ -307,13 +306,13 @@ begin
 
 		if @@ROWCOUNT > 0 and @nNumberOfTables >= 1
 		begin
-			set @cSQLString = ''create view '' + @cFullViewname + '' as select '' + @cFieldList + '' from '' + @cLastMonthDBName + ''..'' + @cLastMonthTableName
+			set @cSQLString = 'create view ' + @cFullViewname + ' as select ' + @cFieldList + ' from ' + @cLastMonthDBName + '..' + @cLastMonthTableName
 			exec sp_executeSQL @cSQLString
 
-			set @cSQLString = ''grant select on '' + @cFullViewName + '' to public '' + char(13) + char(10) + char(9) +
-				''grant insert on '' + @cFullViewName + '' to public '' + char(13) + char(10) + char(9) +
-				''grant update on '' + @cFullViewName + '' to public '' + char(13) + char(10) + char(9) +
-				''grant delete on '' + @cFullViewName + '' to public ''
+			set @cSQLString = 'grant select on ' + @cFullViewName + ' to public ' + char(13) + char(10) + char(9) +
+				'grant insert on ' + @cFullViewName + ' to public ' + char(13) + char(10) + char(9) +
+				'grant update on ' + @cFullViewName + ' to public ' + char(13) + char(10) + char(9) +
+				'grant delete on ' + @cFullViewName + ' to public '
 
 			exec(@cSQLString)
 		end
@@ -324,11 +323,11 @@ begin
 		--***********************************************************************************************
 		-- This makes the _thisMonth view
 
-		set @cFullViewname = ''v_'' + @cThisViewName + ''_thisMonth''
+		set @cFullViewname = 'v_' + @cThisViewName + '_thisMonth'
 
 		set @cSQLString =
-			''if exists (select * from dbo.sysobjects where id = object_id(N''''[dbo].['' + @cFullViewName + '']'''') and OBJECTPROPERTY(id, N''''IsView'''') = 1) '' +
-				''drop view [dbo].['' + @cFullViewName + '']''
+			'if exists (select * from dbo.sysobjects where id = object_id(N''[dbo].[' + @cFullViewName + ']'') and OBJECTPROPERTY(id, N''IsView'') = 1) ' +
+				'drop view [dbo].[' + @cFullViewName + ']'
 		exec(@cSQLString)
 
 		select top 1 @cThisMonthDBName = dbName, @cThisMonthTableName = tableName
@@ -338,13 +337,13 @@ begin
 
 		if @@ROWCOUNT > 0 and @nNumberOfTables >= 1
 		begin
-			set @cSQLString = ''create view '' + @cFullViewname + '' as select '' + @cFieldList + '' from '' + @cThisMonthDBName + ''..'' + @cThisMonthTableName
+			set @cSQLString = 'create view ' + @cFullViewname + ' as select ' + @cFieldList + ' from ' + @cThisMonthDBName + '..' + @cThisMonthTableName
 			exec sp_executeSQL @cSQLString
 
-			set @cSQLString = ''grant select on '' + @cFullViewName + '' to public '' + char(13) + char(10) + char(9) +
-				''grant insert on '' + @cFullViewName + '' to public '' + char(13) + char(10) + char(9) +
-				''grant update on '' + @cFullViewName + '' to public '' + char(13) + char(10) + char(9) +
-				''grant delete on '' + @cFullViewName + '' to public ''
+			set @cSQLString = 'grant select on ' + @cFullViewName + ' to public ' + char(13) + char(10) + char(9) +
+				'grant insert on ' + @cFullViewName + ' to public ' + char(13) + char(10) + char(9) +
+				'grant update on ' + @cFullViewName + ' to public ' + char(13) + char(10) + char(9) +
+				'grant delete on ' + @cFullViewName + ' to public '
 
 			exec(@cSQLString)
 		end
@@ -353,18 +352,18 @@ begin
 		--***********************************************************************************************
 
 
-		set @cFullViewName = ''v_'' + @cThisViewName + ''_all''
-		set @cFullViewName = replace(@cFullViewName, ''__'', ''_'')
+		set @cFullViewName = 'v_' + @cThisViewName + '_all'
+		set @cFullViewName = replace(@cFullViewName, '__', '_')
 
 		set @cSQLString =
-			''if exists (select * from dbo.sysobjects where id = object_id(N''''[dbo].['' + @cFullViewName + '']'''') and OBJECTPROPERTY(id, N''''IsView'''') = 1) '' +
-				''drop view [dbo].['' + @cFullViewName + '']''
+			'if exists (select * from dbo.sysobjects where id = object_id(N''[dbo].[' + @cFullViewName + ']'') and OBJECTPROPERTY(id, N''IsView'') = 1) ' +
+				'drop view [dbo].[' + @cFullViewName + ']'
 		exec(@cSQLString)
 
 		if @nNumberOfTables >= 1
 		begin
 
-			set @cVeryLongString1 = ''create view '' + @cFullViewName + '' as '' + char(13) + char(10) + char(9)
+			set @cVeryLongString1 = 'create view ' + @cFullViewName + ' as ' + char(13) + char(10) + char(9)
 			set @nCounter = 1
 
 			-- roll through each to the tables that will contribute to this view and generate the sql statement
@@ -373,11 +372,11 @@ begin
 			begin
 				select top 1 @cDatabaseName = dbname, @cThisTableName = tablename from #viewTables order by dbname desc, tableName desc
 
-				set @cWhereClause = ''''
+				set @cWhereClause = ''
 				set @nStartDate = 0
 				set @nEndDate = 0
-				set @dStartDate = ''''
-				set @dEndDate = ''''
+				set @dStartDate = ''
+				set @dEndDate = ''
 				set @nStartDateYMD = 0
 				set @nEndDateYMD = 0
 				if (select count(*) from #viewTables) = 1
@@ -394,12 +393,13 @@ begin
 				else
 					if isnumeric(right(@cThisTableName, 6)) = 1
 					begin
-						select @dStartDate = min(ymd), @dEndDate = max(ymd)
+						select @dStartDate = min(ymd), @dEndDate
+= max(ymd)
 							from #dm_ymd
 							where left(ymdString, 6) = right(@cThisTableName, 6)
 					end
 					else
-						if @cThisTableName like ''%_week%''
+						if @cThisTableName like '%_week%'
 						begin
 							select @dStartDate = min(ymd), @dEndDate = max(ymd)
 								from #dm_ymd
@@ -423,102 +423,102 @@ begin
 				if @cDatabaseName = db_name()
 					set @nEndDate = 0
 
-				if @@version not like ''%sql server 2005%''
-					if (select count(*) from #allTableFields where dbname = @cDatabaseName and tableName = @cThisTableName and fieldName = ''ymd'' and dataType = ''dateTime'') > 0
-						and @dStartDate <> ''''
-						set @cWhereClause = ''where ymd >= '''''' + convert(varchar(20), @dStartDate) + '''''''' + case when @nEndDate <> 0 then '''''' and ymd <= '''''' + convert(varchar(20), @dEndDate) + '''''''' else '''' end
+				if @@version not like '%sql server 2005%'
+					if (select count(*) from #allTableFields where dbname = @cDatabaseName and tableName = @cThisTableName and fieldName = 'ymd' and dataType = 'dateTime') > 0
+						and @dStartDate <> ''
+						set @cWhereClause = 'where ymd >= ''' + convert(varchar(20), @dStartDate) + '''' + case when @nEndDate <> 0 then ''' and ymd <= ''' + convert(varchar(20), @dEndDate) + '''' else '' end
 
-				set @cSQLString = ''select '' + @cFieldList + char(13) + char(10) + char(9) +
-						''from '' + @cDatabaseName + ''..'' + @cThisTableName + '' '' + @cWhereClause + case when @lLastRow = 0 and @nCounter < @nNumberOfViewTables then '' union all '' + char(13) + char(10) + char(9) else '''' end
+				set @cSQLString = 'select ' + @cFieldList + char(13) + char(10) + char(9) +
+						'from ' + @cDatabaseName + '..' + @cThisTableName + ' ' + @cWhereClause + case when @lLastRow = 0 and @nCounter < @nNumberOfViewTables then ' union all ' + char(13) + char(10) + char(9) else '' end
 
 				-- being sure to stub in the special field list whenever a table is known to not have a matching list of fields
-				-- CG: I''m not proud of this code. If you have a better suggestion, please let me know.
+				-- CG: I'm not proud of this code. If you have a better suggestion, please let me know.
 
-				if len(@cVeryLongString1) + len(@cSQLString)  < 4000 and @cVeryLongString2 = ''''
+				if len(@cVeryLongString1) + len(@cSQLString)  < 4000 and @cVeryLongString2 = ''
 					set @cVeryLongString1 = @cVeryLongString1 + @cSQLString
 				else
-					if len(@cVeryLongString2) + len(@cSQLString)  < 4000 and @cVeryLongString3 = ''''
+					if len(@cVeryLongString2) + len(@cSQLString)  < 4000 and @cVeryLongString3 = ''
 						set @cVeryLongString2 = @cVeryLongString2 + @cSQLString
 					else
-						if len(@cVeryLongString3) + len(@cSQLString)  < 4000 and @cVeryLongString4 = ''''
+						if len(@cVeryLongString3) + len(@cSQLString)  < 4000 and @cVeryLongString4 = ''
 						set @cVeryLongString3 = @cVeryLongString3 + @cSQLString
 						else
-						if len(@cVeryLongString4) + len(@cSQLString)  < 4000 and @cVeryLongString5 = ''''
+						if len(@cVeryLongString4) + len(@cSQLString)  < 4000 and @cVeryLongString5 = ''
 						set @cVeryLongString4 = @cVeryLongString4 + @cSQLString
 						else
-						if len(@cVeryLongString5) + len(@cSQLString)  < 4000 and @cVeryLongString6 = ''''
+						if len(@cVeryLongString5) + len(@cSQLString)  < 4000 and @cVeryLongString6 = ''
 						set @cVeryLongString5 = @cVeryLongString5 + @cSQLString
 						else
-						if len(@cVeryLongString6) + len(@cSQLString)  < 4000 and @cVeryLongString7 = ''''
+						if len(@cVeryLongString6) + len(@cSQLString)  < 4000 and @cVeryLongString7 = ''
 						set @cVeryLongString6 = @cVeryLongString6 + @cSQLString
 						else
-						if len(@cVeryLongString7) + len(@cSQLString)  < 4000 and @cVeryLongString8 = ''''
+						if len(@cVeryLongString7) + len(@cSQLString)  < 4000 and @cVeryLongString8 = ''
 						set @cVeryLongString7 = @cVeryLongString7 + @cSQLString
 						else
-						if len(@cVeryLongString8) + len(@cSQLString)  < 4000 and @cVeryLongString9 = ''''
+						if len(@cVeryLongString8) + len(@cSQLString)  < 4000 and @cVeryLongString9 = ''
 						set @cVeryLongString8 = @cVeryLongString8 + @cSQLString
 						else
-						if len(@cVeryLongString9) + len(@cSQLString)  < 4000 and @cVeryLongString10 = ''''
+						if len(@cVeryLongString9) + len(@cSQLString)  < 4000 and @cVeryLongString10 = ''
 						set @cVeryLongString9 = @cVeryLongString9 + @cSQLString
 						else
-						if len(@cVeryLongString10) + len(@cSQLString)  < 4000 and @cVeryLongString11 = ''''
+						if len(@cVeryLongString10) + len(@cSQLString)  < 4000 and @cVeryLongString11 = ''
 						set @cVeryLongString10 = @cVeryLongString10 + @cSQLString
 						else
-						if len(@cVeryLongString11) + len(@cSQLString)  < 4000 and @cVeryLongString12 = ''''
+						if len(@cVeryLongString11) + len(@cSQLString)  < 4000 and @cVeryLongString12 = ''
 						set @cVeryLongString11 = @cVeryLongString11 + @cSQLString
 						else
-						if len(@cVeryLongString12) + len(@cSQLString)  < 4000 and @cVeryLongString13 = ''''
+						if len(@cVeryLongString12) + len(@cSQLString)  < 4000 and @cVeryLongString13 = ''
 						set @cVeryLongString12 = @cVeryLongString12 + @cSQLString
 						else
-						if len(@cVeryLongString13) + len(@cSQLString)  < 4000 and @cVeryLongString14 = ''''
+						if len(@cVeryLongString13) + len(@cSQLString)  < 4000 and @cVeryLongString14 = ''
 						set @cVeryLongString13 = @cVeryLongString13 + @cSQLString
 						else
-						if len(@cVeryLongString14) + len(@cSQLString)  < 4000 and @cVeryLongString15 = ''''
+						if len(@cVeryLongString14) + len(@cSQLString)  < 4000 and @cVeryLongString15 = ''
 						set @cVeryLongString14 = @cVeryLongString14 + @cSQLString
 						else
-						if len(@cVeryLongString15) + len(@cSQLString)  < 4000 and @cVeryLongString16 = ''''
+						if len(@cVeryLongString15) + len(@cSQLString)  < 4000 and @cVeryLongString16 = ''
 						set @cVeryLongString15 = @cVeryLongString15 + @cSQLString
 						else
-						if len(@cVeryLongString16) + len(@cSQLString)  < 4000 and @cVeryLongString17 = ''''
+						if len(@cVeryLongString16) + len(@cSQLString)  < 4000 and @cVeryLongString17 = ''
 						set @cVeryLongString16 = @cVeryLongString16 + @cSQLString
 						else
-						if len(@cVeryLongString17) + len(@cSQLString)  < 4000 and @cVeryLongString18 = ''''
+						if len(@cVeryLongString17) + len(@cSQLString)  < 4000 and @cVeryLongString18 = ''
 						set @cVeryLongString17 = @cVeryLongString17 + @cSQLString
 						else
-						if len(@cVeryLongString18) + len(@cSQLString)  < 4000 and @cVeryLongString19 = ''''
+						if len(@cVeryLongString18) + len(@cSQLString)  < 4000 and @cVeryLongString19 = ''
 						set @cVeryLongString18 = @cVeryLongString18 + @cSQLString
 						else
-						if len(@cVeryLongString19) + len(@cSQLString)  < 4000 and @cVeryLongString20 = ''''
+						if len(@cVeryLongString19) + len(@cSQLString)  < 4000 and @cVeryLongString20 = ''
 						set @cVeryLongString19 = @cVeryLongString19 + @cSQLString
 						else
-						if len(@cVeryLongString20) + len(@cSQLString)  < 4000 and @cVeryLongString21 = ''''
+						if len(@cVeryLongString20) + len(@cSQLString)  < 4000 and @cVeryLongString21 = ''
 						set @cVeryLongString20 = @cVeryLongString20 + @cSQLString
 						else
-						if len(@cVeryLongString21) + len(@cSQLString)  < 4000 and @cVeryLongString22 = ''''
+						if len(@cVeryLongString21) + len(@cSQLString)  < 4000 and @cVeryLongString22 = ''
 						set @cVeryLongString21 = @cVeryLongString21 + @cSQLString
 						else
-						if len(@cVeryLongString22) + len(@cSQLString)  < 4000 and @cVeryLongString23 = ''''
+						if len(@cVeryLongString22) + len(@cSQLString)  < 4000 and @cVeryLongString23 = ''
 						set @cVeryLongString22 = @cVeryLongString22 + @cSQLString
 						else
-						if len(@cVeryLongString23) + len(@cSQLString)  < 4000 and @cVeryLongString24 = ''''
+						if len(@cVeryLongString23) + len(@cSQLString)  < 4000 and @cVeryLongString24 = ''
 						set @cVeryLongString23 = @cVeryLongString23 + @cSQLString
 						else
-						if len(@cVeryLongString24) + len(@cSQLString)  < 4000 and @cVeryLongString25 = ''''
+						if len(@cVeryLongString24) + len(@cSQLString)  < 4000 and @cVeryLongString25 = ''
 						set @cVeryLongString24 = @cVeryLongString24 + @cSQLString
 						else
-						if len(@cVeryLongString25) + len(@cSQLString)  < 4000 and @cVeryLongString26 = ''''
+						if len(@cVeryLongString25) + len(@cSQLString)  < 4000 and @cVeryLongString26 = ''
 						set @cVeryLongString25 = @cVeryLongString25 + @cSQLString
 						else
-						if len(@cVeryLongString26) + len(@cSQLString)  < 4000 and @cVeryLongString27 = ''''
+						if len(@cVeryLongString26) + len(@cSQLString)  < 4000 and @cVeryLongString27 = ''
 						set @cVeryLongString26 = @cVeryLongString26 + @cSQLString
 						else
-						if len(@cVeryLongString27) + len(@cSQLString)  < 4000 and @cVeryLongString28 = ''''
+						if len(@cVeryLongString27) + len(@cSQLString)  < 4000 and @cVeryLongString28 = ''
 						set @cVeryLongString27 = @cVeryLongString27 + @cSQLString
 						else
-						if len(@cVeryLongString28) + len(@cSQLString)  < 4000 and @cVeryLongString29 = ''''
+						if len(@cVeryLongString28) + len(@cSQLString)  < 4000 and @cVeryLongString29 = ''
 						set @cVeryLongString28 = @cVeryLongString28 + @cSQLString
 						else
-						if len(@cVeryLongString29) + len(@cSQLString)  < 4000 and @cVeryLongString30 = ''''
+						if len(@cVeryLongString29) + len(@cSQLString)  < 4000 and @cVeryLongString30 = ''
 						set @cVeryLongString29 = @cVeryLongString29 + @cSQLString
 						else
 						if len(@cVeryLongString30) + len(@cSQLString)  < 4000
@@ -528,21 +528,21 @@ begin
 
 				set @nCounter = @nCounter + 1
 
-	-- 			print ''1: '' + @cVeryLongString1
-	-- 			print ''2: '' + @cVeryLongString2
-	-- 			print ''3: '' + @cVeryLongString3
-	-- 			print ''4: '' + @cVeryLongString4
-	-- 			print ''5: '' + @cVeryLongString5
-	-- 			print ''6: '' + @cVeryLongString6
-	-- 			print ''7: '' + @cVeryLongString7
-	-- 			print ''8: '' + @cVeryLongString8
-	-- 			print ''9: '' + @cVeryLongString9
-	-- 			print ''10: '' + @cVeryLongString10
-	-- 			print ''11: '' + @cVeryLongString11
-	-- 			print ''12: '' + @cVeryLongString12
-	-- 			print ''13: '' + @cVeryLongString13
-	-- 			print ''14: '' + @cVeryLongString14
-	-- 			print ''15: '' + @cVeryLongString15
+	-- 			print '1: ' + @cVeryLongString1
+	-- 			print '2: ' + @cVeryLongString2
+	-- 			print '3: ' + @cVeryLongString3
+	-- 			print '4: ' + @cVeryLongString4
+	-- 			print '5: ' + @cVeryLongString5
+	-- 			print '6: ' + @cVeryLongString6
+	-- 			print '7: ' + @cVeryLongString7
+	-- 			print '8: ' + @cVeryLongString8
+	-- 			print '9: ' + @cVeryLongString9
+	-- 			print '10: ' + @cVeryLongString10
+	-- 			print '11: ' + @cVeryLongString11
+	-- 			print '12: ' + @cVeryLongString12
+	-- 			print '13: ' + @cVeryLongString13
+	-- 			print '14: ' + @cVeryLongString14
+	-- 			print '15: ' + @cVeryLongString15
 			end
 
 -- 			print @cVeryLongString1
@@ -562,7 +562,8 @@ begin
 -- 			print @cVeryLongString15
 
 			exec(@cVeryLongString1
-				+ @cVeryLongString2
+				+ @c
+VeryLongString2
 				+ @cVeryLongString3
 				+ @cVeryLongString4
 				+ @cVeryLongString5
@@ -595,14 +596,14 @@ begin
 
 
 			-- then, once the table exists we need to be sure proper access rights are granted to it.
-			set @cSQLString = ''grant select on '' + @cFullViewName + '' to public '' + char(13) + char(10) + char(9) +
-				''grant insert on '' + @cFullViewName + '' to public '' + char(13) + char(10) + char(9) +
-				''grant update on '' + @cFullViewName + '' to public '' + char(13) + char(10) + char(9) +
-				''grant delete on '' + @cFullViewName + '' to public ''
+			set @cSQLString = 'grant select on ' + @cFullViewName + ' to public ' + char(13) + char(10) + char(9) +
+				'grant insert on ' + @cFullViewName + ' to public ' + char(13) + char(10) + char(9) +
+				'grant update on ' + @cFullViewName + ' to public ' + char(13) + char(10) + char(9) +
+				'grant delete on ' + @cFullViewName + ' to public '
 
 			exec(@cSQLString)
 	-- 		print @cSQLString
-	-- 		print ''GO''
+	-- 		print 'GO'
 
 		end
 		delete from #partitionViews where viewname = @cThisViewName
@@ -618,51 +619,11 @@ begin
 	drop table #alltablefields
 	drop table #dm_ymd
 
-	select ''Views created.''
+	select 'Views created.'
 
 	return 0
 
 end
 
 -- exec pr_maintainPartitionedViews
-'
-END
-GO
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[pr_rpt_databaseGrowthDetail]') AND type in (N'P', N'PC'))
-BEGIN
-EXEC dbo.sp_executesql @statement = N'CREATE procedure [pr_rpt_databaseGrowthDetail] (@cServerName varchar(100))
-as
-begin
-
---	declare @cServerName varchar(100)
---	set @cServerName = ''sqlcluster01''
-
-	set datefirst 2
-
-	-- Growth by week
-	select dbName,
-		convert(varchar(10), weekStart, 120) as weekStart,
-		convert(varchar(10), weekEnd, 120) as weekEnd,
-		minSize, [maxSize],
-		[maxSize] - minSize as sizeChange
-		from (
-			select
-				a.serverName, a.dbName,
-				min(ymd) as weekStart,
-				max(ymd) as weekEnd,
-				max([size]) as maxSize,
-				min([size]) as minSize
-				from v_databaseFileSizeLog_all a (nolock)
-	--			join (select distinct serverName, dbName from #overallGrowth) b on a.servername = b.servername and a.dbname = b.dbName
-				where a.isLog = 0
-					and dbname <> ''tempdb''
-					and serverName = @cServerName
-					and a.ymd >= dateAdd(month, -2, getDate())
-				group by a.serverName, a.dbName, datePart(year, ymd), datePart(week, ymd)
-			) a
-		where servername = @cServerName
-		order by dbName, weekStart
-end
-'
-END
 GO

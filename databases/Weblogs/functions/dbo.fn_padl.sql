@@ -1,4 +1,4 @@
-create function [dbo].[fn_padl] (@cString varchar(200), @nLength int, @cPadCharacter varchar(1))
+create function [fn_padl] (@cString varchar(200), @nLength int, @cPadCharacter varchar(1))
 	returns varchar(200)
 as
 begin
@@ -7,8 +7,7 @@ begin
 
 	return @cString
 end
-GO
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER OFF
+
+
+
 GO

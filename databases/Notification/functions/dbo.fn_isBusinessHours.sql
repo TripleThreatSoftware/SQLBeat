@@ -1,11 +1,4 @@
-USE [Notification]
-GO
-/****** Object:  UserDefinedFunction [dbo].[fn_isBusinessHours]    Script Date: 10/08/2008 08:56:50 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER OFF
-GO
-ALTER  function [dbo].[fn_isBusinessHours] ()
+CREATE  function [dbo].[fn_isBusinessHours] ()
 returns bit
 as
 begin
@@ -29,3 +22,7 @@ begin
 
 	return 1
 end
+
+
+
+GO

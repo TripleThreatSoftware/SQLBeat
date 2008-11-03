@@ -1,9 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[pr_monitorJobIntervals]    Script Date: 07/09/2008 11:14:13 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-ALTER procedure [dbo].[pr_monitorJobIntervals]
+CREATE procedure [dbo].[pr_monitorJobIntervals]
 as
 begin
 	declare @cSQLString nvarchar(4000)
@@ -191,7 +186,8 @@ begin
 				left outer join dm_servers c (nolock) on a.ukey = c.ukey_group
 					and c.configurationCheck = 1
 				group by a.groupName, b.job_id, jobName
-				having count(distinct c.ukey) > 0
+
+	having count(distinct c.ukey) > 0
 			) a
 
 	--*******************************************************************************************************************
@@ -243,4 +239,6 @@ begin
 	end
 
 end
+
+
 GO

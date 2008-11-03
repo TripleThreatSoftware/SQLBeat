@@ -1,9 +1,4 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-
-ALTER procedure [dbo].[pr_graph_sqlDiskLoad_byDatabase_byHour] (@cServerName varchar(100))
+CREATE procedure [dbo].[pr_graph_sqlDiskLoad_byDatabase_byHour] (@cServerName varchar(100))
 as
 begin
 
@@ -130,3 +125,7 @@ begin
 	drop table #dataValues
 	drop table #activity
 end
+
+
+
+GO

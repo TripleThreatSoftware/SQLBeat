@@ -1,12 +1,4 @@
-USE [Notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_rpt_outageReport]    Script Date: 06/18/2008 13:10:44 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-
-ALTER procedure [dbo].[pr_rpt_outageReport]
+CREATE procedure [dbo].[pr_rpt_outageReport]
 as
 begin
 
@@ -180,7 +172,8 @@ begin
 		select top 20
 			@cThisMessage = @cThisMessage +
 				left(serverName + space(20), 20) + ' ' +
-				left(convert(varchar(19), outageStart, 120) + space(19), 19) + ' ' +
+				left(
+convert(varchar(19), outageStart, 120) + space(19), 19) + ' ' +
 				left(isnull(convert(varchar(19), outageStop, 120), '') + space(19), 19) + ' ' +
 				left(details, 35) + char(13)
 			from #detailOutput
@@ -256,3 +249,6 @@ begin
 	drop table #detailOutput
 
 end
+
+
+GO

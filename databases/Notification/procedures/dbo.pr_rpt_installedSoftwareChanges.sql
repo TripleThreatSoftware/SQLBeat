@@ -1,7 +1,7 @@
 -- exec pr_rpt_installedSoftwareChanges '2008-02-01', '2008-06-20'
 -- exec pr_rpt_installedSoftwareChanges
 
-ALTER procedure [dbo].[pr_rpt_installedSoftwareChanges] (@dStartDate dateTime = null, @dEndDate dateTime = null)
+create procedure [dbo].[pr_rpt_installedSoftwareChanges] (@dStartDate dateTime = null, @dEndDate dateTime = null)
 as
 begin
 
@@ -113,3 +113,7 @@ begin
 end
 -- select top 100 * from notification..notificationLog order by ukey desc
 -- delete from notification..notificationLog where ukey in (29609,29608,29607)
+
+
+
+GO

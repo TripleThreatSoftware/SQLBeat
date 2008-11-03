@@ -1,8 +1,4 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-ALTER procedure [dbo].[pr_dashboard_returnSQLServers]
+CREATE procedure [dbo].[pr_dashboard_returnSQLServers]
 as
 begin
 	set nocount on
@@ -212,7 +208,8 @@ begin
 		left outer join (
 			select a.*,
 				convert(decimal(10,2), convert(decimal(15,10), droppedPings)/convert(decimal(15,10), totalPings) * 100) as failureRate,
-				convert(decimal(10,2), convert(decimal(15,10), (totalPings - droppedPings))/convert(decimal(15,10), totalPings) * 100) as availability
+				convert(decimal(10,2), convert(decimal(15,10), (totalPings -
+droppedPings))/convert(decimal(15,10), totalPings) * 100) as availability
 				from (
 					select
 						a.serverName,
@@ -232,3 +229,6 @@ begin
 	drop table #results
 	drop table #databaseReadings
 end
+
+
+GO

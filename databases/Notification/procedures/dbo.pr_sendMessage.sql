@@ -1,4 +1,4 @@
-ALTER procedure [dbo].[pr_sendMessage] (@cFrom varchar(100), @cTo varchar(500), @cSubject varchar(500), @cBody varchar(8000))
+CREATE procedure [dbo].[pr_sendMessage] (@cFrom varchar(100), @cTo varchar(500), @cSubject varchar(500), @cBody varchar(8000))
 as
 begin
 	declare @cClientCode varchar(100)
@@ -31,4 +31,7 @@ begin
 --	set @cTo = 'cole@triplethreatsoftware.com'
 --	exec sp_send_cdosysmail @cFrom, @cTo, @cSubject, @cBody
 end
+
+
+
 GO

@@ -1,8 +1,4 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-ALTER procedure [dbo].[pr_dashboard_returnServerList]
+CREATE procedure [dbo].[pr_dashboard_returnServerList]
 as
 begin
 
@@ -42,3 +38,7 @@ begin
 		order by case when b.isProduction=1 then 0 else 1 end, isnull(b.groupName, ''), a.serverName
 
 end
+
+
+
+GO

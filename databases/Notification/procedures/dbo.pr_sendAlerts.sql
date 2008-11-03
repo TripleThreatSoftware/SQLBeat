@@ -1,21 +1,7 @@
-USE [Notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_sendAlerts]    Script Date: 08/27/2008 09:36:53 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-
--- exec pr_sendAlerts 'cole', 1
--- exec pr_sendAlerts '', 0
-ALTER procedure [dbo].[pr_sendAlerts] (@cUserName varchar(100) = '', @bIsPreview bit = 0)
+CREATE procedure [dbo].[pr_sendAlerts] (@cUserName varchar(100) = '', @bIsPreview bit = 0)
 as
 begin
 	set nocount off
-
---declare @cUserName varchar(100), @bIsPreview bit
---set @cUserName = null
---set @bIsPreview = 0
 
 	declare @bIsBusinessHours bit
 	declare @nUkeyMessage int
@@ -163,14 +149,12 @@ begin
 			-- panic! email Cole, do not send these out
 
 			set @cThisSubject = 'SQLBeat (' + @@servername + '): More than 500 messages are queued to send'
-			set @cThisMessage = 'There are ' + convert(varchar(20), (select count(*) from #messagesToSend)) + ' messages in the hopper to send on ' + @@servername + '.'
+			set @cThisMessage = 'There are ' + convert(varchar(20), (select count(*) from #messagesToSend)) + ' messages in the hopper to send for ' + @@servername + '.'
 
 			exec pr_sendMessage '', 'cole@sqlbeat.com', 'More than 100 messages are queued to send', @cThisMessage
-
 		end
 		else
 		begin
-
 			set @nUkeyMessage = 0
 
 			while exists (select top 1 ukey from #messagesToSend where ukey > @nUkeyMessage and isnull(subject, '') <> '')
@@ -201,10 +185,14 @@ begin
 	begin
 		select ukey, serverName, ymd, left(subject, 130) as subject, emailAddress
 			from #messagesToSend
---			where ymd >= dateAdd(day, -1, getDate())
+			where ymd >= dateAdd(day, -1, getDate())
 			order by ymd desc, subject
 	end
 
 	drop table #messages
 	drop table #messagesToSend
 end
+
+
+
+GO

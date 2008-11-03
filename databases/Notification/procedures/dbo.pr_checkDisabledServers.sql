@@ -1,8 +1,4 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-ALTER procedure [dbo].[pr_checkDisabledServers]
+CREATE procedure [dbo].[pr_checkDisabledServers]
 as
 begin
 	declare @cServerName varchar(100)
@@ -45,3 +41,7 @@ begin
 		exec pr_pingServer @cServerName
 	end
 end
+
+
+
+GO

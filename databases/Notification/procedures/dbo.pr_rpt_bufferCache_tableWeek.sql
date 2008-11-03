@@ -42,6 +42,7 @@ begin
 
 	drop table #bufferHistory
 end
-go
 
-grant exec on pr_rpt_bufferCache_tableWeek to public
+
+
+GO

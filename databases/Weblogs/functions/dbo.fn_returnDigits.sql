@@ -1,4 +1,4 @@
-CREATE         function [dbo].[fn_returnDigits](@cSomeString varchar(50), @lStopAtFirstNonNumber bit = 0)
+CREATE         function [fn_returnDigits](@cSomeString varchar(50), @lStopAtFirstNonNumber bit = 0)
 returns bigInt
 as
 begin
@@ -38,4 +38,7 @@ begin
 
 	return @nReturnValue
 end
+
+
+
 GO

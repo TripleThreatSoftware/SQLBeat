@@ -1,7 +1,4 @@
-use [notification]
-GO
-
-ALTER procedure [dbo].[pr_monitorProductionConnections]
+CREATE procedure [dbo].[pr_monitorProductionConnections]
 as
 begin
 	set nocount on
@@ -158,7 +155,8 @@ begin
 			else 0
 			end as numWaitingConnections_oledb_delta,
 
-		a.secondsElapsed_avg_oledb as secondsElapsed_avg_oledb_now, b.secondsElapsed_avg_oledb as secondsElapsed_avg_oledb_hist,
+		a.secondsElapsed_avg_oledb as secondsElaps
+ed_avg_oledb_now, b.secondsElapsed_avg_oledb as secondsElapsed_avg_oledb_hist,
 		case when b.secondsElapsed_avg_oledb <> 0
 			then convert(int, (
 						convert(decimal(10,2), a.secondsElapsed_avg_oledb) / convert(decimal(10,2), b.secondsElapsed_avg_oledb)
@@ -309,3 +307,6 @@ begin
 	drop table #results
 
 end
+
+
+GO

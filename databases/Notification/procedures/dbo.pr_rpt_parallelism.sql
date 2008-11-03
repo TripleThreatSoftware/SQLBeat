@@ -1,10 +1,5 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-
 -- exec pr_rpt_paralellism 'spiderxps\sqlbeat'
-ALTER procedure [dbo].[pr_rpt_parallelism] (@cServerName varchar(100))
+CREATE procedure [dbo].[pr_rpt_parallelism] (@cServerName varchar(100))
 as
 begin
 
@@ -30,3 +25,7 @@ begin
 		order by a.ymd, a.spid
 
 end
+
+
+
+GO

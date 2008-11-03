@@ -1,6 +1,3 @@
-use [notification]
-go
-
 create function dbo.fn_removeFormatting(@cString varchar(8000))
 returns varchar(8000)
 as
@@ -11,3 +8,7 @@ begin
 
 	return @cReturnString
 end
+
+
+
+GO

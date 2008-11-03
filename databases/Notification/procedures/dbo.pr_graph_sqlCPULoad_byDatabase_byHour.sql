@@ -1,10 +1,6 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
 -- exec pr_graph_sqlCPULoad_byDatabase_byHour '10.3.10.110'
 
-ALTER procedure [dbo].[pr_graph_sqlCPULoad_byDatabase_byHour] (@cServerName varchar(100))
+CREATE procedure [dbo].[pr_graph_sqlCPULoad_byDatabase_byHour] (@cServerName varchar(100))
 as
 begin
 
@@ -131,3 +127,7 @@ begin
 	drop table #dataValues
 	drop table #activity
 end
+
+
+
+GO

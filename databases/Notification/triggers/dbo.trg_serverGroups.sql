@@ -1,12 +1,4 @@
-USE [Notification]
-GO
-/****** Object:  Trigger [dbo].[trg_serverGroups]    Script Date: 09/24/2008 10:50:35 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-
-ALTER trigger [dbo].[trg_serverGroups] on [dbo].[dm_serverGroups] for insert, update, delete
+CREATE trigger [trg_serverGroups] on [dm_serverGroups] for insert, update, delete
 as
 begin
 	declare @nUkeyGroup int
@@ -216,7 +208,8 @@ set @ReturnCode = 0
 
 begin transaction
 
-IF  EXISTS (SELECT job_id FROM msdb.dbo.sysjobs_view WHERE name = N''SQL Integrity Check - ' + @cGroupName + ''')
+IF  EXISTS (SELECT job_id FROM msdb.dbo.sysjobs_vie
+w WHERE name = N''SQL Integrity Check - ' + @cGroupName + ''')
 	EXEC msdb.dbo.sp_delete_job @job_name=N''SQL Integrity Check - ' + @cGroupName + ''', @delete_unused_schedule=1
 
 IF NOT EXISTS (SELECT name FROM msdb.dbo.syscategories WHERE name=N''SQLAutomation'' AND category_class=1)
@@ -255,12 +248,12 @@ IF (@@ERROR <> 0 OR @ReturnCode <> 0)
 EXEC @ReturnCode = msdb.dbo.sp_update_job @job_id = @jobId, @start_step_id = 1
 IF (@@ERROR <> 0 OR @ReturnCode <> 0)
 	GOTO QuitWithRollback
-EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_id=@jobId, @name=N''Every 15 minutes'',
+EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_id=@jobId, @name=N''Every minute'',
 		@enabled=1,
 		@freq_type=4,
 		@freq_interval=1,
 		@freq_subday_type=4,
-		@freq_subday_interval=15,
+		@freq_subday_interval=1,
 		@freq_relative_interval=0,
 		@freq_recurrence_factor=0,
 		@active_start_date=20070917,
@@ -330,12 +323,12 @@ IF (@@ERROR <> 0 OR @ReturnCode <> 0)
 EXEC @ReturnCode = msdb.dbo.sp_update_job @job_id = @jobId, @start_step_id = 1
 IF (@@ERROR <> 0 OR @ReturnCode <> 0)
 	GOTO QuitWithRollback
-EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_id=@jobId, @name=N''Every 15 minutes'',
+EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_id=@jobId, @name=N''Every minute'',
 		@enabled=1,
 		@freq_type=4,
 		@freq_interval=1,
 		@freq_subday_type=4,
-		@freq_subday_interval=15,
+		@freq_subday_interval=1,
 		@freq_relative_interval=0,
 		@freq_recurrence_factor=0,
 		@active_start_date=20070917,
@@ -434,7 +427,8 @@ EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_id=@jobId, @name=N''Every mi
 		@active_end_time=235959
 IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
 
-EXEC @ReturnCode = msdb.dbo.sp_add_jobserver @job_id = @jobId, @server_name = N''(local)''
+EXEC @ReturnCode = msdb
+.dbo.sp_add_jobserver @job_id = @jobId, @server_name = N''(local)''
 IF (@@ERROR <> 0 OR @ReturnCode <> 0)
 	GOTO QuitWithRollback
 COMMIT TRANSACTION
@@ -616,12 +610,12 @@ IF (@@ERROR <> 0 OR @ReturnCode <> 0)
 EXEC @ReturnCode = msdb.dbo.sp_update_job @job_id = @jobId, @start_step_id = 1
 IF (@@ERROR <> 0 OR @ReturnCode <> 0)
 	GOTO QuitWithRollback
-EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_id=@jobId, @name=N''Every 15 minutes'',
+EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_id=@jobId, @name=N''Every minute'',
 		@enabled=1,
 		@freq_type=4,
 		@freq_interval=1,
 		@freq_subday_type=4,
-		@freq_subday_interval=15,
+		@freq_subday_interval=1,
 		@freq_relative_interval=0,
 		@freq_recurrence_factor=0,
 		@active_start_date=20070917,
@@ -644,3 +638,5 @@ EndSave:'
 
 	end
 end
+
+GO

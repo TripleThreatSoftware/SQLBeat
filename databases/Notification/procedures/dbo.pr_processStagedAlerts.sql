@@ -1,7 +1,3 @@
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[pr_processStagedAlerts]') AND type in (N'P', N'PC'))
-BEGIN
-EXEC dbo.sp_executesql @statement = N'
-
 --select top 100 * from notificationLog
 --select top 100 * from notificationLog_stage
 
@@ -47,27 +43,27 @@ begin
 	create table #exceptions (messageSubstring varchar(100), emailDestination varchar(200))
 
 	insert into #exceptions (messageSubstring, emailDestination)
-	select ''admin'', ''DBA''
+	select 'admin', 'DBA'
 	union
-	select ''number of connections'', ''DBA''
+	select 'number of connections', 'DBA'
 	union
-	select ''number of waiting connections'', ''DBA''
+	select 'number of waiting connections', 'DBA'
 	union
-	select ''WMI'', ''DBA''
+	select 'WMI', 'DBA'
 	union
-	select ''Error Invalid parameter'', ''DBA''
+	select 'Error Invalid parameter', 'DBA'
 	union
-	select ''sleep'', ''DBA''
+	select 'sleep', 'DBA'
 	union
-	select @@servername, ''DBA''
+	select @@servername, 'DBA'
 
-	-- we need to establish a range to look at in case new messages are added as we''re processing
+	-- we need to establish a range to look at in case new messages are added as we're processing
 	select @nMinUkey = min(ukey), @nMaxUkey = max(ukey) from notificationLog_stage
 
 	if @nMinUkey is null and @nMaxUkey is null
 		return
 
-	-- We need to know if it''s business hours so we can queue the low priority alerts
+	-- We need to know if it's business hours so we can queue the low priority alerts
 	declare @bIsOffHours bit
 
 	if dbo.fn_isBusinessHours() = 1
@@ -91,7 +87,7 @@ begin
 				and a.subject = b.subject
 				and a.ukey <> b.ukey
 
-	-- don''t re-send messages that have gone out in the last little while
+	-- don't re-send messages that have gone out in the last little while
 	delete notificationLog_stage
 		from notificationLog_stage a
 		join notificationLog b on a.serverName = b.serverName
@@ -121,15 +117,15 @@ begin
 				or isJobFailure = 1
 			)
 			and (
-				subject like ''%monitor sql statistics%''
-				or subject like ''%configuration check%''
-				or subject like ''%import weblogs%''
-				or subject like ''%maintenance%''
-				or subject like ''%monitor%''
-				or subject like ''%report%''
-				or subject like ''%fragmentation check%''
-				or subject like ''%integrity check%''
-				or subject like ''%service check%''
+				subject like '%monitor sql statistics%'
+				or subject like '%configuration check%'
+				or subject like '%import weblogs%'
+				or subject like '%maintenance%'
+				or subject like '%monitor%'
+				or subject like '%report%'
+				or subject like '%fragmentation check%'
+				or subject like '%integrity check%'
+				or subject like '%service check%'
 				)
 
 	insert into notificationLog (ymd, subject, message, messageSent, messageSentDate, severity,
@@ -153,50 +149,50 @@ begin
 	-- Manual cleanup
 	--***************************************************************************************************
 
-	delete from notificationLog_stage where isJobFailure = 1 and subject like ''%import weblogs%''
+	delete from notificationLog_stage where isJobFailure = 1 and subject like '%import weblogs%'
 
 	-- any time the purge is blocking, ignore it
 	delete
 		from notificationLog_stage
 		where isBlocking = 1
-			and serverName = ''mssql-ny''
-			and (message like ''%purgebydays%'' or message like ''%msrepl%'')
+			and serverName = 'mssql-ny'
+			and (message like '%purgebydays%' or message like '%msrepl%')
 			and datePart(hour, ymd) between 13 and 15
 
 	-- any time replication is running long, ignore it
 	delete
 		from notificationLog_stage
 		where isLongRunningProcess = 1
-			and serverName = ''mssql-ny''
+			and serverName = 'mssql-ny'
 			and (
-					(message like ''%sp_MSadd%'' and message like ''%clusterservice%'')
-					or (message like ''%clusterservice%'' and message like ''%distribution%'')
+					(message like '%sp_MSadd%' and message like '%clusterservice%')
+					or (message like '%clusterservice%' and message like '%distribution%')
 				)
 
 	-- any time replication is kicking sand during the purge, ignore it
 	delete
 		from notificationLog_stage
 		where isLongRunningProcess = 1
-			and serverName = ''mssql-ny''
-			and (message like ''%sp_replcmds%'' or message like ''%sp_msget_repl_commands%'')
+			and serverName = 'mssql-ny'
+			and (message like '%sp_replcmds%' or message like '%sp_msget_repl_commands%')
 			and datePart(hour, ymd) between 13 and 15
 
 	-- when the purge kicks off, ignore replication synch messages
 	delete
 		from notificationLog_stage
-		where subject like ''%subscription%''
-			and subject like ''%out of synch%''
-			and subject like ''%0 hrs%''
+		where subject like '%subscription%'
+			and subject like '%out of synch%'
+			and subject like '%0 hrs%'
 			and datePart(hour, ymd) between 13 and 15
 
 	delete from notificationLog_stage
-		where message like ''%system failed to register host%''
-			or message like ''%Replication of license information%''
-			or message like ''%Group Policy objects%''
-			or message like ''%Security policies are propagated with warning%''
-			or message like ''%Group Policy processing%''
+		where message like '%system failed to register host%'
+			or message like '%Replication of license information%'
+			or message like '%Group Policy objects%'
+			or message like '%Security policies are propagated with warning%'
+			or message like '%Group Policy processing%'
 
-	-- any time we''ve got a box down for a long time, it''ll start to show up in the 15 minute summary
+	-- any time we've got a box down for a long time, it'll start to show up in the 15 minute summary
 	-- to cut down on the number of email messages that go out
 	insert into notificationLog (ymd, subject, message, messageSent, messageSentDate, severity,
 		isJobFailure, isLogShippingJobFailure, isLongRunningJob, isBlocking, isLongRunningProcess,
@@ -222,13 +218,14 @@ begin
 				where isServerPingable = 1
 				group by serverName
 				having dateDiff(minute, max(ymd), getDate()) >= 15
-			) b on a.serverName = b.serverName
+			) b on a.serverName = b.serve
+rName
 		where isConnectivity = 1
 
 	--***************************************************************************************************
 	-- Get down to the business of sending
 	--***************************************************************************************************
-	set @cQueuedMessages = ''''
+	set @cQueuedMessages = ''
 	set @nUkey = 0
 	set @bIsException = 0
 
@@ -253,13 +250,4 @@ begin
 end
 
 
-
-
-
-'
-END
-GO
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
 GO

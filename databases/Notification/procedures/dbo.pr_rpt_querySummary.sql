@@ -1,11 +1,6 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-
 -- exec pr_rpt_querySummary 'mssql-ny', null, null
 -- select * from tmp_messageLog
-ALTER procedure [dbo].[pr_rpt_querySummary] (@cServerName varchar(100), @nHours int = 6)
+CREATE procedure [dbo].[pr_rpt_querySummary] (@cServerName varchar(100), @nHours int = 6)
 as
 begin
 
@@ -38,3 +33,7 @@ begin
 	drop table #activity
 
 end
+
+
+
+GO

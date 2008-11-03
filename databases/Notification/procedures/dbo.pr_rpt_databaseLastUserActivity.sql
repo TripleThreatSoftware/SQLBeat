@@ -1,7 +1,4 @@
-use [notification]
-GO
-
-ALTER procedure [dbo].[pr_rpt_databaseLastUserActivity] (@cServerName varchar(200))
+CREATE procedure [dbo].[pr_rpt_databaseLastUserActivity] (@cServerName varchar(200))
 as
 begin
 
@@ -34,3 +31,7 @@ begin
 		order by a.dbName
 
 end
+
+
+
+GO

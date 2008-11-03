@@ -1,6 +1,4 @@
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[pr_rpt_outages_detail]') AND type in (N'P', N'PC'))
-BEGIN
-EXEC dbo.sp_executesql @statement = N'-- exec pr_rpt_outages_detail null, null
+-- exec pr_rpt_outages_detail null, null
 create procedure [pr_rpt_outages_detail] (@dStartDate dateTime, @dEndDate dateTime)
 as
 begin
@@ -18,7 +16,7 @@ begin
 
 	declare @results table (groupName varchar(200), serverName varchar(200), outageStart dateTime, outageStop dateTime, details varchar(200))
 
-	set @cSourceString = ''
+	set @cSourceString = '
 declare @outages table (serverName varchar(200), outageStart dateTime)
 declare @websiteOutages table (ukey_url int, outageStart dateTime)
 
@@ -26,22 +24,22 @@ insert into @outages
 select serverName, ymd as outageStart
 	from [**SERVERNAME**].notification.dbo.v_pingLog_all
 	where isServerPingable = 0
-		and ymd >= '''''' + convert(varchar(10), @dStartDate, 120) + ''''''
-		and ymd < dateAdd(day, 1, '''''' + convert(varchar(10), @dEndDate, 120) + '''''')
+		and ymd >= ''' + convert(varchar(10), @dStartDate, 120) + '''
+		and ymd < dateAdd(day, 1, ''' + convert(varchar(10), @dEndDate, 120) + ''')
 
 insert into @websiteOutages
 select ukey_url, ymd as outageStart
 	from [**SERVERNAME**].websiteMonitor.dbo.monitoredURLs_history a
-	where a.ymd >= '''''' + convert(varchar(10), @dStartDate, 120) + ''''''
+	where a.ymd >= ''' + convert(varchar(10), @dStartDate, 120) + '''
 		and isAvailable = 0
-		and a.ymd < dateAdd(day, 1, '''''' + convert(varchar(10), @dEndDate, 120) + '''''')
+		and a.ymd < dateAdd(day, 1, ''' + convert(varchar(10), @dEndDate, 120) + ''')
 
 select d.groupName, a.*
 	from (
 		select a.serverName, min(a.outageStart) as outageStart, b.outageStop,
  			case
-				when b.outageStop is null then ''''Offline''''
-				else ''''Not PINGing for '''' + convert(varchar(20), convert(int, ceiling((convert(decimal(10,2), dateDiff(millisecond, min(a.outageStart), b.outageStop))/1000.00)/60.00))) + '''' minute(s)''''
+				when b.outageStop is null then ''Offline''
+				else ''Not PINGing for '' + convert(varchar(20), convert(int, ceiling((convert(decimal(10,2), dateDiff(millisecond, min(a.outageStart), b.outageStop))/1000.00)/60.00))) + '' minute(s)''
 				end as details
 			from @outages a
 			left outer join (
@@ -58,10 +56,10 @@ select d.groupName, a.*
 	join [**SERVERNAME**].notification.dbo.dm_servers c on a.serverName = c.serverName
 	join [**SERVERNAME**].notification.dbo.dm_serverGroups d on c.ukey_group = d.ukey
 union
-select distinct ''''Websites'''', c.friendlyName, min(a.outageStart) as outageStart, b.outageStop,
+select distinct ''Websites'', c.friendlyName, min(a.outageStart) as outageStart, b.outageStop,
 	case
-		when b.outageStop is null then ''''Offline''''
-		else ''''Not PINGing for '''' + convert(varchar(20), convert(int, ceiling((convert(decimal(10,2), dateDiff(millisecond, min(a.outageStart), b.outageStop))/1000.00)/60.00))) + '''' minute(s)''''
+		when b.outageStop is null then ''Offline''
+		else ''Not PINGing for '' + convert(varchar(20), convert(int, ceiling((convert(decimal(10,2), dateDiff(millisecond, min(a.outageStart), b.outageStop))/1000.00)/60.00))) + '' minute(s)''
 		end as details
 	from @websiteOutages a
 	left outer join (
@@ -80,40 +78,40 @@ select distinct ''''Websites'''', c.friendlyName, min(a.outageStart) as outageSt
 union
 select d.groupName, a.*
 	from (
-		select left(substring(subject, charindex(''''with '''', subject) + 5, 99), charindex('''' '''', substring(subject, charindex(''''with '''', subject) + 5, 99)) - 1) as serverName,
+		select left(substring(subject, charindex(''with '', subject) + 5, 99), charindex('' '', substring(subject, charindex(''with '', subject) + 5, 99)) - 1) as serverName,
 			ymd as outageStart,
 			null as outageStop,
-			''''Point Outage'''' as details
+			''Point Outage'' as details
 			from [**SERVERNAME**].notification.dbo.v_notificationLog_all
 			where
 				serverName = @@serverName
-				and subject like ''''%lost communication%''''
-				and message not like ''''%transaction log%''''
-				and message not like ''''%disk space%''''
-				and ymd >= '''''' + convert(varchar(10), @dStartDate, 120) + ''''''
-				and ymd < dateAdd(day, 1, '''''' + convert(varchar(10), @dEndDate, 120) + '''''')
+				and subject like ''%lost communication%''
+				and message not like ''%transaction log%''
+				and message not like ''%disk space%''
+				and ymd >= ''' + convert(varchar(10), @dStartDate, 120) + '''
+				and ymd < dateAdd(day, 1, ''' + convert(varchar(10), @dEndDate, 120) + ''')
 		) a
 	join [**SERVERNAME**].notification.dbo.dm_servers c on a.serverName = c.serverName
 	join [**SERVERNAME**].notification.dbo.dm_serverGroups d on c.ukey_group = d.ukey
-''
+'
 
-	set @cSQLString = replace(@cSourceString, ''[**SERVERNAME**].'', '''')
+	set @cSQLString = replace(@cSourceString, '[**SERVERNAME**].', '')
 
 	insert into @results (groupName, serverName, outageStart, outageStop, details)
 	exec sp_executeSQL @cSQLString
 
-	set @cServerName = ''''
+	set @cServerName = ''
 
-	while exists (select top 1 settingValue from notification..dm_settings where settingName = ''Sister server'' and settingValue > @cServerName)
+	while exists (select top 1 settingValue from notification..dm_settings where settingName = 'Sister server' and settingValue > @cServerName)
 	begin
 		select top 1
 			@cServerName = settingValue
 			from notification..dm_settings
-			where settingName = ''Sister server''
+			where settingName = 'Sister server'
 				and settingValue > @cServerName
 			order by settingValue
 
-		set @cSQLString = replace(@cSourceString, ''**SERVERNAME**'', @cServerName)
+		set @cSQLString = replace(@cSourceString, '**SERVERNAME**', @cServerName)
 
 		insert into @results (groupName, serverName, outageStart, outageStop, details)
 		exec sp_executeSQL @cSQLString
@@ -125,10 +123,7 @@ select d.groupName, a.*
 
 
 end
-'
-END
-GO
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
+
+
+
 GO

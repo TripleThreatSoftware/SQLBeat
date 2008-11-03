@@ -1,12 +1,4 @@
-USE [Notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_rpt_weeklyTailReport]    Script Date: 09/10/2008 09:18:32 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-
-ALTER procedure [dbo].[pr_rpt_weeklyTailReport]
+CREATE procedure [dbo].[pr_rpt_weeklyTailReport]
 as
 begin
 	-- First, detail on the time and duration of outages in the last week
@@ -222,7 +214,8 @@ begin
 		'Website ' + friendlyName + ' went offline ' +
 			case when endDate is null
 				then 'and is still OFFLINE.'
-				else 'for ' + convert(varchar(20), convert(decimal(10,2), dateDiff(second, startDate, endDate) / 60.00)) + ' minutes.'
+				else 'for ' + convert(varchar(20), convert(decima
+l(10,2), dateDiff(second, startDate, endDate) / 60.00)) + ' minutes.'
 				end as eventDetail,
 		startDate, endDate
 		from #outageStart
@@ -418,7 +411,8 @@ begin
 			when subject like '%drive%is down to' then 'Disk space below threshold'
 			when subject like '%CPU load has triggered an alert%' or subject like 'cpu load is%' then 'CPU utilization above threshold'
 
-			when subject like '%event log service was%' or subject like '%initiated the restart%' or subject like '%system is shutting down%' then 'Rebooted'
+			when subject like '%event log service was%' or subject like '%initiated the restart
+%' or subject like '%system is shutting down%' then 'Rebooted'
 
 			when subject like '%shutdown%was%unexpected%' or subject like '%unexpected%shutdown%' then 'Unexpected Shutdown'
 
@@ -497,3 +491,5 @@ begin
 	drop table #tailDetail
 	drop table #otherErrors
 end
+
+GO

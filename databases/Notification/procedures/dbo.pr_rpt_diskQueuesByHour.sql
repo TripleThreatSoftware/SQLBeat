@@ -1,9 +1,5 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
 -- exec pr_rpt_diskQueuesByHour 'ttssvr'
-ALTER procedure [dbo].[pr_rpt_diskQueuesByHour] (@cServerName varchar(100))
+CREATE procedure [dbo].[pr_rpt_diskQueuesByHour] (@cServerName varchar(100))
 as
 begin
 --	declare @cServerName varchar(100)
@@ -61,3 +57,7 @@ begin
 	drop table #dataValues
 
 end
+
+
+
+GO

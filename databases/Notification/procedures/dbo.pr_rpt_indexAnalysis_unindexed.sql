@@ -1,9 +1,5 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
 -- exec pr_rpt_indexAnalysis_unindexed 'funmssql02', null, null
-ALTER procedure [dbo].[pr_rpt_indexAnalysis_unindexed] (@cServerName varchar(100) = '')
+CREATE procedure [dbo].[pr_rpt_indexAnalysis_unindexed] (@cServerName varchar(100) = '')
 as
 begin
 
@@ -97,3 +93,7 @@ begin
 	drop table #performanceSummary
 
 end
+
+
+
+GO

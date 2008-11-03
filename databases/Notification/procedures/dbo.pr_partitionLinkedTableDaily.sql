@@ -1,6 +1,4 @@
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[pr_partitionLinkedTableDaily]') AND type in (N'P', N'PC'))
-BEGIN
-EXEC dbo.sp_executesql @statement = N'-- exec pr_partitionLinkedTableDaily ''runs_data'', ''ukey_run'', ''runs'', ''ukey'', ''ymd'', ''ukey_run, ukey_server, ukey_counter, instance, ukey_keyName, ukey'', 0
+-- exec pr_partitionLinkedTableDaily 'runs_data', 'ukey_run', 'runs', 'ukey', 'ymd', 'ukey_run, ukey_server, ukey_counter, instance, ukey_keyName, ukey', 0
 CREATE procedure [pr_partitionLinkedTableDaily] (
 	@cTableName varchar(100),
 	@cForeignKeyField varchar(100),
@@ -52,28 +50,28 @@ begin
 	declare @dLastDayTable dateTime
 	declare @cDestinationTableName varchar(1000)
 
-	if not exists (select * from dbo.sysobjects where id = object_id(N''[dbo].[hist_partitionTableDaily]'') and OBJECTPROPERTY(id, N''IsUserTable'') = 1)
+	if not exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[hist_partitionTableDaily]') and OBJECTPROPERTY(id, N'IsUserTable') = 1)
 		create table hist_partitionTableDaily (ymd dateTime default getDate(), stepName varchar(200))
 
 	if @lMakeUkey = 1
-		set @cKeyFieldList = isnull(@cKeyFieldList, '''') + case when @cKeyFieldList = '''' then '''' else '', '' end + ''ukey''
-	if isnull(@cKeyFieldList, '''') not like ''%'' + @cForeignKeyField + ''%''
-		set @cKeyFieldList = @cForeignKeyField + case when isnull(@cKeyFieldList, '''') = '''' then '''' else '', '' end + isnull(@cKeyFieldList, '''')
+		set @cKeyFieldList = isnull(@cKeyFieldList, '') + case when @cKeyFieldList = '' then '' else ', ' end + 'ukey'
+	if isnull(@cKeyFieldList, '') not like '%' + @cForeignKeyField + '%'
+		set @cKeyFieldList = @cForeignKeyField + case when isnull(@cKeyFieldList, '') = '' then '' else ', ' end + isnull(@cKeyFieldList, '')
 
 	set @lHasUkey = 0
 
-	insert into hist_partitionTableDaily (stepName) values (''Starting'')
+	insert into hist_partitionTableDaily (stepName) values ('Starting')
 
-	-- Do this here so that if we''ve deleted tables from the views we catch it instead of conking later
+	-- Do this here so that if we've deleted tables from the views we catch it instead of conking later
 	exec pr_maintainPartitionedViews
 
-	insert into hist_partitionTableDaily (stepName) values (''Partitioned views recreated'')
+	insert into hist_partitionTableDaily (stepName) values ('Partitioned views recreated')
 
 	if (
 		select count(*)
 			from sysObjects a
 			join sysColumns b on a.id = b.id and b.name = @cForeignKeyField
-			where a.name = @cTableName and a.xtype = ''U''
+			where a.name = @cTableName and a.xtype = 'U'
 		) > 0
 		set @bHasForeignKeyField = 1
 	else
@@ -89,9 +87,9 @@ begin
 	create table #dm_ymd (ymd dateTime, week int, day int, month int, year int, ymdString varchar(8))
 	set @dToday = dateAdd(year, -5, convert(varchar(10), getDate(), 120))
 
-	-- with linked tables, if we try and build one with data for today we don''t yet know the full range of FK values
+	-- with linked tables, if we try and build one with data for today we don't yet know the full range of FK values
 	-- it will end up creating a constraint violation the next time we insert for today, later in the day
-	-- SOOOO: We don''t insert records for today with linked table calls
+	-- SOOOO: We don't insert records for today with linked table calls
 	while @dToday < convert(varchar(10), getDate(), 120)
 	begin
 		insert into #dm_ymd (ymd, week, day, month, year) values (
@@ -100,64 +98,64 @@ begin
 	end
 
 	update #dm_ymd
-		set ymdString = convert(varchar(4), [year]) + dbo.fn_padl(month, 2, ''0'') + dbo.fn_padl(day, 2, ''0'')
+		set ymdString = convert(varchar(4), [year]) + dbo.fn_padl(month, 2, '0') + dbo.fn_padl(day, 2, '0')
 
 	set @nLastDayTableWeek = datePart(week, dateAdd(day, -14, convert(varchar(10), getDate(), 120)))
 	set @nLastDayTableYear = datePart(year, dateAdd(day, -14, convert(varchar(10), getDate(), 120)))
 
 	set @dLastDayTable = (select max(ymd) from #dm_ymd where year = @nLastDayTableYear and week = @nLastDayTableWeek)
 
-	insert into hist_partitionTableDaily (stepName) values (''Day values table created'')
+	insert into hist_partitionTableDaily (stepName) values ('Day values table created')
 
 	--************************************************************************************************
 	--************************************************************************************************
 
 	set @cArchiveTableName = @cTableName
 
-	if right(@cTableName, 6) in (''_daily'', ''_stage'')
+	if right(@cTableName, 6) in ('_daily', '_stage')
 		set @cArchiveTableName = left(@cTableName, len(@cTableName) - 6)
 	else
-		if left(@cTableName, 6) = ''stage_''
+		if left(@cTableName, 6) = 'stage_'
 			set @cArchiveTableName = right(@cTableName, len(@cTableName) - 6)
 		else
-			if left(@cTableName, 8) = ''staging_''
+			if left(@cTableName, 8) = 'staging_'
 				set @cArchiveTableName = right(@cTableName, len(@cTableName) - 8)
 			else
 				set @cArchiveTableName = @cTableName
 
-	-- Here we want it to make all the day tables it can. After that''s done, the weekly archive rollup SP
-	-- will be called to wrap them all up. Seems a little redundant but it''s the smoothest way to automate
+	-- Here we want it to make all the day tables it can. After that's done, the weekly archive rollup SP
+	-- will be called to wrap them all up. Seems a little redundant but it's the smoothest way to automate
 	-- it all.
-	set @dFirstDate = ''2000-01-01''
+	set @dFirstDate = '2000-01-01'
 
 	if @bHasForeignKeyField = 1
 	begin
-		set @cSQLString = ''select distinct b.ymd, b.ymdString, b.year, b.month, b.week, a.ukey_min, a.ukey_max
-			from ( '' +
-				''select convert(varchar(10), '' + @cForeignTableDateField + '', 120) as dateField, '' +
-					''min(['' + @cForeignTableKeyField + '']) as ukey_min, '' +
-					''max(['' + @cForeignTableKeyField + '']) as ukey_max '' +
-					''from '' + @cForeignTable + '' '' +
-					''where ['' + @cForeignTableKeyField + ''] in (select distinct ['' + @cForeignKeyField + ''] from ['' + @cTableName + '']) '' +
-					''	and ['' + @cForeignTableDateField + ''] < convert(varchar(10), getDate(), 120) '' +
-					''group by convert(varchar(10), '' + @cForeignTableDateField + '', 120) '' +
-				'') a
+		set @cSQLString = 'select distinct b.ymd, b.ymdString, b.year, b.month, b.week, a.ukey_min, a.ukey_max
+			from ( ' +
+				'select convert(varchar(10), ' + @cForeignTableDateField + ', 120) as dateField, ' +
+					'min([' + @cForeignTableKeyField + ']) as ukey_min, ' +
+					'max([' + @cForeignTableKeyField + ']) as ukey_max ' +
+					'from ' + @cForeignTable + ' ' +
+					'where [' + @cForeignTableKeyField + '] in (select distinct [' + @cForeignKeyField + '] from [' + @cTableName + ']) ' +
+					'	and [' + @cForeignTableDateField + '] < convert(varchar(10), getDate(), 120) ' +
+					'group by convert(varchar(10), ' + @cForeignTableDateField + ', 120) ' +
+				') a
 			left outer join #dm_ymd b on a.dateField = b.ymd
-				and b.ymd >= '''''' + convert(varchar(10), @dFirstDate, 120) + ''''''''
+				and b.ymd >= ''' + convert(varchar(10), @dFirstDate, 120) + ''''
 
 		insert into #days
 		exec sp_executeSQL @cSQLString
 	end
 
-	insert into hist_partitionTableDaily (stepName) values (''Days in staging table counted'')
+	insert into hist_partitionTableDaily (stepName) values ('Days in staging table counted')
 
 	if (select count(*) from #days where ymd is null) > 0 or (select count(*) from #days) = 0
 	begin
-		print ''Days not present in the dimension table. Unable to process.''
+		print 'Days not present in the dimension table. Unable to process.'
 		print @cSQLString
-		print ''Date field: '' + @cForeignTableDateField
-		print ''First date: '' + convert(varchar(20), @dFirstDate)
-		print ''Has date field: '' + case when @bHasForeignKeyField = 1 then ''Yes'' else ''No'' end
+		print 'Date field: ' + @cForeignTableDateField
+		print 'First date: ' + convert(varchar(20), @dFirstDate)
+		print 'Has date field: ' + case when @bHasForeignKeyField = 1 then 'Yes' else 'No' end
 
 		drop table #results
 		drop table #days
@@ -172,20 +170,20 @@ begin
 
 	-- hit the view first for structure
 	set @cSQLString =
-		''select distinct syscolumns.name as fieldName, '' +
-		''	systypes.name as fieldType, '' +
-		'' 	syscolumns.xprec as fieldLength, '' +
-		''	syscolumns.xscale as fieldPrecision, '' +
-		''	syscolumns.length as stringLength, '' +
-		''	syscolumns.isnullable as nullable '' +
-		''	from syscolumns as syscolumns '' +
-		''	join sysobjects as sysobjects on sysobjects.id = syscolumns.id '' +
-		''		and sysobjects.xtype = ''''V'''' '' +
-		''		and sysobjects.name = ''''v_'' + @cArchiveTableName + ''_all'''''' +
+		'select distinct syscolumns.name as fieldName, ' +
+		'	systypes.name as fieldType, ' +
+		' 	syscolumns.xprec as fieldLength, ' +
+		'	syscolumns.xscale as fieldPrecision, ' +
+		'	syscolumns.length as stringLength, ' +
+		'	syscolumns.isnullable as nullable ' +
+		'	from syscolumns as syscolumns ' +
+		'	join sysobjects as sysobjects on sysobjects.id = syscolumns.id ' +
+		'		and sysobjects.xtype = ''V'' ' +
+		'		and sysobjects.name = ''v_' + @cArchiveTableName + '_all''' +
 		case when @lMakeUkey = 1 then
-		''		and syscolumns.name <> ''''ukey''''''
-			else '''' end + '' '' +
-		''	join systypes as systypes on syscolumns.xtype = systypes.xtype ''
+		'		and syscolumns.name <> ''ukey'''
+			else '' end + ' ' +
+		'	join systypes as systypes on syscolumns.xtype = systypes.xtype '
 
 --	print @cSQLString
 	insert into #viewFields
@@ -195,37 +193,38 @@ begin
 	if @@rowcount = 0
 	begin
 		set @cSQLString =
-			''select distinct syscolumns.name as fieldName, '' +
-			''	systypes.name as fieldType, '' +
-			'' 	syscolumns.xprec as fieldLength, '' +
-			''	syscolumns.xscale as fieldPrecision, '' +
-			''	syscolumns.length as stringLength, '' +
-			''	syscolumns.isnullable as nullable '' +
-			''	from syscolumns as syscolumns '' +
-			''	join sysobjects as sysobjects on sysobjects.id = syscolumns.id '' +
-			''		and sysobjects.xtype = ''''U'''' '' +
-			''		and sysobjects.name = '''''' + @cTableName + '''''''' +
-			''	join systypes as systypes on syscolumns.xtype = systypes.xtype ''
+			'select distinct syscolumns.name as fieldName, ' +
+
+		'	systypes.name as fieldType, ' +
+			' 	syscolumns.xprec as fieldLength, ' +
+			'	syscolumns.xscale as fieldPrecision, ' +
+			'	syscolumns.length as stringLength, ' +
+			'	syscolumns.isnullable as nullable ' +
+			'	from syscolumns as syscolumns ' +
+			'	join sysobjects as sysobjects on sysobjects.id = syscolumns.id ' +
+			'		and sysobjects.xtype = ''U'' ' +
+			'		and sysobjects.name = ''' + @cTableName + '''' +
+			'	join systypes as systypes on syscolumns.xtype = systypes.xtype '
 
 --		print @cSQLString
 		insert into #viewFields
 		exec sp_executeSQL @cSQLString
 	end
 
-	insert into hist_partitionTableDaily (stepName) values (''Structure of destination table divined'')
+	insert into hist_partitionTableDaily (stepName) values ('Structure of destination table divined')
 
---	print ''Processing '' + convert(varchar(20), @@rowcount) + '' fields''
+--	print 'Processing ' + convert(varchar(20), @@rowcount) + ' fields'
 
-	-- if it''s not one of the key fields then assume it shouldn''t be in the partitioned tables
-	if ''ukey'' not in (select listItem from dbo.fn_makeTableFromList(@cKeyFieldList, '',''))
+	-- if it's not one of the key fields then assume it shouldn't be in the partitioned tables
+	if 'ukey' not in (select listItem from dbo.fn_makeTableFromList(@cKeyFieldList, ','))
 	begin
-		delete from #viewFields where fieldName = ''ukey''
+		delete from #viewFields where fieldName = 'ukey'
 	end
 
 	-- and for these, build a list of fields they all have in common
 	-- also create a table structure statement to remove identity columns
-	set @cFieldList = ''''
-	set @cTableStructure = ''''
+	set @cFieldList = ''
+	set @cTableStructure = ''
 	while exists (select top 1 * from #viewFields)
 	begin
 		select top 1 @cFieldName = fieldName,
@@ -236,45 +235,45 @@ begin
 			@nIsNullable = nullable
 			from #viewFields
 
-		if @cFieldName = ''ukey''
+		if @cFieldName = 'ukey'
 			set @lHasUkey = 1
 
-		set @cFieldList = @cFieldList + case when len(@cFieldList) > 0 then '','' else '''' end + ''['' + @cFieldName + '']''
+		set @cFieldList = @cFieldList + case when len(@cFieldList) > 0 then ',' else '' end + '[' + @cFieldName + ']'
 
 		if @nFieldLength = 0
-			set @cTableStructure = @cTableStructure + case when len(@cTableStructure) > 0 then '','' else '''' end +
-				'' ['' + @cFieldName + ''] '' + @cFieldType + '' ('' + convert(varchar(100), @nStringLength) + '')''
+			set @cTableStructure = @cTableStructure + case when len(@cTableStructure) > 0 then ',' else '' end +
+				' [' + @cFieldName + '] ' + @cFieldType + ' (' + convert(varchar(100), @nStringLength) + ')'
 		else
 		begin
-			if @nFieldPrecision > 0 and @cFieldType not in (''dateTime'', ''money'')
-				set @cTableStructure = @cTableStructure + case when len(@cTableStructure) > 0 then '','' else '''' end +
-					'' ['' + @cFieldName + ''] '' + @cFieldType + '' ('' + convert(varchar(100), @nFieldLength) + '', '' + convert(varchar(100), @nFieldPrecision) + '')''
+			if @nFieldPrecision > 0 and @cFieldType not in ('dateTime', 'money')
+				set @cTableStructure = @cTableStructure + case when len(@cTableStructure) > 0 then ',' else '' end +
+					' [' + @cFieldName + '] ' + @cFieldType + ' (' + convert(varchar(100), @nFieldLength) + ', ' + convert(varchar(100), @nFieldPrecision) + ')'
 			else
-				set @cTableStructure = @cTableStructure + case when len(@cTableStructure) > 0 then '','' else '''' end +
-					'' ['' + @cFieldName + ''] '' + @cFieldType
+				set @cTableStructure = @cTableStructure + case when len(@cTableStructure) > 0 then ',' else '' end +
+					' [' + @cFieldName + '] ' + @cFieldType
 		end
 
-		if @cFieldName in (''ukey'', @cForeignKeyField) or @nIsNullable = 0 or @cFieldName in (select listItem from dbo.fn_makeTableFromList(@cKeyFieldList, '',''))
-			set @cTableStructure = @cTableStructure + '' not null''
+		if @cFieldName in ('ukey', @cForeignKeyField) or @nIsNullable = 0 or @cFieldName in (select listItem from dbo.fn_makeTableFromList(@cKeyFieldList, ','))
+			set @cTableStructure = @cTableStructure + ' not null'
 
 		delete from #viewFields where fieldName = @cFieldName
 	end
 
-	-- if there''s no UKEY, add one and make it an identity
+	-- if there's no UKEY, add one and make it an identity
 	if @lMakeUkey = 1
 	begin
-		set @cTableStructure = @cTableStructure + '', [ukey] bigint not null''
-		set @cFieldList = @cFieldList + '', [ukey]''
+		set @cTableStructure = @cTableStructure + ', [ukey] bigint not null'
+		set @cFieldList = @cFieldList + ', [ukey]'
 
--- 		set @cSQlString = ''alter table ['' + @cTableName + ''] add ukey bigint default 0''
+-- 		set @cSQlString = 'alter table [' + @cTableName + '] add ukey bigint default 0'
 -- 		exec sp_executeSQL @cSQLString
 	end
 
-	insert into hist_partitionTableDaily (stepName) values (''Common fields and structure CREATE finished'')
+	insert into hist_partitionTableDaily (stepName) values ('Common fields and structure CREATE finished')
 
 	set @cArchiveDBName = db_name()
 
-	set @dToday = ''1900-01-01''
+	set @dToday = '1900-01-01'
 
 	while exists (select top 1 * from #days where ymd > @dToday)
 	begin
@@ -292,46 +291,44 @@ begin
 
 		if (select count(*) from master.dbo.sysdatabases where [name] = @cDatabaseName) = 0
 		begin
---			print ''Database '' + @cDatabaseName + '' does not exist''
+--			print 'Database ' + @cDatabaseName + ' does not exist'
 
-			select top 1 @cOldestDatabasePath = left(fileName, len(fileName) - charindex(''\'', reverse(fileName)) + 1)
+			select top 1 @cOldestDatabasePath = left(fileName, len(fileName) - charindex('\', reverse(fileName)) + 1)
 				from master.dbo.sysdatabases
 				where left(name, len(@cArchiveDBName)) = @cArchiveDBName
 					and dbo.fn_returnDigits(name, 0) > 0
-				order by dbo.fn_returnDigits(name, 0) desc
-
-			if @cOldestDatabasePath is null
+				order by dbo.fn_returnDigits(name, 0) desc			if @cOldestDatabasePath is null
 			begin
-				select top 1 @cOldestDatabasePath = left(fileName, len(fileName) - charindex(''\'', reverse(fileName)) + 1)
+				select top 1 @cOldestDatabasePath = left(fileName, len(fileName) - charindex('\', reverse(fileName)) + 1)
 					from master.dbo.sysdatabases
 					where left(name, len(@cArchiveDBName)) = @cArchiveDBName
 					order by dbo.fn_returnDigits(name, 0) desc
 			end
 
---			print ''Creating new database, storing files in: '' + isnull(@cOldestDatabasePath, ''BAD PATH'')
+--			print 'Creating new database, storing files in: ' + isnull(@cOldestDatabasePath, 'BAD PATH')
 
 			-- This adds the newest database to the system
 			set @cSQLString =
-				''CREATE DATABASE ['' + @cDatabaseName + ''] '' +
-					''ON (NAME = N'''''' + @cDatabaseName + '''''', '' +
-						''FILENAME = N'''''' + @cOldestDatabasePath + @cDatabaseName + ''_data.mdf'''' , '' +
-						''SIZE = 50, FILEGROWTH = 50) '' +
-					''LOG ON (NAME = N'''''' + @cDatabaseName + ''_log'''', '' +
-						''FILENAME = N'''''' + @cOldestDatabasePath + @cDatabaseName + ''_log.ldf'''' , '' +
-						''SIZE = 25, FILEGROWTH = 25)''
+				'CREATE DATABASE [' + @cDatabaseName + '] ' +
+					'ON (NAME = N''' + @cDatabaseName + ''', ' +
+						'FILENAME = N''' + @cOldestDatabasePath + @cDatabaseName + '_data.mdf'' , ' +
+						'SIZE = 50, FILEGROWTH = 50) ' +
+					'LOG ON (NAME = N''' + @cDatabaseName + '_log'', ' +
+						'FILENAME = N''' + @cOldestDatabasePath + @cDatabaseName + '_log.ldf'' , ' +
+						'SIZE = 25, FILEGROWTH = 25)'
 --			print @cSQLString
 			exec sp_executesql @cSQLString
 
-			set @cSQLString = ''alter database ['' + @cDatabaseName + ''] set recovery simple''
+			set @cSQLString = 'alter database [' + @cDatabaseName + '] set recovery simple'
 --			print @cSQLString
 			exec sp_executesql @cSQLString
 		end
 --		else
---			print ''Database '' + @cDatabaseName + '' already exists''
+--			print 'Database ' + @cDatabaseName + ' already exists'
 
 		set @lMakeNewTable = 0
 
-		set @cSQLString = ''select count(*) as numRows from '' + @cDatabaseName + ''.dbo.sysObjects where xtype = ''''U'''' and name = '''''' + @cArchiveTableName + ''_'' + @cToday + ''''''''
+		set @cSQLString = 'select count(*) as numRows from ' + @cDatabaseName + '.dbo.sysObjects where xtype = ''U'' and name = ''' + @cArchiveTableName + '_' + @cToday + ''''
 
 		insert into #results (numRows)
 		exec sp_executeSQL @cSQLString
@@ -342,8 +339,8 @@ begin
 		begin
 			truncate table #results
 
-			-- the table does exists, and lets see if it''s empty. if so, drop it and make it again - just in case
-			set @cSQLString = ''select count(*) from '' + @cDatabaseName + ''..['' + @cArchiveTableName + ''_'' + @cToday + '']''
+			-- the table does exists, and lets see if it's empty. if so, drop it and make it again - just in case
+			set @cSQLString = 'select count(*) from ' + @cDatabaseName + '..[' + @cArchiveTableName + '_' + @cToday + ']'
 
 			insert into #results
 			exec sp_executeSQL @cSQLString
@@ -352,8 +349,8 @@ begin
 			begin
 				set @lMakeNewTable = 1
 
-				set @cSQLString = ''use '' + @cDatabaseName + ''
-					drop table ['' + @cArchiveTableName + ''_'' + @cToday + '']''
+				set @cSQLString = 'use ' + @cDatabaseName + '
+					drop table [' + @cArchiveTableName + '_' + @cToday + ']'
 --				print @cSQLString
 				exec sp_executeSQL @cSQLString
 			end
@@ -364,104 +361,104 @@ begin
 
 		if @lMakeNewTable = 1
 		begin
-			-- If there''s an archive_ table here, it''ll have the same named constraints as I''m about to make,
+			-- If there's an archive_ table here, it'll have the same named constraints as I'm about to make,
 			-- se it needs to be gone first.
-			set @cSQLString = ''select count(*) as numRows from '' + @cDatabaseName + ''.dbo.sysObjects where xtype = ''''U'''' and name = ''''archive_'' + @cArchiveTableName + ''_'' + @cToday + ''''''''
+			set @cSQLString = 'select count(*) as numRows from ' + @cDatabaseName + '.dbo.sysObjects where xtype = ''U'' and name = ''archive_' + @cArchiveTableName + '_' + @cToday + ''''
 
 			insert into #results
 			exec sp_executeSQL @cSQLString
 			if (select top 1 numRows from #results) > 0
 			begin
-				set @cSQLString = ''use '' + @cDatabaseName + ''
-					drop table archive_'' + @cArchiveTableName + ''_'' + @cToday
+				set @cSQLString = 'use ' + @cDatabaseName + '
+					drop table archive_' + @cArchiveTableName + '_' + @cToday
 --				print @cSQLString
 				exec sp_executeSQL @cSQLString
 			end
 
 			truncate table #results
 
-			set @cSQLString = ''
-use '' + @cDatabaseName + ''
-create table ['' + @cArchiveTableName + ''_'' + @cToday + ''] ('' + @cTableStructure + '')''
+			set @cSQLString = '
+use ' + @cDatabaseName + '
+create table [' + @cArchiveTableName + '_' + @cToday + '] (' + @cTableStructure + ')'
 
 --			print @cSQLString
 			exec sp_executeSQL @cSQLString
 
-			set @cSQLString = ''use '' + @cDatabaseName + '' grant select on '' + @cArchiveTableName + ''_'' + @cToday + '' to public''
+			set @cSQLString = 'use ' + @cDatabaseName + ' grant select on ' + @cArchiveTableName + '_' + @cToday + ' to public'
 --			print @cSQLString
 			exec sp_executeSQL @cSQLString
 
-			set @cPKString = ''''
+			set @cPKString = ''
 
 			if @bHasForeignKeyField = 1
 			begin
-				set @cSQLString = ''use '' + @cDatabaseName + '' ALTER TABLE '' + @cArchiveTableName + ''_'' + @cToday + '' WITH CHECK '' +
-						''ADD CONSTRAINT '' + @cArchiveTableName + ''_'' + @cToday + ''_ymd '' +
-						''CHECK ('' + @cForeignKeyField + '' >= '' + convert(varchar(20), @nUkeyMin) + ''
-							and '' + @cForeignKeyField + '' <= '' + convert(varchar(20), @nUkeyMax) + '')''
+				set @cSQLString = 'use ' + @cDatabaseName + ' ALTER TABLE ' + @cArchiveTableName + '_' + @cToday + ' WITH CHECK ' +
+						'ADD CONSTRAINT ' + @cArchiveTableName + '_' + @cToday + '_ymd ' +
+						'CHECK (' + @cForeignKeyField + ' >= ' + convert(varchar(20), @nUkeyMin) + '
+							and ' + @cForeignKeyField + ' <= ' + convert(varchar(20), @nUkeyMax) + ')'
 --				print @cSQLString
 				exec sp_executesql @cSQLString
 
-				if @cKeyfieldList not like ''%'' + @cForeignKeyField + ''%''
-					set @cPKString = case when @cPKString = '''' then @cForeignKeyField else @cPKString + '', '' + @cForeignKeyField end
+				if @cKeyfieldList not like '%' + @cForeignKeyField + '%'
+					set @cPKString = case when @cPKString = '' then @cForeignKeyField else @cPKString + ', ' + @cForeignKeyField end
 			end
 
-			set @cSQLString = ''use '' + @cDatabaseName + ''
-				ALTER TABLE '' + @cArchiveTableName + ''_'' + @cToday + ''
-					ADD CONSTRAINT [PK_'' + @cArchiveTableName + ''_'' + @cToday + '']
-					PRIMARY KEY CLUSTERED ('' + case when @cPKString <> '''' then @cPKString + '', '' else '''' end + @cKeyfieldList + '')
-					WITH  FILLFACTOR = 80''
+			set @cSQLString = 'use ' + @cDatabaseName + '
+				ALTER TABLE ' + @cArchiveTableName + '_' + @cToday + '
+					ADD CONSTRAINT [PK_' + @cArchiveTableName + '_' + @cToday + ']
+					PRIMARY KEY CLUSTERED (' + case when @cPKString <> '' then @cPKString + ', ' else '' end + @cKeyfieldList + ')
+					WITH  FILLFACTOR = 80'
 --			print @cSQLString
 			exec sp_executesql @cSQLString
 		end
 	end
 
-	insert into hist_partitionTableDaily (stepName) values (''Database, tables and indexes created'')
+	insert into hist_partitionTableDaily (stepName) values ('Database, tables and indexes created')
 
---	print ''Archiving old tables''
+--	print 'Archiving old tables'
 
 	exec pr_archiveOldLinkedPartitionedTables @cTableName, @cForeignKeyField, @cForeignTable, @cForeignTableKeyField, @cForeignTableDateField, @cKeyfieldList
 
-	insert into hist_partitionTableDaily (stepName) values (''Old tables archived'')
+	insert into hist_partitionTableDaily (stepName) values ('Old tables archived')
 
---	print ''Regenerating views''
+--	print 'Regenerating views'
 
 	exec pr_maintainPartitionedViews
 
-	insert into hist_partitionTableDaily (stepName) values (''Partitioned views recreated (2)'')
+	insert into hist_partitionTableDaily (stepName) values ('Partitioned views recreated (2)')
 
-	if (select count(*) from sysobjects where xtype = ''V'' and name = ''v_'' + @cArchiveTableName + ''_all'') > 0
+	if (select count(*) from sysobjects where xtype = 'V' and name = 'v_' + @cArchiveTableName + '_all') > 0
 	begin
 
 		-- this code removes duplicate data in the incoming records
 		create table #keyFields (fieldName varchar(100))
 		insert into #keyFields
 		select listItem
-			from dbo.fn_makeTableFromList(@cKeyFieldList, '','')
-			where (@lMakeUkey = 0 or listItem not like ''%ukey%'')
+			from dbo.fn_makeTableFromList(@cKeyFieldList, ',')
+			where (@lMakeUkey = 0 or listItem not like '%ukey%')
 
 		declare @cWhereClause varchar(1000)
 		declare @cThisKeyField varchar(100)
-		set @cWhereClause = ''''
+		set @cWhereClause = ''
 
-		if @bHasForeignKeyField = 1 and @cKeyFieldList not like ''%'' + @cForeignKeyField + ''%''
-			set @cWhereClause = ''a.'' + @cForeignKeyField + '' = b.'' + @cForeignKeyField
+		if @bHasForeignKeyField = 1 and @cKeyFieldList not like '%' + @cForeignKeyField + '%'
+			set @cWhereClause = 'a.' + @cForeignKeyField + ' = b.' + @cForeignKeyField
 
 		while exists (select top 1 * from #keyFields)
 		begin
 			select top 1 @cThisKeyField = fieldName from #keyFields
 
-			set @cWhereClause = @cWhereClause + case when @cWhereClause <> '''' then '' and '' else '''' end + ''a.'' + @cThisKeyField + '' = b.'' + @cThisKeyField
+			set @cWhereClause = @cWhereClause + case when @cWhereClause <> '' then ' and ' else '' end + 'a.' + @cThisKeyField + ' = b.' + @cThisKeyField
 
 			delete from #keyFields where fieldName = @cThisKeyField
 		end
 
 		-- end duplicate check
 
-		set @cSQLString = ''
-			select distinct a.['' + @cForeignKeyField + '']
-				from ['' + @cTableName + ''] a
-				join ['' + @cForeignTable + ''] b on a.['' + @cForeignKeyField + ''] = b.['' + @cForeignTableKeyField + '']''
+		set @cSQLString = '
+			select distinct a.[' + @cForeignKeyField + ']
+				from [' + @cTableName + '] a
+				join [' + @cForeignTable + '] b on a.[' + @cForeignKeyField + '] = b.[' + @cForeignTableKeyField + ']'
 
 		create table #valuesPresent (ukey bigint)
 
@@ -469,8 +466,8 @@ create table ['' + @cArchiveTableName + ''_'' + @cToday + ''] ('' + @cTableStruc
 		exec sp_executeSQL @cSQLString
 
 		-- note that the destination table will always have a UKEY, whether it comes from
-		-- source data or is an IDENTITY at the destination. If it''s in the source data,
-		-- it will be included in the field list. Otherwise it''ll happen in transfer.
+		-- source data or is an IDENTITY at the destination. If it's in the source data,
+		-- it will be included in the field list. Otherwise it'll happen in transfer.
 		select identity(int, 1, 1) as ukey,
 			[year],
 			[month],
@@ -481,15 +478,15 @@ create table ['' + @cArchiveTableName + ''_'' + @cToday + ''] ('' + @cTableStruc
 			max(ukey_max) as ukey_max,
 
 			case
-				when ymd > @dLastDayTable then ''['' + @cArchiveDBName + left(ymdString, 6) + '']..['' + @cArchiveTableName + ''_'' + ymdString + '']''
-				else ''['' + @cArchiveDBName + left(ymdString, 6) + '']..['' + @cArchiveTableName + ''_'' + left(ymdString, 6) + ''_week'' + convert(varchar(4), [week]) + '']''
+				when ymd > @dLastDayTable then '[' + @cArchiveDBName + left(ymdString, 6) + ']..[' + @cArchiveTableName + '_' + ymdString + ']'
+				else '[' + @cArchiveDBName + left(ymdString, 6) + ']..[' + @cArchiveTableName + '_' + left(ymdString, 6) + '_week' + convert(varchar(4), [week]) + ']'
 				end as tableName
 
 			into #weeks
 			from #days
 			group by [year], [month], [week], case
-				when ymd > @dLastDayTable then ''['' + @cArchiveDBName + left(ymdString, 6) + '']..['' + @cArchiveTableName + ''_'' + ymdString + '']''
-				else ''['' + @cArchiveDBName + left(ymdString, 6) + '']..['' + @cArchiveTableName + ''_'' + left(ymdString, 6) + ''_week'' + convert(varchar(4), [week]) + '']''
+				when ymd > @dLastDayTable then '[' + @cArchiveDBName + left(ymdString, 6) + ']..[' + @cArchiveTableName + '_' + ymdString + ']'
+				else '[' + @cArchiveDBName + left(ymdString, 6) + ']..[' + @cArchiveTableName + '_' + left(ymdString, 6) + '_week' + convert(varchar(4), [week]) + ']'
 				end		declare @nThisUkey int
 
 		set @nThisUkey = 0
@@ -507,83 +504,78 @@ create table ['' + @cArchiveTableName + ''_'' + @cToday + ''] ('' + @cTableStruc
 				where ukey > @nThisUkey
 				order by ukey
 
---				print ''Inserting '' + convert(varchar(10), @dStartDate, 120) + '' - '' + convert(varchar(10), @dEndDate, 120)
+--				print 'Inserting ' + convert(varchar(10), @dStartDate, 120) + ' - ' + convert(varchar(10), @dEndDate, 120)
 
 			-- if we already know about a range of key values, then assume we have new data coming in
-			set @cSQLString = ''delete '' + @cDestinationTableName + ''
-				from '' + @cDestinationTableName + '' a
-				join '' + @cTableName + '' b on '' + @cWhereClause + ''
-					and b.'' + @cForeignKeyField + '' >= '' + convert(varchar(20), @nUkeyMin) + ''
-					and b.'' + @cForeignKeyField + '' <= '' + convert(varchar(20), @nUkeyMax) + ''
-				where a.'' + @cForeignKeyField + '' >= '' + convert(varchar(20), @nUkeyMin) + ''
-					and a.'' + @cForeignKeyField + '' <= '' + convert(varchar(20), @nUkeyMax)
+			set @cSQLString = 'delete ' + @cDestinationTableName + '
+				from ' + @cDestinationTableName + ' a
+				join ' + @cTableName + ' b on ' + @cWhereClause + '
+					and b.' + @cForeignKeyField + ' >= ' + convert(varchar(20), @nUkeyMin) + '
+					and b.' + @cForeignKeyField + ' <= ' + convert(varchar(20), @nUkeyMax) + '
+				where a.' + @cForeignKeyField + ' >= ' + convert(varchar(20), @nUkeyMin) + '
+					and a.' + @cForeignKeyField + ' <= ' + convert(varchar(20), @nUkeyMax)
 
 			print @cSQLString
 			exec sp_executeSQL @cSQLString
 
 			insert into hist_partitionTableDaily (stepName) values
-				(''Inserting '' + convert(varchar(10), @dStartDate, 120) + '' - '' + convert(varchar(10), @dEndDate, 120) + '' into '' + @cDestinationTableName)
+				('Inserting ' + convert(varchar(10), @dStartDate, 120) + ' - ' + convert(varchar(10), @dEndDate, 120) + ' into ' + @cDestinationTableName)
 
-			set @cSQLString = ''insert into '' + @cDestinationTableName + '' ('' + @cFieldList + '')
-			select '' + @cFieldList + ''
-				from '' + @cTableName + '' (nolock)
-				where '' + @cForeignKeyField + '' >= '' + convert(varchar(20), @nUkeyMin) + ''
-					and '' + @cForeignKeyField + '' <= '' + convert(varchar(20), @nUkeyMax)
+			set @cSQLString = 'insert into ' + @cDestinationTableName + ' (' + @cFieldList + ')
+			select ' + @cFieldList + '
+				from ' + @cTableName + ' (nolock)
+				where ' + @cForeignKeyField + ' >= ' + convert(varchar(20), @nUkeyMin) + '
+					and ' + @cForeignKeyField + ' <= ' + convert(varchar(20), @nUkeyMax)
 
 			print @cSQLString
 
 			exec sp_executeSQL @cSQLString
 
-			insert into hist_partitionTableDaily (stepName) values (''Rows inserted for this week'')
+			insert into hist_partitionTableDaily (stepName) values ('Rows inserted for this week')
 
 			if (@nThisUkey % 5) = 0
 			begin
 
-				set @cSQLString = ''
+				set @cSQLString = '
 declare @cThisDatabase varchar(100)
 declare @cSQLString nvarchar(4000)
-set @cThisDatabase = ''''''''
-while exists (select top 1 [name] from master..sysdatabases where [name] like '''''' + @cArchiveDBName + ''20%'''' and [name] > @cThisDatabase)
+set @cThisDatabase = ''''
+while exists (select top 1 [name] from master..sysdatabases where [name] like ''' + @cArchiveDBName + '20%'' and [name] > @cThisDatabase)
 begin
-	select top 1 @cThisDatabase = [name] from master..sysdatabases where [name] like '''''' + @cArchiveDBName + ''20%'''' and [name] > @cThisDatabase
+	select top 1 @cThisDatabase = [name] from master..sysdatabases where [name] like ''' + @cArchiveDBName + '20%'' and [name] > @cThisDatabase
 
-	set @cSQLString = ''''
-	use ['''' + @cThisDatabase + '''']
-	backup log ['''' + @cThisDatabase + ''''] with truncate_only
-	exec sp_spaceUsed @updateusage = ''''''''TRUE''''''''
-	dbcc shrinkfile(2,1)''''
+	set @cSQLString = ''
+	use ['' + @cThisDatabase + '']
+	backup log ['' + @cThisDatabase + ''] with truncate_only
+	exec sp_spaceUsed @updateusage = ''''TRUE''''
+	dbcc shrinkfile(2,1)''
 
 	exec sp_executeSQL @cSQLString
-end''
+end'
 				exec sp_executeSQL @cSQLString
 
 
-				set @cSQLString = ''use tempdb
+				set @cSQLString = 'use tempdb
 backup log tempdb with truncate_only
-dbcc shrinkfile(2,1)''
+dbcc shrinkfile(2,1)'
 				exec sp_executeSQL @cSQLString
 
-				insert into hist_partitionTableDaily (stepName) values (''TEMPDB shrunk'')
+				insert into hist_partitionTableDaily (stepName) values ('TEMPDB shrunk')
 			end
 		end
 		drop table #weeks
 		drop table #valuesPresent
 	end
 --	else
---		print ''View v_'' + @cArchiveTableName + ''_all does not exist''
+--		print 'View v_' + @cArchiveTableName + '_all does not exist'
 
 	drop table #viewFields
 	drop table #dm_ymd
 end
 
--- exec pr_partitionTableDaily ''fact_inventory_daily'', ''business_day'', ''familyId, branchID'', 0
--- exec pr_partitionTableDaily ''transLines_daily'', ''transactionDate'', ''transactionSetID, transHeaderID'', 1
--- exec pr_partitionTableDaily ''fact_cardActivityProcessor_daily'', ''business_day'', ''transID'', 1
--- exec pr_partitionTableDaily ''stage_transactionData'', ''importDate'', ''iteration, ukey, ukey_parent, ukey_keyName'', 0
-'
-END
-GO
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
+-- exec pr_partitionTableDaily 'fact_inventory_daily', 'business_day', 'familyId, branchID', 0
+-- exec pr_partitionTableDaily 'transLines_daily', 'transactionDate', 'transactionSetID, transHeaderID', 1
+-- exec pr_partitionTableDaily 'fact_cardActivityProcessor_daily', 'business_day', 'transID', 1
+-- exec pr_partitionTableDaily 'stage_transactionData', 'importDate', 'iteration, ukey, ukey_parent, ukey_keyName', 0
+
 GO

@@ -1,9 +1,5 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
 -- exec pr_rpt_indexAnalysis 'spiderxps', null, null
-ALTER procedure [dbo].[pr_rpt_indexAnalysis] (@cServerName varchar(100), @dStartDate dateTime, @dEndDate dateTime)
+CREATE procedure [dbo].[pr_rpt_indexAnalysis] (@cServerName varchar(100), @dStartDate dateTime, @dEndDate dateTime)
 as
 begin
 
@@ -28,3 +24,7 @@ begin
 			and ymd = @dLatestRun
 
 end
+
+
+
+GO

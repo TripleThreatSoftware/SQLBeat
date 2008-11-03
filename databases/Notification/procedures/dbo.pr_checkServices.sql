@@ -1,11 +1,4 @@
-USE [Notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_checkServices]    Script Date: 08/20/2008 09:31:41 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-ALTER procedure [dbo].[pr_checkServices] (@nUkeyGroup int)
+CREATE      procedure [dbo].[pr_checkServices] (@nUkeyGroup int)
 as
 begin
 	set nocount on
@@ -120,8 +113,6 @@ begin
 			) > 0
 			truncate table #runningServices
 
-		delete from #runningServices where serviceName like '%web proxy auto%' or serviceName like '%shadow copy%'
-
 		if (select count(*) from #runningServices) > 1
 		begin
 			-- this is the last pass made against this server, so that we'll know what changed since the last look
@@ -191,7 +182,8 @@ begin
 				begin
 					insert into #messages (subject, message, severity) values ('SQLSERVERAGENT service is offline on ' + @cFriendlyName + '.', 'SQLSERVER service is offline on ' + @cFriendlyName + ' (' + @cServerName + ')', 1)
 					update dm_servers with (rowlock) set isSQLAgentServiceRunning = 0 where serverName = @cServerName
-				end
+				e
+nd
 				else
 					update dm_servers with (rowlock) set isSQLAgentServiceRunning = 1 where serverName = @cServerName
 			end
@@ -224,3 +216,6 @@ begin
 	drop table #messages
 	drop table #runningServices
 end
+
+
+GO

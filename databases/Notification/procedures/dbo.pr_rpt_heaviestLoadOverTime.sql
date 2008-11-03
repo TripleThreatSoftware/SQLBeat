@@ -1,9 +1,5 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
 -- exec pr_rpt_heaviestLoadOverTime 'doe-monitor-sql', 72
-ALTER procedure [dbo].[pr_rpt_heaviestLoadOverTime] (@cServerName varchar(100), @nHours int)
+CREATE procedure [dbo].[pr_rpt_heaviestLoadOverTime] (@cServerName varchar(100), @nHours int)
 as
 begin
 --	declare @cServerName varchar(100)
@@ -104,3 +100,7 @@ begin
 
 	drop table #activity
 end
+
+
+
+GO

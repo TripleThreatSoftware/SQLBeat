@@ -1,14 +1,6 @@
-USE [Notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_monitorBigBrother]    Script Date: 08/20/2008 10:52:30 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-
 -- select top 100 * from messagesSent order by ymd desc
 
-ALTER       procedure [dbo].[pr_monitorBigBrother]
+CREATE       procedure [dbo].[pr_monitorBigBrother]
 as
 begin
 	set nocount on
@@ -196,7 +188,8 @@ begin
 		set buffercontents = left(b.bufferContents, 3000)
 		from #processes a
 		join (
-			select a.spid, a.macAddress, a.bufferContents
+			select a.spid, a.m
+acAddress, a.bufferContents
 				from #userActivity a
 				join (
 					select spid, macAddress, max(ukey) as ukey
@@ -407,7 +400,8 @@ begin
 			AND b.run_status  = 1
 			and abs(dateDiff(minute, getDate(),
 				convert(dateTime, convert(varchar(10), getDate(), 120) + ' ' +
-					left(replicate('0', 6 - len(rtrim(run_time))) + rtrim(ltrim(run_time)), 2) + ':' +
+					left(replicate('0', 6 - len(rtrim(run_time))) + rtrim(ltrim(run_time))
+, 2) + ':' +
 						left(right(replicate('0', 6 - len(rtrim(run_time))) +
 						rtrim(ltrim(run_time)), 4), 2) + ':' +
 						right(replicate('0', 6 - len(rtrim(run_time))) + rtrim(ltrim(run_time)), 2) + '.000')
@@ -571,7 +565,8 @@ begin
 		1 as isLongRunningJob
 		from #allJobs a
 		join msdb..sysjobs b (nolock) on a.job_id = b.job_id
-		left outer join  #jobAverageRuntimes d on a.job_id = d.job_id
+		left outer join  #jobAverageRuntimes d
+on a.job_id = d.job_id
 --		left outer join msdb..sycategories c on a.category_id = c.category_id
 		where running = 1
 			and d.job_id is null
@@ -584,8 +579,6 @@ begin
 			and b.[name] not like '%import weblogs%'
 			and isnull(b.[name], '') not like '%sqlautomation%'
 			and isnull(b.[name], '') not like '%sqlbeat%'
-
-	-- because other things may be running on the monitor box, don't do this step any more!
 
 	-- if we found some long running jobs, kill 'em off if they're over five times normal runtime
 	if (select count(*) from #results where isLongRunningJob = 1) > 0
@@ -602,9 +595,14 @@ begin
 				left outer join #jobAverageRuntimes d on a.job_id = d.job_id
 				where a.running = 1
 					and datePart(year, a.startTime) <> 1900
-					and b.[name] like '%monitor websites%'
+					and not isnull(rtrim(ltrim(b.name)), '') like '%log shipping%'
+					and not isnull(rtrim(ltrim(b.name)), '') like '%transaction log%'
+					and b.[name] not like '%trim history%'
+					and b.[name] not like '%eventlog check%'
+					and b.[name] not like '%configuration check%'
+					and b.[name] not like '%import weblogs%'
 					and b.[name] > @cThisJob
-					and minutesRunning > 15
+					and minutesRunning > 180
 					and (
 						d.job_id is null
 						or (
@@ -621,9 +619,14 @@ begin
 				left outer join #jobAverageRuntimes d on a.job_id = d.job_id
 				where a.running = 1
 					and datePart(year, a.startTime) <> 1900
-					and b.[name] like '%monitor websites%'
+					and not isnull(rtrim(ltrim(b.name)), '') like '%log shipping%'
+					and not isnull(rtrim(ltrim(b.name)), '') like '%transaction log%'
+					and b.[name] not like '%trim history%'
+					and b.[name] not like '%eventlog check%'
+					and b.[name] not like '%configuration check%'
+					and b.[name] not like '%import weblogs%'
 					and b.[name] > @cThisJob
-					and minutesRunning > 15
+					and minutesRunning > 180
 					and (
 						d.job_id is null
 						or (
@@ -755,467 +758,5 @@ begin
 			) c on a.job_id = c.job_id
 				and dateDiff(minute, latestFailure, getDate()) < @nMinutesBackToLook*2
 
-	-- insert into hist_monitorBigBrother (stepName) values ('Regular job alerts generated')
-
-	--**************************************************************************************************************************
-	-- if the automation job fails, check which server it conked on
-	--**************************************************************************************************************************
-	declare @notificationFailures table (job_id uniqueIdentifier, jobStartTime dateTime, failureTime dateTime, isSuccess bit,
-		nextJobStartTime dateTime, serverGroup varchar(200), errorMessage varchar(2000), ukey_group int)
-	insert into @notificationFailures (job_id, jobStartTime, failureTime, isSuccess, serverGroup, errorMessage)
-	select 	a.job_id,
-		convert(dateTime, left(c.run_date, 4) + '-' +
-			left(right(c.run_date, 4), 2) + '-' +
-			right(c.run_date, 2) + ' ' +
-			left(replicate('0', 6 - len(rtrim(c.Run_Time))) +
-			rtrim(ltrim(c.Run_Time)), 2) + ':' +
-			left(right(replicate('0', 6 - len(rtrim(c.Run_Time))) +
-			rtrim(ltrim(c.Run_Time)), 4), 2) + ':' +
-			right(replicate('0', 6 - len(rtrim(c.Run_Time))) +
-			rtrim(ltrim(c.Run_Time)), 2) + '.000'
-			) as jobStartTime,
-		dateAdd(second,
-			right(right('000000' + convert(varchar(6), c.run_duration), 6), 2)  +
-			left(right(right('000000' + convert(varchar(6), c.run_duration), 6), 4), 2) * 60 +
-			left(right('000000' + convert(varchar(6), c.run_duration), 6), 2) * 60 * 60,
-			convert(dateTime, left(c.run_date, 4) + '-' +
-				left(right(c.run_date, 4), 2) + '-' +
-				right(c.run_date, 2) + ' ' +
-				left(replicate('0', 6 - len(rtrim(c.Run_Time))) +
-				rtrim(ltrim(c.Run_Time)), 2) + ':' +
-				left(right(replicate('0', 6 - len(rtrim(c.Run_Time))) +
-				rtrim(ltrim(c.Run_Time)), 4), 2) + ':' +
-				right(replicate('0', 6 - len(rtrim(c.Run_Time))) +
-				rtrim(ltrim(c.Run_Time)), 2) + '.000'
-				)
-			) as failureTime,
-		case when c.run_status = 0 then 0 else 1 end as isSuccess,
-		rtrim(ltrim(substring(a.[name], charindex('-', a.[name]) + 1, 99))) as serverGroup,
-		left(c.message, 2000) as errorMessage
-		from msdb..sysjobs a
-		join msdb..sysJobHistory c (nolock) on a.job_id = c.job_id
-			and c.step_id <> 0
-			and dateDiff(minute,
-					dateAdd(minute,
-						left(right(right('000000' + convert(varchar(6), c.run_duration), 6), 4), 2) +
-						left(right('000000' + convert(varchar(6), c.run_duration), 6), 2) * 60,
-						convert(dateTime, left(c.run_date, 4) + '-' +
-							left(right(c.run_date, 4), 2) + '-' +
-							right(c.run_date, 2) + ' ' +
-							left(replicate('0', 6 - len(rtrim(c.Run_Time))) +
-							rtrim(ltrim(c.Run_Time)), 2) + ':' +
-							left(right(replicate('0', 6 - len(rtrim(c.Run_Time))) +
-							rtrim(ltrim(c.Run_Time)), 4), 2) + ':' +
-							right(replicate('0', 6 - len(rtrim(c.Run_Time))) +
-							rtrim(ltrim(c.Run_Time)), 2) + '.000'
-							)
-						),
-					getDate()) < @nMinutesBackToLook*2
-
-			-- ignore errors that result from attempting to touch a db that slipped into a RESTORE mid-statement
-			and c.message not like '%middle of a restore%'
-			and c.message not like '%definition of object%'
---			and (
---				(
---					c.message not like '%resource limit was reached%'
---					and c.message not like '%0x80004005%'
---					and c.message not like '%SQL Server does not exist or access denied%'
---					)
---				or a.[name] like '%priority 1%'
---				)
-
-		where a.[name] like '%sql detailed check -%'
-
-	update @notificationFailures
-		set ukey_group = b.ukey
-		from @notificationFailures a
-		join dm_serverGroups b on a.serverGroup = b.groupName
-
-	if (select count(*) from @notificationFailures where isSuccess = 0) > 0
-	begin
-
-		update @notificationFailures
-			set nextJobStartTime = b.nextJobStartTime
-			from @notificationFailures a
-			join (
-				select a.job_id, a.jobStartTime, min(b.jobStartTime) as nextJobStartTime
-					from @notificationFailures a
-					join @notificationFailures b on a.jobStartTime < b.jobStartTime
-						and a.job_id = b.job_id
-					group by a.jobStartTime, a.job_id
-				) b on a.jobStartTime = b.jobStartTime
-					and a.job_id = b.job_id
-
-		update @notificationFailures
-			set nextJobStartTime = getDate()
-			where nextJobStartTime is null
-
-		insert into #results (message, severity, subject, isJobFailure)
-		select left(
-			'The notification system failed on the ''' + isnull(b.stepName, 'N/A') + ''' step ' +
-			'after ' + isnull(convert(varchar(20), dateDiff(second, b.ymd, a.failureTime)), 'N/A') + ' seconds ' +
-			'while communicating with ' + isnull(isnull(c.friendlyName, c.serverName), 'N/A') + '. ' +
-			'The job as a whole started at ' + convert(varchar(30), a.jobStartTime, 120) + ', ' +
-			'ran for ' + convert(varchar(20), dateDiff(second, a.jobStartTime, a.failureTime)) + ' seconds ' +
-			'and was able to process ' + convert(varchar(20), a.numServers) + ' other servers without error.' + char(13) +
-			'Error Message: ' + char(13) + a.errorMessage, 2000) as message,
-			2 as severity,
-			'Lost communication with ' + isnull(b.serverName, 'N/A') + ' at ' + right(convert(varchar(30), a.failureTime, 120), 8) + '.' as subject,
-			1 as isJobFailure
-
-			from (
-				select a.jobStartTime, a.failureTime, a.nextJobStartTime, a.errorMessage, a.ukey_group,
-					max(b.ymd) as ymd,
-					count(distinct b.serverName) as numServers
-					from @notificationFailures a
-					left outer join notificationLog_history b on b.ymd >= a.jobStartTime
-						and b.ymd < a.nextJobStartTime
-						and a.ukey_group = b.ukey_group
-					where a.isSuccess = 0
-					group by a.jobStartTime, a.failureTime, a.nextJobStartTime, a.errorMessage, a.ukey_group
-				) a
-			join notificationLog_history b on a.ymd = b.ymd
-			join dm_servers c on b.serverName = c.serverName
-				and (
-					(
-						c.ignoreTimeouts = 1
-						and (
-							a.errorMessage not like '%resource limit was reached%'
-							and a.errorMessage not like '%0x80004005%'
-							and a.errorMessage not like '%SQL Server does not exist or access denied%'
-							and a.errorMessage not like '%timeout%'
-							)
-						)
-					or isnull(c.ignoreTimeouts, 0) = 0
-				)
-
-			where dateDiff(second, left(convert(varchar(20), b.ymd, 120), 19), a.failureTime) >= 0
-
-		update dm_servers
-			set skipNextRun = 1
-			from dm_servers a
-			join (
-				select b.serverName
-					from (
-						select a.jobStartTime, a.failureTime, a.nextJobStartTime, a.errorMessage, a.ukey_group,
-							max(b.ymd) as ymd,
-							count(distinct b.serverName) as numServers
-							from @notificationFailures a
-							left outer join notificationLog_history b on b.ymd >= a.jobStartTime
-								and b.ymd < a.nextJobStartTime
-								and a.ukey_group = b.ukey_group
-							where a.isSuccess = 0
-							group by a.jobStartTime, a.failureTime, a.nextJobStartTime, a.errorMessage, a.ukey_group
-						) a
-					join notificationLog_history b on a.ymd = b.ymd
-					where dateDiff(second, left(convert(varchar(20), b.ymd, 120), 19), a.failureTime) >= 0
-						and dateDiff(minute, a.failureTime, getDate()) < 10
-				) b on a.serverName = b.serverName
-
-	end
-
-	-- insert into hist_monitorBigBrother (stepName) values ('Automation job alerts created')
-
-	--*********************************************************************************************************************
-	-- Drive space
-	--*********************************************************************************************************************
-
-	CREATE TABLE #drives (ukey int identity, driveLetter varchar(1), freeSpace int NULL)
-
-	INSERT #drives (driveLetter, freeSpace)
-	EXEC master.dbo.xp_fixeddrives
-
-	update #drives
-		set freeSpace = (freeSpace / 10) * 10
-
-	insert into #results (message, severity, subject, isDriveSpace)
-	select 'Drive ' + driveLetter + ' is down to ' + convert(varchar(100), freeSpace) + 'mb free.',
-		1 as severity,
-		'Drive ' + driveLetter + ' is down to ' + convert(varchar(100), freeSpace) + 'mb free.' as subject,
-		1 as isDriveSpace
-		from #drives
-		where freeSpace < case when @@servername like '%stby%' or @@servername like '%test%' then 1000 else 1000 end
-
-	DROP TABLE #drives
-
-	-- insert into hist_monitorBigBrother (stepName) values ('Drive space checked')
-
-	--*********************************************************************************************************************
-	-- Log file size
-	--*********************************************************************************************************************
-
-	declare @cThisDatabase varchar(100)
-
-	create table #databaseNames (dbname varchar(100))
-	create table #fileSizes (dbname varchar(100), objectname varchar(100), fileName varchar(100), size bigint, isLog bit default 0)
-
-	insert into #databaseNames
-	select [name]
-		from master.dbo.sysdatabases (nolock)
-		where [name] not in ('master', 'model', 'msdb', 'northwind')
-
-	while exists (select top 1 * from #databaseNames)
-	begin
-		select top 1 @cThisDatabase = dbName from #databaseNames
-		set @cSQLString = 'SELECT ' +
-			'''' + @cThisDatabase + ''' as dbname, ' +
-			'left(name, 100) AS objectName, ' +
-			'left(fileName, 100) AS fileName, ' +
-			'([size]*8)/1024 ' +
-			'FROM [' + @cThisDatabase + '].dbo.sysfiles '
-
-		insert into #fileSizes (dbname, objectName, fileName, size)
-		exec sp_executeSQL @cSQLString
-
-		delete from #databaseNames where dbName = @cThisDatabase
-	end
-	drop table #databaseNames
-
-	update #fileSizes
-		set isLog = 1
-		where objectName like '%log%' or fileName like '%log%'
-
-	insert into databaseFileSizeLog (serverName, dbname, objectname, [fileName], [size], isLog)
-	select @@serverName, dbName, objectName, [fileName], [size], isLog
-		from #fileSizes
-
-	insert into #results (message, severity, subject, isLogSize)
-	select 'Database ' + isnull(rtrim(dbName), '' ) + ' ' +
-			'size (' + convert(varchar(20), totalSize) + 'mb) ' +
-			'is about to reach the MSDE cap of 2000mb.',
-		1 as severity,
-		'Database ' + isnull(rtrim(dbName), '' ) + ' is about to reach MSDE limits.',
-		1 as isLogSize
-		from (
-			select dbName,
-				sum([size]) as totalSize
-				from #fileSizes
-				where isLog = 0
-				group by dbname
-			) a
-		where totalSize >= 1800
-			and @cVersion like '%desktop engine%'
-
-	drop table #fileSizes
-
-	-- insert into hist_monitorBigBrother (stepName) values ('Log size checked')
-
-	--*********************************************************************************************************************
-	-- Check on service monitor
-	--*********************************************************************************************************************
-	insert into #results (message, severity, subject)
-	select 'Error checking services on ' + isnull(serverName, 'N/A') + '.' + char(13) + char(13) +
-			isnull(max(serviceName), 'N/A') + char(13) + char(13) +
-			'Further service checks DISABLED.' as message,
-		1 as severity,
-		'Service check error for ' + isnull(serverName, 'N/A') + ' at ' + right(convert(varchar(20), min(ymd), 120), 8) as subject
-		from serviceLog
-		where ymd >= dateAdd(minute, -180, getDate())
-			and (
-				(serviceName like '%SQL Native Client%'
-					and serviceName not like '%sspi content%'
-					and serviceName not like '%Unable to complete login%'
-					and serviceName not like '%unable to establish connection%'
-				)
-			)
-		group by serverName
-		having count(*) > 5
-
-	update dm_servers
-		set serviceCheck = 0
-		from dm_servers a
-		join (
-			select isnull(serverName, '') as serverName
-				from serviceLog
-				where ymd >= dateAdd(minute, -180, getDate())
-					and (
-						(serviceName like '%SQL Native Client%'
-							and serviceName not like '%sspi content%'
-							and serviceName not like '%Unable to complete login%'
-							and serviceName not like '%unable to establish connection%'
-						)
-					)
-				group by serverName
-				having count(*) > 5
-			) b on a.serverName = b.serverName
-
-	-- insert into hist_monitorBigBrother (stepName) values ('Service monitor checked')
-
-	--*********************************************************************************************************************
-	-- Check on the configuration monitor
-	--*********************************************************************************************************************
-
-	select g.ukey as ukey_server, a.serverName, c.groupName, isnull(a.message, 'N/A') as notes, a.ymd,
-		isnull(g.lastConfigurationCheck, dateAdd(week, -3, getDate())) as lastConfigurationCheck,
-		convert(int, dateDiff(minute, a.ymd, getDate()) / 5) * 5 as minutesStuck,
-		e.[name] as jobName,
-		f.startTime
-		into #stuckConfigCheck
-		from configuration..runs_log a (nolock)
-		join (
-			select ukey_group, max(ukey) as maxUkey
-				from configuration..runs_log (nolock)
-				group by ukey_group
-			) b on a.ukey_group = b.ukey_group
-				and a.ukey = b.maxUkey
-		join dm_serverGroups c on a.ukey_group = c.ukey
-
-		join msdb..sysjobs e on e.[name] = 'Configuration Check - ' + c.groupName
-		join #allJobs f on e.job_id = f.job_id
-			and f.running = 1
-
-		join dm_servers g on a.serverName = g.serverName
-
-		where a.serverName is not null
-			and isnull(a.message, '') <> 'END'
-			and dateDiff(minute, a.ymd, getDate()) > 30
-			and e.[name] is not null
-
---	insert into #results (subject, message, severity, serverName)
---	select
---		'Job "' + jobName + '" has been stuck on ' + serverName + ' for ' + convert(varchar(20), minutesStuck) + ' minutes (since ' + convert(varchar(19), ymd, 120) + ').' as subject,
---		'Job "' + jobName + '" has been stuck on ' + serverName + ' for ' + convert(varchar(20), minutesStuck) + ' minutes (since ' + convert(varchar(19), ymd, 120) + ').' + char(13) + char(13) +
---			'Step       : ' + notes + char(13) +
---			'Last Check : ' + convert(varchar(19), lastConfigurationCheck, 120)-- + char(13) +
---			as message,
---		2 as severity, serverName
---		from #stuckConfigCheck
-
-	-- set the server to sleep that stuck us
-	update dm_servers
-		set configurationCheckSleepUntil = dateAdd(hour, 2, getDate())
-		from dm_servers a
-		join #stuckConfigCheck b on a.serverName = b.serverName
-
-	set @cThisJob = ''
-
-	while exists (select top 1 jobName from #stuckConfigCheck where jobName > @cThisJob)
-	begin
-		select top 1 @cThisJob = jobName ,
-			@dStartTime = startTime
-			from #stuckConfigCheck
-			where jobName > @cThisJob
-			order by jobName
-
-		exec msdb..sp_stop_job @job_name = @cThisJob
-
---		insert into #results (message, severity, subject) values
---			(
---				'Job ' + @cThisJob + ', started at ' + convert(varchar(20), @dStartTime) + ', sent a STOP command at ' + convert(varchar(20), getDate(), 120) + '.',
---				2,
---				'Job ' + @cThisJob + ', started at ' + convert(varchar(20), @dStartTime) + ', sent a STOP command.')
-	end
-
-	drop table #stuckConfigCheck
-
-	-- insert into hist_monitorBigBrother (stepName) values ('Configuration monitor checked')
-
-	--*********************************************************************************************************************
-	-- Check on the event log monitor stuckness
-	--*********************************************************************************************************************
-
-	select g.ukey as ukey_server, a.serverName, c.groupName, isnull(notes, 'N/A') as notes, a.ymd,
-		isnull(g.lastEventLogCheck, dateAdd(week, -3, getDate())) as lastEventLogCheck,
-		convert(int, dateDiff(minute, a.ymd, getDate()) / 5) * 5 as minutesStuck,
-		e.[name] as jobName,
-		f.startTime
-		into #stuckEventLogCheck
-		from eventLog_history a (nolock)
-		join (
-			select ukey_group, max(ukey) as maxUkey
-				from eventLog_history (nolock)
-				group by ukey_group
-			) b on a.ukey_group = b.ukey_group
-				and a.ukey = b.maxUkey
-		join dm_serverGroups c on a.ukey_group = c.ukey
-
-		join msdb..sysjobs e on e.[name] = 'EventLog Check - ' + c.groupName
-		join #allJobs f on e.job_id = f.job_id
-			and f.running = 1
-
-		join dm_servers g on a.serverName = g.serverName
-
-		where a.serverName is not null
-			and isnull(a.notes, '') not like '%Examination Completed%'
-			and dateDiff(minute, a.ymd, getDate()) > 10
-			and e.[name] is not null
-
---	insert into #results (subject, message, severity, serverName)
---	select
---		'Job "' + jobName + '" has been stuck on ' + serverName + ' for ' + convert(varchar(20), minutesStuck) + ' minutes (since ' + convert(varchar(19), ymd, 120) + ').' as subject,
---		'Job "' + jobName + '" has been stuck on ' + serverName + ' for ' + convert(varchar(20), minutesStuck) + ' minutes (since ' + convert(varchar(19), ymd, 120) + ').' + char(13) + char(13) +
---			'Step       : ' + notes + char(13) +
---			'Last Check : ' + convert(varchar(19), lastEventLogCheck, 120) --+ char(13) +
---			as message,
---		2 as severity, serverName
---		from #stuckEventLogCheck
-
-	-- set the server to sleep that stuck us
-	update dm_servers
-		set eventLogCheckSleepUntil = dateAdd(hour, 1, getDate()),
-			lastEventLogCheck = case when dateDiff(day, a.lastEventLogCheck, getDate()) > 7 then dateAdd(week, -1, getDate()) else a.lastEventLogCheck end
-		from dm_servers a
-		join #stuckEventLogCheck b on a.serverName = b.serverName
-
-	set @cThisJob = ''
-
-	while exists (select top 1 jobName from #stuckEventLogCheck where jobName > @cThisJob)
-	begin
-		select top 1 @cThisJob = jobName
-			from #stuckEventLogCheck
-			where jobName > @cThisJob
-			order by jobName
-
-		exec msdb..sp_stop_job @job_name = @cThisJob
-
---		insert into #results (message, severity, subject) values
---			(
---				'Job ' + @cThisJob + ', started at ' + convert(varchar(20), @dStartTime) + ', sent a STOP command at ' + convert(varchar(20), getDate(), 120) + '.',
---				2,
---				'Job ' + @cThisJob + ', started at ' + convert(varchar(20), @dStartTime) + ', sent a STOP command.')
-	end
-
-	drop table #stuckEventLogCheck
-
-	-- insert into hist_monitorBigBrother (stepName) values ('EventLog monitor checked')
-
-	--*********************************************************************************************************************
-	-- Send output to the notification system
-	--*********************************************************************************************************************
-
-	declare @nUkey int
-
-	set @nUkey = (select max(ukey) from notificationLog)
-
-	-- automatically deprioritize all issues
-	insert into notificationLog_stage (message, severity, subject,
-		isJobFailure, isLogShippingJobFailure, isLongRunningJob, isBlocking, isLongRunningProcess,
-		isDriveSpace, isLogSize, isEventLog, serverName)
-	select message,
-		case
-			when message like '%test%'
-				or message like '%stby%'
-				or message like '%deploy%'
-				or message like '%newsql%'
-				then 2
-			else severity end as severity,
-		subject,
-		isJobFailure, isLogShippingJobFailure, isLongRunningJob, isBlocking, isLongRunningProcess,
-		isDriveSpace, isLogSize, isEventLog, isnull(serverName, @@serverName)
-		from #results
-
-	drop table #results
-	drop table #jobAverageRuntimes
-	drop table #allJobs
-
-	drop table #userActivity
-	drop table #processes
-
-	drop table #locks
-	drop table #lockSummary
-	drop table #lockresults
-	drop table #junkString
-
-	-- insert into hist_monitorBigBrother (stepName) values ('Alerts sent')
-
-end
+	-- insert into hist_monitorBigBr
+GO

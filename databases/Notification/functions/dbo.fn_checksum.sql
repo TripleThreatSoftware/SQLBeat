@@ -1,6 +1,3 @@
-use [notification]
-go
-
 -- select dbo.fn_checksum('hello world')
 -- select dbo.fn_checksum('hello world2')
 create function fn_checksum(@cString varchar(max))
@@ -25,3 +22,7 @@ begin
 
 	return @nResults
 end
+
+
+
+GO

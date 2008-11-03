@@ -1,6 +1,4 @@
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[pr_archiveOldLinkedPartitionedTables]') AND type in (N'P', N'PC'))
-BEGIN
-EXEC dbo.sp_executesql @statement = N'--pr_archiveOldLinkedPartitionedTables ''runs_data'', ''ukey_run'', ''runs'', ''ukey'', ''ymd'', ''ukey_run, ukey_server, ukey_counter, instance, ukey_keyName''
+--pr_archiveOldLinkedPartitionedTables 'runs_data', 'ukey_run', 'runs', 'ukey', 'ymd', 'ukey_run, ukey_server, ukey_counter, instance, ukey_keyName'
 
 CREATE  procedure [pr_archiveOldLinkedPartitionedTables] (
 	@cTableName varchar(100),
@@ -12,7 +10,7 @@ CREATE  procedure [pr_archiveOldLinkedPartitionedTables] (
 	)
 as
 begin
---	print ''Beginning to archive old partitioned tables''
+--	print 'Beginning to archive old partitioned tables'
 
 	set nocount on
 
@@ -60,19 +58,19 @@ begin
 	end
 
 	update #archiveDates
-		set ymdString = convert(varchar(4), [year]) + dbo.fn_padl(month, 2, ''0'') + dbo.fn_padl(day, 2, ''0'')
+		set ymdString = convert(varchar(4), [year]) + dbo.fn_padl(month, 2, '0') + dbo.fn_padl(day, 2, '0')
 
 	set @cSQLString =
-		''update #archiveDates
+		'update #archiveDates
 			set ukey_min = b.ukey_min, ukey_max = b.ukey_max
 			from #archiveDates a
 			join (
-				select convert(varchar(10), '' + @cForeignTableDateField + '', 120) as dateField, '' +
-					''min(['' + @cForeignTableKeyField + '']) as ukey_min, '' +
-					''max(['' + @cForeignTableKeyField + '']) as ukey_max '' +
-					''from '' + @cForeignTable + '' '' +
-					''group by convert(varchar(10), '' + @cForeignTableDateField + '', 120)
-				) b on a.ymd = b.dateField''
+				select convert(varchar(10), ' + @cForeignTableDateField + ', 120) as dateField, ' +
+					'min([' + @cForeignTableKeyField + ']) as ukey_min, ' +
+					'max([' + @cForeignTableKeyField + ']) as ukey_max ' +
+					'from ' + @cForeignTable + ' ' +
+					'group by convert(varchar(10), ' + @cForeignTableDateField + ', 120)
+				) b on a.ymd = b.dateField'
 
 --	print @cSQLString
 	exec sp_executeSQL @cSQLString
@@ -82,20 +80,20 @@ begin
 
 	set @cArchiveTableName = @cTableName
 
-	if right(@cTableName, 6) in (''_daily'', ''_stage'')
+	if right(@cTableName, 6) in ('_daily', '_stage')
 		set @cArchiveTableName = left(@cTableName, len(@cTableName) - 6)
 	else
-		if left(@cTableName, 6) = ''stage_''
+		if left(@cTableName, 6) = 'stage_'
 			set @cArchiveTableName = right(@cTableName, len(@cTableName) - 6)
 		else
-			if left(@cTableName, 8) = ''staging_''
+			if left(@cTableName, 8) = 'staging_'
 				set @cArchiveTableName = right(@cTableName, len(@cTableName) - 8)
 
 	if (
 		select count(*)
 			from sysObjects a
 			join sysColumns b on a.id = b.id and b.name = @cForeignKeyField
-			where a.name = @cTableName and a.xtype = ''U''
+			where a.name = @cTableName and a.xtype = 'U'
 		) > 0
 		set @lHasYMD = 1
 	else
@@ -121,7 +119,7 @@ begin
 		where left([name], len(db_name())) = db_name()
 			and [name] <> db_name()
 			and dbo.fn_returnDigits([name], 0) > 0
-			and [name] not in (''master'', ''model'', ''msdb'', ''northwind'')
+			and [name] not in ('master', 'model', 'msdb', 'northwind')
 			and (
 				status in (0, 8)
 				or (not status % 32 = 0 and not status % 64 = 0 and not status % 128 = 0)
@@ -133,11 +131,11 @@ begin
 	begin
 		select top 1 @cThisDatabase = dbname from #databases
 
---		print ''Archiving old partitioned tables in '' + @cThisDatabase
+--		print 'Archiving old partitioned tables in ' + @cThisDatabase
 
 		set @cThisMonth = right(@cThisDatabase, 6)
 
-		set @cSQLString = ''select name from '' + @cThisDatabase + ''..sysobjects where xtype = ''''U'''' and name like '''''' + @cArchiveTableName + ''%'''' and name not like ''''%week%'''' order by name''
+		set @cSQLString = 'select name from ' + @cThisDatabase + '..sysobjects where xtype = ''U'' and name like ''' + @cArchiveTableName + '%'' and name not like ''%week%'' order by name'
 --		print @cSQLString
 
 		insert into #tables
@@ -145,7 +143,7 @@ begin
 
 		delete from #tables where right(tableName, 8) > @cLastWeekTable
 
-		set @cSQLString = ''''
+		set @cSQLString = ''
 		while exists (select top 1 * from #tables)
 		begin
 			select top 1 @cThisTable = tableName from #tables order by tableName
@@ -164,7 +162,7 @@ begin
 					from #archiveDates
 					where @cThisDay = ymdString)
 
-			set @cWeekTable = @cArchiveTableName + ''_'' + left(@cThisDay, 6) + ''_week'' + convert(varchar(2), @nWeek)
+			set @cWeekTable = @cArchiveTableName + '_' + left(@cThisDay, 6) + '_week' + convert(varchar(2), @nWeek)
 
 			select @dStartDate = min(ymd),
 				@dEndDate = max(ymd),
@@ -177,7 +175,7 @@ begin
 
 			set @lMakeTable = 0
 
-			set @cSQLString = ''select count(*) as numRows from '' + @cThisDatabase + ''..sysobjects where xtype = ''''U'''' and name = '''''' + @cWeekTable + ''''''''
+			set @cSQLString = 'select count(*) as numRows from ' + @cThisDatabase + '..sysobjects where xtype = ''U'' and name = ''' + @cWeekTable + ''''
 			truncate table #results
 			insert into #results (numRows)
 			exec sp_executeSQL @cSQLString
@@ -186,8 +184,8 @@ begin
 			begin
 				truncate table #results
 
-				-- the table does exists, lets see if it''s empty. if so, drop it and make it again - just in case
-				set @cSQLString = ''select count(*) from '' + @cThisDatabase + ''..['' + @cWeekTable + '']''
+				-- the table does exists, lets see if it's empty. if so, drop it and make it again - just in case
+				set @cSQLString = 'select count(*) from ' + @cThisDatabase + '..[' + @cWeekTable + ']'
 --				print @cSQLString
 				insert into #results
 				exec sp_executeSQL @cSQLString
@@ -196,8 +194,8 @@ begin
 				begin
 					set @lMakeTable = 1
 
-					set @cSQLString = ''use '' + @cThisDatabase + ''
-						drop table ['' + @cWeekTable + '']''
+					set @cSQLString = 'use ' + @cThisDatabase + '
+						drop table [' + @cWeekTable + ']'
 --					print @cSQLString
 					exec sp_executeSQL @cSQLString
 				end
@@ -211,75 +209,75 @@ begin
 
 			if @lMakeTable = 1
 			begin
-				-- the archive table doesn''t yet exist, so create it using an INSERT INTO from the day table
-				-- we''re currently working
-				set @cSQLString = ''use '' + @cThisDatabase + ''
-					select * into '' + @cWeekTable + '' from '' + @cThisTable
+				-- the archive table doesn't yet exist, so create it using an INSERT INTO from the day table
+				-- we're currently working
+				set @cSQLString = 'use ' + @cThisDatabase + '
+					select * into ' + @cWeekTable + ' from ' + @cThisTable
 --				print @cSQLString
 				exec sp_executeSQL @cSQLString
 
-				set @cPKString = ''''
+				set @cPKString = ''
 
 				if @lHasYMD = 1
 				begin
-					set @cSQLString = ''use '' + @cThisDatabase + '' ALTER TABLE '' + @cWeekTable + '' WITH CHECK '' +
-							''ADD CONSTRAINT '' + @cWeekTable + ''_ymd '' +
-							''CHECK ('' + @cForeignKeyField + '' >= '' + convert(varchar(20), @nUkeyMin) + ''
-								and '' + @cForeignKeyField + '' <= '' + convert(varchar(20), @nUkeyMax) + '')''
+					set @cSQLString = 'use ' + @cThisDatabase + ' ALTER TABLE ' + @cWeekTable + ' WITH CHECK ' +
+							'ADD CONSTRAINT ' + @cWeekTable + '_ymd ' +
+							'CHECK (' + @cForeignKeyField + ' >= ' + convert(varchar(20), @nUkeyMin) + '
+								and ' + @cForeignKeyField + ' <= ' + convert(varchar(20), @nUkeyMax) + ')'
 --					print @cSQLString
 					exec sp_executesql @cSQLString
 
-					if @cKeyfieldList not like ''%'' + @cForeignKeyField + ''%''
-						set @cPKString = case when @cPKString = '''' then @cForeignKeyField else @cPKString + '', '' + @cForeignKeyField end
+					if @cKeyfieldList not like '%' + @cForeignKeyField + '%'
+						set @cPKString = case when @cPKString = '' then @cForeignKeyField else @cPKString + ', ' + @cForeignKeyField end
 				end
 
-				set @cSQLString = ''use '' + @cThisDatabase + ''
-					ALTER TABLE '' + @cWeekTable + ''
-						ADD CONSTRAINT [PK_'' + @cWeekTable + '']
-						PRIMARY KEY CLUSTERED ('' + case when @cPKString <> '''' then @cPKString + '', '' else '''' end + @cKeyfieldList + '')
-						WITH  FILLFACTOR = 80''
+				set @cSQLString = 'use ' + @cThisDatabase + '
+					ALTER TABLE ' + @cWeekTable + '
+						ADD CONSTRAINT [PK_' + @cWeekTable + ']
+						PRIMARY KEY CLUSTERED (' + case when @cPKString <> '' then @cPKString + ', ' else '' end + @cKeyfieldList + ')
+						WITH  FILLFACTOR = 80'
 --				print @cSQLString
 				exec sp_executesql @cSQLString
 			end
 			else
 			begin
-				-- the archive table exists, so insert into it from the day table we''re working
+				-- the archive table exists, so insert into it from the day table we're working
 				truncate table #fields
-				set @cSQLString = ''use '' + @cThisDatabase + ''
+				set @cSQLString = 'use ' + @cThisDatabase + '
 					select distinct a.name
 						from syscolumns a
-						join sysobjects b on a.id = b.id and b.name = '''''' + @cThisTable + '''''' and b.xtype = ''''U''''''
+						join sysobjects b on a.id = b.id and b.name = ''' + @cThisTable + ''' and b.xtype = ''U'''
 
 --				print @cSQLString
 				insert into #fields
 				exec sp_executeSQL @cSQLString
 
-				set @cFieldList = ''''
+				set @cFieldList = ''
 				while exists (select top 1 * from #fields)
 				begin
 					select top 1 @cThisField = fieldName from #fields
 
-					set @cFieldList = @cFieldList + case when @cFieldList = '''' then '''' else '', '' end + ''['' + @cThisField + '']''
+					set @cFieldList = @cFieldList + case when @cFieldList = '' then '' else ', ' end + '[' + @cThisField + ']'
 
 					delete from #fields where fieldName = @cThisField
 				end
 
-				if @cFieldList = ''''
-					set @cFieldList = ''*''
+				if @cFieldList = ''
+					set @cFieldList = '*'
 
-				set @cSQLString = ''use '' + @cThisDatabase + ''
-					insert into '' + @cWeekTable + ''('' + @cFieldList + '') select '' + @cFieldList + '' from '' + @cThisTable
+				set @cSQLString = 'use ' + @cThisDatabase + '
+					insert into ' + @cWeekTable + '(' + @cFieldList + ') select ' + @cFieldList + ' from ' + @cThisTable
 --				print @cSQLString
 				exec sp_executesql @cSQLString
 			end
 
 			-- double check that permissions are set properly by re-applying them
-			set @cSQLString = ''use '' + @cThisDatabase + '' grant select on '' + @cWeekTable + '' to public''
+			set @cSQLString = 'use ' + @cThisDatabase + ' grant select on ' + @cWeekTable + ' to public'
 --			print @cSQLString
 			exec sp_executesql @cSQLString
 
-			set @cSQLString =  ''use '' + @cThisDatabase + ''
-					drop table ['' + @cThisTable + '']''
+			set @cSQLString =  'use ' + @cThisDatabase + '
+					drop table [' + @cThisTable + ']'
 --			print @cSQLString
 			exec sp_executeSQL @cSQLString
 
@@ -295,154 +293,10 @@ begin
 	drop table #results
 	drop table #archiveDates
 
---	print ''Done archiving''
+--	print 'Done archiving'
 end
 
--- exec pr_archiveOldPartitionedTables ''mart_vehicle_byday_daily'', ''ukey_auto''
-'
-END
-GO
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[pr_dashboard_fulfillment]') AND type in (N'P', N'PC'))
-BEGIN
-EXEC dbo.sp_executesql @statement = N'CREATE procedure [pr_dashboard_fulfillment]
-as
-begin
-	create table #results (groupName varchar(200), serverName varchar(200), messageBody varchar(8000))
+-- exec pr_archiveOldPartitionedTables 'mart_vehicle_byday_daily', 'ukey_auto'
 
-	insert into #results (groupName, serverName, messageBody)
-	select b.groupName, serverName,
-			case
-				when (eventLogCheck = 1 and convert(decimal(10,2), dateDiff(minute, isnull(lastEventLogCheck, dateAdd(day, -1, getDate())), getDate())) > convert(decimal(10,2), eventLogCheckMinuteInterval) * 1.25)
-					then ''Event Log check '' + convert(varchar(20), dateDiff(minute, isnull(lastEventLogCheck, dateAdd(day, -1, getDate())), getDate()) - eventLogCheckMinuteInterval) + '' minutes overdue. ''
-					else '''' end +
-			case
-				when (detailedCheck = 1 and convert(decimal(10,2), dateDiff(minute, isnull(lastDetailedCheck, dateAdd(day, -1, getDate())), getDate())) > convert(decimal(10,2), detailedCheckMinuteInterval) * 1.25)
-					then ''Detailed SQL check '' + convert(varchar(20), dateDiff(minute, isnull(lastDetailedCheck, dateAdd(day, -1, getDate())), getDate()) - detailedCheckMinuteInterval) + '' minutes overdue. ''
-					else '''' end +
-			case
-				when (serviceCheck = 1 and convert(decimal(10,2), dateDiff(minute, isnull(lastServiceCheck, dateAdd(day, -1, getDate())), getDate())) > convert(decimal(10,2), serviceCheckMinuteInterval) * 1.25)
-					then ''Services check '' + convert(varchar(20), dateDiff(minute, isnull(lastServiceCheck, dateAdd(day, -1, getDate())), getDate()) - serviceCheckMinuteInterval) + '' minutes overdue. ''
-					else '''' end +
-			case
-				when (pingCheck = 1 and convert(decimal(10,2), dateDiff(minute, isnull(lastPingCheck, dateAdd(day, -1, getDate())), getDate())) > convert(decimal(10,2), pingCheckMinuteInterval) * 1.25 and dateDiff(minute, lastPingCheck, getDate()) > 5)
-					then ''PING check '' + convert(varchar(20), dateDiff(minute, isnull(lastPingCheck, dateAdd(day, -1, getDate())), getDate()) - pingCheckMinuteInterval) + '' minutes overdue. ''
-					else '''' end +
-			case
-				when (integrityCheck = 1 and convert(decimal(10,2), dateDiff(minute, isnull(lastIntegrityCheck, dateAdd(day, -1, getDate())), getDate())) > convert(decimal(10,2), integrityCheckMinuteInterval) * 1.25)
-					then ''Integrity check '' + convert(varchar(20), dateDiff(minute, isnull(lastIntegrityCheck, dateAdd(day, -1, getDate())), getDate()) - integrityCheckMinuteInterval) + '' minutes overdue. ''
-					else '''' end +
-			case
-				when (configurationCheck = 1 and convert(decimal(10,2), dateDiff(minute, isnull(lastConfigurationCheck, dateAdd(day, -1, getDate())), getDate())) > convert(decimal(10,2), configurationCheckMinuteInterval) * 1.50)
-					then ''Configuration check '' + convert(varchar(20), dateDiff(minute, isnull(lastConfigurationCheck, dateAdd(day, -1, getDate())), getDate()) - configurationCheckMinuteInterval) + '' minutes overdue. ''
-					else '''' end +
-			case
-				when (fragmentationCheck = 1 and convert(decimal(10,2), dateDiff(minute, isnull(lastFragmentationCheck, dateAdd(day, -1, getDate())), getDate())) > convert(decimal(10,2), fragmentationCheckMinuteInterval) * 1.25)
-					then ''Fragmentation check '' + convert(varchar(20), dateDiff(minute, isnull(lastFragmentationCheck, dateAdd(day, -1, getDate())), getDate()) - fragmentationCheckMinuteInterval) + '' minutes overdue. ''
-				else ''''
-				end
 
-		from dm_servers a
-		join dm_serverGroups b on a.ukey_group = b.ukey
-		where isEnabled = 1
-			and (
-				(
-					eventLogCheck = 1
-					and convert(decimal(10,2),
-						dateDiff(minute,
-							case when isnull(eventLogCheckSleepUntil, '''') > lastEventLogCheck then eventLogCheckSleepUntil
-								else isnull(lastEventLogCheck, dateAdd(day, -1, getDate()))
-								end, getDate()
-							)
-						) > convert(decimal(10,2), eventLogCheckMinuteInterval) * 1.25
-					and dateDiff(minute, lastEventLogCheck, getDate()) > 5
-					)
-				or (
-					detailedCheck = 1
-					and convert(decimal(10,2),
-						dateDiff(minute, isnull(lastDetailedCheck, dateAdd(day, -1, getDate())), getDate())
-						) > convert(decimal(10,2), detailedCheckMinuteInterval) * 1.25
-					and dateDiff(minute, lastDetailedCheck, getDate()) > 5
-					)
-				or (
-					serviceCheck = 1
-					and convert(decimal(10,2),
-						dateDiff(minute, isnull(lastServiceCheck, dateAdd(day, -1, getDate())), getDate())
-						) > convert(decimal(10,2), serviceCheckMinuteInterval) * 1.25
-					and dateDiff(minute, lastServiceCheck, getDate()) > 5
-					)
-				or (
-					pingCheck = 1
-					and convert(decimal(10,2),
-						dateDiff(minute, isnull(lastPingCheck, dateAdd(day, -1, getDate())), getDate())
-						) > convert(decimal(10,2), pingCheckMinuteInterval) * 1.25
-					and dateDiff(minute, lastPingCheck, getDate()) > 5
-					)
-				or (
-					integrityCheck = 1
-					and convert(decimal(10,2),
-						dateDiff(minute, isnull(lastIntegrityCheck, dateAdd(day, -1, getDate())), getDate())
-						) > convert(decimal(10,2), integrityCheckMinuteInterval) * 1.25
-					and dateDiff(minute, lastIntegrityCheck, getDate()) > 5
-					)
-				or (
-					configurationCheck = 1
-					and convert(decimal(10,2),
-						dateDiff(minute, isnull(lastConfigurationCheck, dateAdd(day, -1, getDate())), getDate())
-						) > convert(decimal(10,2), configurationCheckMinuteInterval) * 1.50
-					and dateDiff(minute, lastConfigurationCheck, getDate()) > 5
-					)
-				or (
-					fragmentationCheck = 1
-					and convert(decimal(10,2),
-						dateDiff(minute, isnull(lastFragmentationCheck, dateAdd(day, -1, getDate())), getDate())
-						) > convert(decimal(10,2), fragmentationCheckMinuteInterval) * 1.25
-					and dateDiff(minute, lastFragmentationCheck, getDate()) > 5
-					)
-				)
-			and isServerPingable = 1
-
-	insert into #results (groupName, serverName, messageBody)
-	select ''Websites'' as groupName,
-		isnull(friendlyName, websiteURL) as serverName,
-		''URL '' + isnull(friendlyName, websiteURL) + '' has not been checked for '' + convert(varchar(20), dateDiff(minute, isnull(lastCheck, ''1980-08-28''), getDate())) + '' minutes.''
-		from websiteMonitor..monitoredURLs
-		where dateDiff(minute, isnull(lastCheck, dateAdd(week, -1, getDate())), getDate()) > 15
-			and isEnabled = 1
-
-	select *
-		from #results
-		order by groupName, serverName
-
-	drop table #results
-end
-'
-END
-GO
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[fn_returnUTCDate]') AND type in (N'FN', N'IF', N'TF', N'FS', N'FT'))
-BEGIN
-execute dbo.sp_executesql @statement = N'CREATE function [fn_returnUTCDate] (@dToday dateTime)
-returns varchar(50)
-as
-begin
-	--declare @dToday dateTime
-	--set @dToday = dateAdd(hour, -5, getDate())
-
-	return convert(varchar(4), datePart(year, @dToday)) +
-		right(''00'' + convert(varchar(2), datePart(month, @dToday)), 2) +
-		right(''00'' + convert(varchar(2), datePart(day, @dToday)), 2) +
-
-		right(''00'' + convert(varchar(2), datePart(hour, @dToday)), 2) +
-		right(''00'' + convert(varchar(2), datePart(minute, @dToday)), 2) +
-		right(''00'' + convert(varchar(2), datePart(second, @dToday)), 2) +
-
-		''.000000'' +
-
-		''-'' + left(convert(varchar(2), dateDiff(hour, getDate(), getUTCDate())) + ''000'', 3)
-end
-'
-END
 GO

@@ -1,7 +1,4 @@
-use [notification]
-go
-
-create procedure [dbo].[pr_rpt_sqlLoadByDatabaseByMinute] (@cServerName varchar(100), @dStartDate dateTime, @dEndDate dateTime)
+CREATE procedure [dbo].[pr_rpt_sqlLoadByDatabaseByMinute] (@cServerName varchar(100), @dStartDate dateTime, @dEndDate dateTime)
 as
 begin
 --	declare @cServerName varchar(100)
@@ -9,7 +6,7 @@ begin
 --	declare @dEndDate dateTime
 --	set @cServerName = 'mssql-ny'
 
-	set @dStartDate = isnull(@dStartDate, dateAdd(hour, -12, getDate()))
+	set @dStartDate = isnull(@dStartDate, dateAdd(hour, -36, getDate()))
 	set @dEndDate = isnull(@dEndDate, getDate())
 
 	set nocount on
@@ -85,14 +82,18 @@ begin
 
 	select
 		dbName,
-		right(convert(varchar(16), lastBatchTime, 120), 5) as ymd,
+		dbo.fn_returnShortDate(lastBatchTime) as ymd,
 		sum(cpuTime_delta) as cpuTime,
 		sum(diskIO_delta) as diskIO
 
 		from #activity
-		group by dbName, right(convert(varchar(16), lastBatchTime, 120), 5)
-		order by dbName, right(convert(varchar(16), lastBatchTime, 120), 5)
+		group by dbName, dbo.fn_returnShortDate(lastBatchTime)
+		order by dbName, dbo.fn_returnShortDate(lastBatchTime)
 
 	drop table #activity
 
 end
+
+
+
+GO

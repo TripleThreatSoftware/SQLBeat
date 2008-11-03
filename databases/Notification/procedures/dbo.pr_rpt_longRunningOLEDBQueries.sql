@@ -1,9 +1,5 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
 -- exec pr_rpt_longRunningOLEDBQueries 'sqlcluster01', null, null
-ALTER procedure [dbo].[pr_rpt_longRunningOLEDBQueries] (@cServerName varchar(100), @nNumHours int = 6)
+CREATE procedure [dbo].[pr_rpt_longRunningOLEDBQueries] (@cServerName varchar(100), @nNumHours int = 6)
 as
 begin
 
@@ -29,3 +25,7 @@ begin
 		order by [login], dbname, left(dbo.fn_returnTrimmedBuffer(bufferContents), 200)
 
 end
+
+
+
+GO

@@ -1,7 +1,4 @@
-use notification
-go
-
-ALTER  function [dbo].[fn_returnListItem] (@cList varchar(8000), @nItemNumber int, @cDelimiter varchar(5))
+CREATE  function [dbo].[fn_returnListItem] (@cList varchar(8000), @nItemNumber int, @cDelimiter varchar(5))
 returns varchar(8000)
 as
 begin
@@ -63,4 +60,6 @@ begin
 	return @cResults
 end
 
--- select dbo.fn_returnListItem('transactionSet periodID="1" periodname="SHIFT" longId="2006-10-21" shortId="039" site="RT053"', 6, ' ')
+
+
+GO

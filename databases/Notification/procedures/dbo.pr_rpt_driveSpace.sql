@@ -1,11 +1,4 @@
-USE [Notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_rpt_driveSpace]    Script Date: 09/10/2008 15:10:38 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-ALTER       procedure [dbo].[pr_rpt_driveSpace]
+CREATE       procedure [dbo].[pr_rpt_driveSpace]
 as
 begin
 	declare @dToday dateTime
@@ -149,3 +142,7 @@ begin
 
 
 end
+
+
+
+GO

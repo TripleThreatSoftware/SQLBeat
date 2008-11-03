@@ -1,11 +1,4 @@
-USE [Notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_dashboard_returnRecentMessages]    Script Date: 06/18/2008 09:12:51 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-ALTER procedure [dbo].[pr_dashboard_returnRecentMessages]
+CREATE procedure [dbo].[pr_dashboard_returnRecentMessages]
 as
 begin
 
@@ -21,3 +14,7 @@ begin
 		order by ymd desc
 
 end
+
+
+
+GO

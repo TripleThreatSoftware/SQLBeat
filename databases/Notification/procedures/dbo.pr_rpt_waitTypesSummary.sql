@@ -1,6 +1,4 @@
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[pr_rpt_waitTypesSummary]') AND type in (N'P', N'PC'))
-BEGIN
-EXEC dbo.sp_executesql @statement = N'-- exec pr_rpt_waitTypesSummary ''doesqlcluster''
+-- exec pr_rpt_waitTypesSummary 'doesqlcluster'
 CREATE procedure [pr_rpt_waitTypesSummary] (@cServerName varchar(100))
 as
 begin
@@ -43,10 +41,10 @@ begin
 
 		from (
 			select spid, lastWaitType, lastBatchTime, hostname, dbName, login, command,
-				rtrim(ltrim(replace(replace(replace(replace(replace(replace(replace(replace(bufferContents, ''['', ''''), '']'', ''''), char(13), '' ''), ''  '', ''''), ''  '', ''''), char(10), ''''), char(9), '' ''), ''dbo.'', ''''))) as bufferContents,
+				rtrim(ltrim(replace(replace(replace(replace(replace(replace(replace(replace(bufferContents, '[', ''), ']', ''), char(13), ' '), '  ', ''), '  ', ''), char(10), ''), char(9), ' '), 'dbo.', ''))) as bufferContents,
 				max(ymd) as ymd
 				from v_processLog_all a
-				where command <> ''awaiting command''
+				where command <> 'awaiting command'
 					and (
 							(ymd >= @dStartDateWeek1 and ymd < @dEndDateWeek1)
 							or (ymd >= @dStartDateWeek2 and ymd < @dEndDateWeek2)
@@ -54,7 +52,7 @@ begin
 						)
 					and serverName = @cServerName
 				group by spid, lastWaitType, lastBatchTime, dbName, hostname, login, command,
-					rtrim(ltrim(replace(replace(replace(replace(replace(replace(replace(replace(bufferContents, ''['', ''''), '']'', ''''), char(13), '' ''), ''  '', ''''), ''  '', ''''), char(10), ''''), char(9), '' ''), ''dbo.'', '''')))
+					rtrim(ltrim(replace(replace(replace(replace(replace(replace(replace(replace(bufferContents, '[', ''), ']', ''), char(13), ' '), '  ', ''), '  ', ''), char(10), ''), char(9), ' '), 'dbo.', '')))
 			) a
 		group by lastWaitType, convert(varchar(10), lastBatchTime, 120)
 
@@ -68,15 +66,15 @@ begin
 		count(*) as numRequests
 		from (
 			select spid, lastWaitType, lastBatchTime, hostname, dbName, login, command,
-				rtrim(ltrim(replace(replace(replace(replace(replace(replace(replace(replace(bufferContents, ''['', ''''), '']'', ''''), char(13), '' ''), ''  '', ''''), ''  '', ''''), char(10), ''''), char(9), '' ''), ''dbo.'', ''''))) as bufferContents,
+				rtrim(ltrim(replace(replace(replace(replace(replace(replace(replace(replace(bufferContents, '[', ''), ']', ''), char(13), ' '), '  ', ''), '  ', ''), char(10), ''), char(9), ' '), 'dbo.', ''))) as bufferContents,
 				max(ymd) as ymd
 				from processLog a (nolock)
-				where command <> ''awaiting command''
+				where command <> 'awaiting command'
 					and ymd >= @dStartDateNow
 					and ymd < @dEndDateNow
 					and serverName = @cServerName
 				group by spid, lastWaitType, lastBatchTime, dbName, hostname, login, command,
-					rtrim(ltrim(replace(replace(replace(replace(replace(replace(replace(replace(bufferContents, ''['', ''''), '']'', ''''), char(13), '' ''), ''  '', ''''), ''  '', ''''), char(10), ''''), char(9), '' ''), ''dbo.'', '''')))
+					rtrim(ltrim(replace(replace(replace(replace(replace(replace(replace(replace(bufferContents, '[', ''), ']', ''), char(13), ' '), '  ', ''), '  ', ''), char(10), ''), char(9), ' '), 'dbo.', '')))
 			) a
 		group by lastWaitType, convert(varchar(10), lastBatchTime, 120)
 
@@ -121,12 +119,7 @@ begin
 	drop table #waitData
 
 end
-'
-END
-GO
-IF NOT EXISTS (SELECT * FROM sys.views WHERE object_id = OBJECT_ID(N'[v_getDate]'))
-EXEC dbo.sp_executesql @statement = N'create view [v_getDate]
-as
-select getDate() as ymd
-'
+
+
+
 GO

@@ -1,6 +1,4 @@
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[pr_dashboard_silenceAlert]') AND type in (N'P', N'PC'))
-BEGIN
-EXEC dbo.sp_executesql @statement = N'-- select * from messageRules
+-- select * from messageRules
 -- update messageRules set ukey_userEmail = 0 where ukey_userEmail is null
 CREATE procedure [pr_dashboard_silenceAlert] (@cUserName varchar(100), @cServerName varchar(100), @cMessage varchar(500), @cMessageSource varchar(100))
 as
@@ -33,9 +31,9 @@ begin
 	set @bIsFulfillment = 0
 	set @bIsMonitorMessage = 0
 
-	set @cMessage = replace(@cMessage, ''"'', '''')
+	set @cMessage = replace(@cMessage, '"', '')
 
-	if @cMessageSource = ''serverStatus''
+	if @cMessageSource = 'serverStatus'
 		set @bIsMonitorMessage = 1
 
 	if not exists (
@@ -72,37 +70,7 @@ end
 
 
 --alter table messageRules add constraint pk_messageRules_ukey primary key (ukey)
-'
-END
-GO
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[fn_returnRunStamp]') AND type in (N'FN', N'IF', N'TF', N'FS', N'FT'))
-BEGIN
-execute dbo.sp_executesql @statement = N'create function [fn_returnRunStamp] (@dToday dateTime)
-returns bigint
-as
-begin
-	declare @nRunStamp bigint
 
-	set @nRunStamp = convert(bigint,
-			convert(varchar(4), datePart(year, @dToday)) +
-			dbo.fn_padl(convert(varchar(2), datePart(month, @dToday)), 2, ''0'') +
-			dbo.fn_padl(convert(varchar(2), datePart(day, @dToday)), 2, ''0'') +
-			dbo.fn_padl(convert(varchar(2), datePart(hour, @dToday)), 2, ''0'') +
-			dbo.fn_padl(convert(varchar(2), datePart(minute, @dToday)), 2, ''0'') +
-			dbo.fn_padl(convert(varchar(2), datePart(second, @dToday)), 2, ''0'') +
-			dbo.fn_padl(convert(varchar(3), datePart(millisecond, @dToday)), 3, ''0'')
-		)
 
-	return @nRunStamp
-end
-'
-END
-GO
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
+
 GO

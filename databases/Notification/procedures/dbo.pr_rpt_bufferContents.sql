@@ -1,10 +1,6 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
 -- pr_rpt_bufferContents 'sqlcluster01', null, null
 
-ALTER procedure [dbo].[pr_rpt_bufferContents] (@cServerName varchar(100), @dStartDate dateTime, @dEndDate dateTime)
+CREATE procedure [dbo].[pr_rpt_bufferContents] (@cServerName varchar(100), @dStartDate dateTime, @dEndDate dateTime)
 as
 begin
 
@@ -69,3 +65,7 @@ begin
 
 	drop table #bufferChanges
 end
+
+
+
+GO

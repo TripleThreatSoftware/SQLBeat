@@ -1,10 +1,5 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-
--- exec pr_rpt_sqlDiskWaiting 'spiderxps', 48
-ALTER procedure [dbo].[pr_rpt_sqlDiskWaiting] (@cServerName varchar(100), @nNumHours int = 12)
+-- exec pr_rpt_sqlDiskWaiting 'spiderxps', '', ''
+CREATE procedure [dbo].[pr_rpt_sqlDiskWaiting] (@cServerName varchar(100), @nNumHours int = 12)
 as
 begin
 	set nocount on
@@ -18,3 +13,7 @@ begin
 			and ymd >= dateAdd(hour, -@nNumHours, getdate())
 		order by ymd desc, dbname
 end
+
+
+
+GO

@@ -1,6 +1,6 @@
 -- exec pr_rpt_sqlCPUWaits '10.3.10.110', 720
 
-ALTER procedure [dbo].[pr_rpt_sqlCPUWaits] (@cServerName varchar(100), @nNumHours int = 12)
+CREATE procedure [dbo].[pr_rpt_sqlCPUWaits] (@cServerName varchar(100), @nNumHours int = 12)
 as
 begin
 
@@ -15,3 +15,7 @@ begin
 
 
 end
+
+
+
+GO

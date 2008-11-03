@@ -1,17 +1,9 @@
-USE [Notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_processEventLogMessages]    Script Date: 08/20/2008 10:24:15 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-
 -- create table eventLog_stage_hist (ukey_group int, ymd dateTime default getDate(), step varchar(200))
 -- pr_processEventLogMessages 1
 -- select * from eventLog_history order by ymd desc
 -- select * from eventLog_stage
 
-ALTER procedure [dbo].[pr_processEventLogMessages] (@nUkeyGroup int)
+CREATE procedure [dbo].[pr_processEventLogMessages] (@nUkeyGroup int)
 as
 begin
 
@@ -119,18 +111,6 @@ begin
 					and message not like '%Group Policy client-side extension Security failed to log RSOP%'
 					and not (message like '%rsop%' and message like '%hostingmodel%')
 
-					and message not like '%landesk%'
-					and message not like '%time service%'
-					and message not like '%local activation permission%'
-					and message not like '%profile cannot be loaded%'
-
-					and message not like '%http server is terminating%'
-					and message not like '%JIT Debugging%'
-					and message not like '%waiting for a transaction response%'
-					and message not like '%performance counter data collection%'
-					and message not like '%open procedure name%'
-
-
 					and isnull(a.message, '') <> ''
 			) a
 
@@ -184,7 +164,8 @@ begin
 	insert into notificationLog_stage (subject, message, severity, isEventLog, serverName)
 	select
 		'EventLog checks have failed ' + convert(varchar(20), numFailures) + ' times for ' + serverName + ' at ' + right(convert(varchar(20), latest, 120), 8) as subject,
-		'Server ' + serverName + ' has experienced ' + convert(varchar(20), numFailures) + ' failures between ' + convert(varchar(20), earliest, 120) + ' and ' + convert(varchar(20), latest, 120) + '. As a result, further Event Log checks have been DISABLED.' + char(13) + char(13) + 'The observed error was: ' + isnull(notes, '') as message,
+		'Server ' + serverName + ' has experienced ' + convert(varchar(20), numFailures) + ' failures between ' + convert(varchar(20), earliest, 120) + ' and ' + convert(varchar(20), latest, 120) + '. As a result, further Event Log checks have been DISABLED.' + char(13) + char(13) + 'The observed e
+rror was: ' + isnull(notes, '') as message,
 		2 as severity,
 		1 as isEventLog,
 		serverName
@@ -218,3 +199,6 @@ begin
 	drop table #eventLogFailures
 	drop table #eventLog
 end
+
+
+GO

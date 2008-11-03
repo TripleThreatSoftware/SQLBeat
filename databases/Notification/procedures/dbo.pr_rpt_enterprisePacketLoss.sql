@@ -15,3 +15,7 @@ begin
 			and ymd <= @dEndDate
 		order by ymd desc
 end
+
+
+
+GO

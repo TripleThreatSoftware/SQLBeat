@@ -1,4 +1,4 @@
-CREATE function [dbo].[fn_occurs] (@cStringToFind varchar(500), @cSource varchar(500))
+CREATE function [fn_occurs] (@cStringToFind varchar(500), @cSource varchar(500))
 returns int
 as
 begin
@@ -22,8 +22,7 @@ begin
 	return @nOccurs
 end
 -- select dbo.fn_occurs(' ', 'test test')
-GO
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER OFF
+
+
+
 GO
