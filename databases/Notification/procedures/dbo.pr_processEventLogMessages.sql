@@ -1,9 +1,15 @@
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
 -- create table eventLog_stage_hist (ukey_group int, ymd dateTime default getDate(), step varchar(200))
 -- pr_processEventLogMessages 1
 -- select * from eventLog_history order by ymd desc
 -- select * from eventLog_stage
 
-CREATE procedure [dbo].[pr_processEventLogMessages] (@nUkeyGroup int)
+ALTER procedure [dbo].[pr_processEventLogMessages] (@nUkeyGroup int)
 as
 begin
 
@@ -61,6 +67,11 @@ begin
 					or a.message like '%eaas%'
 					or a.message like '%degraded%'
 					or a.message like '%sensor%'
+					or a.message like '%disk offline%'
+					or a.message like '%disk removed%'
+					or a.message like '%redundancy%'
+					or a.message like '%physical disk%'
+					or a.message like '%device failed%'
 					or a.message like '%drive array%'
 					or a.message like '%power supply%'
 					or a.message like '%The Event log service was stopped%'
@@ -164,8 +175,7 @@ begin
 	insert into notificationLog_stage (subject, message, severity, isEventLog, serverName)
 	select
 		'EventLog checks have failed ' + convert(varchar(20), numFailures) + ' times for ' + serverName + ' at ' + right(convert(varchar(20), latest, 120), 8) as subject,
-		'Server ' + serverName + ' has experienced ' + convert(varchar(20), numFailures) + ' failures between ' + convert(varchar(20), earliest, 120) + ' and ' + convert(varchar(20), latest, 120) + '. As a result, further Event Log checks have been DISABLED.' + char(13) + char(13) + 'The observed e
-rror was: ' + isnull(notes, '') as message,
+		'Server ' + serverName + ' has experienced ' + convert(varchar(20), numFailures) + ' failures between ' + convert(varchar(20), earliest, 120) + ' and ' + convert(varchar(20), latest, 120) + '. As a result, further Event Log checks have been DISABLED.' + char(13) + char(13) + 'The observed error was: ' + isnull(notes, '') as message,
 		2 as severity,
 		1 as isEventLog,
 		serverName
@@ -199,6 +209,3 @@ rror was: ' + isnull(notes, '') as message,
 	drop table #eventLogFailures
 	drop table #eventLog
 end
-
-
-GO
