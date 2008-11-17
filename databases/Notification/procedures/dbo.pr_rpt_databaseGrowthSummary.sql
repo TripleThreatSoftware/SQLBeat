@@ -1,27 +1,37 @@
-CREATE procedure [pr_rpt_databaseGrowthSummary] (@cServerName varchar(100))
+-- exec pr_rpt_databaseGrowthSummary 'mssql-slv2'
+
+ALTER procedure [dbo].[pr_rpt_databaseGrowthSummary] (@cServerName varchar(100))
 as
 begin
 
 --	declare @cServerName varchar(100)
 --	set @cServerName = 'sqlcluster01'
 
+	select dbName, min(ymd) as minYMD, max(ymd) as maxYMD
+		into #dataPoints
+		from v_databaseFileSizeLog_all
+		where ymd >= dateAdd(month, -1, getDate())
+			and serverName = @cServerName
+			and isLog = 0
+			and dbName <> 'tempdb'
+		group by dbName
+
 	set datefirst 2
 
 	-- Overall growth
 	select *, [maxSize] - minSize as sizeChange
 		from (
-			select dbName, min(ymd) as firstDay, min([size]) as minSize, max([size]) as maxSize, max(ymd) as lastDay
-				from v_databaseFileSizeLog_all (nolock)
-				where isLog = 0
-					and dbname <> 'tempdb'
-					and serverName = @cServerName
-					and ymd >= dateAdd(month, -2, getDate())
-				group by dbName
-				having max([size]) > min([size])
+			select a.dbName, min(ymd) as firstDay, min([size]) as minSize, max([size]) as maxSize, max(ymd) as lastDay
+				from v_databaseFileSizeLog_all a (nolock)
+				join #dataPoints b on a.dbName = b.dbName
+					and a.ymd in (b.minYMD, b.maxYMD)
+				where a.isLog = 0
+					and a.dbname <> 'tempdb'
+					and a.serverName = @cServerName
+					and a.ymd >= dateAdd(month, -1, getDate())
+				group by a.dbName
 			) a
-		order by [maxSize] - minSize desc
+		order by dbName desc
+
+	drop table #dataPoints
 end
-
-
-
-GO

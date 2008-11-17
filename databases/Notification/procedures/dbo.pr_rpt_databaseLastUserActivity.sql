@@ -1,4 +1,9 @@
-CREATE procedure [dbo].[pr_rpt_databaseLastUserActivity] (@cServerName varchar(200))
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+ALTER procedure [dbo].[pr_rpt_databaseLastUserActivity] (@cServerName varchar(200))
 as
 begin
 
@@ -24,14 +29,10 @@ begin
 				where serverName = @cServerName
 					and hostName <> @@servername
 					and hostname <> (select settingValue from dm_settings where settingName = 'current machine name')
-					and ymd >= dateAdd(month, -1, getDate())
+					and ymd >= dateAdd(week, -2, getDate())
 				group by dbName
 			) c on a.dbname = c.dbName
 		where a.dbName not in ('master', 'model', 'msdb', 'distribution', 'tempdb')
 		order by a.dbName
 
 end
-
-
-
-GO

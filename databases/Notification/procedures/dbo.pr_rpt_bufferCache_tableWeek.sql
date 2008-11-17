@@ -1,4 +1,8 @@
-create procedure pr_rpt_bufferCache_tableWeek (@cServerName varchar(100) = '')
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER procedure [dbo].[pr_rpt_bufferCache_tableWeek] (@cServerName varchar(100) = '')
 as
 begin
 
@@ -36,13 +40,9 @@ begin
 --		from #bufferHistory
 --		group by serverName, databaseName
 
-	select serverName, databaseName, tableName, indexNumber, sum(bufferDelta) as bufferDelta
+	select serverName, databaseName, tableName, indexNumber, sum(abs(bufferDelta)) as bufferDelta
 		from #bufferHistory
 		group by serverName, databaseName, tableName, indexNumber
 
 	drop table #bufferHistory
 end
-
-
-
-GO

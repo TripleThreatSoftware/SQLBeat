@@ -1,5 +1,9 @@
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 -- exec pr_rpt_waitTypesSummary 'doesqlcluster'
-CREATE procedure [pr_rpt_waitTypesSummary] (@cServerName varchar(100))
+ALTER procedure [dbo].[pr_rpt_waitTypesSummary] (@cServerName varchar(100))
 as
 begin
 
@@ -21,13 +25,13 @@ begin
 
 	set @dRightNow = getDate()
 
-	set @dStartDateNow = convert(varchar(10), @dRightNow, 120)
-	set @dStartDateWeek1 = dateAdd(week, -1, convert(varchar(10), @dRightNow, 120))
-	set @dStartDateWeek2 = dateAdd(week, -2, convert(varchar(10), @dRightNow, 120))
+	set @dStartDateNow = dateAdd(hour, -2, @dRightNow)
+	set @dStartDateWeek1 = dateAdd(week, -1, @dStartDateNow)
+	set @dStartDateWeek2 = dateAdd(week, -2, @dStartDateNow)
 
-	set @dEndDateNow = dateAdd(hour, datePart(hour, @dRightNow), @dStartDateNow)
-	set @dEndDateWeek1 = dateAdd(hour, datePart(hour, @dRightNow), @dStartDateWeek1)
-	set @dEndDateWeek2 = dateAdd(hour, datePart(hour, @dRightNow), @dStartDateWeek2)
+	set @dEndDateNow = @dRightNow
+	set @dEndDateWeek1 = dateAdd(hour, 2, @dStartDateWeek1)
+	set @dEndDateWeek2 = dateAdd(hour, 2, @dStartDateWeek2)
 
 	select lastWaitType,
 		convert(varchar(10), lastBatchTime, 120) as ymd,
@@ -119,7 +123,3 @@ begin
 	drop table #waitData
 
 end
-
-
-
-GO
