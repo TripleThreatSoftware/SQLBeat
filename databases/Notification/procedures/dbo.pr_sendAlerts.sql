@@ -1,4 +1,9 @@
-CREATE procedure [dbo].[pr_sendAlerts] (@cUserName varchar(100) = '', @bIsPreview bit = 0)
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+ALTER procedure [dbo].[pr_sendAlerts] (@cUserName varchar(100) = '', @bIsPreview bit = 0, @bOverride bit = 0)
 as
 begin
 	set nocount off
@@ -144,7 +149,7 @@ begin
 
 		-- rate limiter!
 
-		if (select count(*) from #messagesToSend) > 500
+		if (select count(*) from #messagesToSend) > 500 and @bOverride = 0
 		begin
 			-- panic! email Cole, do not send these out
 
@@ -192,7 +197,3 @@ begin
 	drop table #messages
 	drop table #messagesToSend
 end
-
-
-
-GO
