@@ -1,4 +1,12 @@
-CREATE procedure [dbo].[pr_monitorProductionConnections]
+USE [Notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_monitorProductionConnections]    Script Date: 12/03/2008 15:43:30 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+ALTER procedure [dbo].[pr_monitorProductionConnections]
 as
 begin
 	set nocount on
@@ -22,10 +30,13 @@ begin
 	declare @dStartDate3 dateTime
 	declare @dEndDate3 dateTime
 
-	set @nNumMinutes = 90
+	set @nNumMinutes = 15
 
 	set @dEndDate = getDate()
 	set @dStartDate = dateAdd(minute, -@nNumMinutes, @dEndDate)
+
+--set @dStartDate = '2008-12-03 14:00:00.000'
+--set @dEndDate = '2008-12-03 14:25:00.000'
 
 	set @dEndDate1 = dateAdd(week, -1, @dEndDate)
 	set @dStartDate1 = dateAdd(minute, -@nNumMinutes, @dEndDate1)
@@ -75,7 +86,7 @@ begin
 					and programName not in ('SQLAgent - Job invocation engine', 'SQLAgent - Generic Refresher')
 					and programName not like '%repl%'
 					and hostName <> @cThisServerName
-					and command <> 'awaiting command'
+--					and command <> 'awaiting command'
 				group by serverName
 			) a
 
@@ -127,12 +138,15 @@ begin
 					and programName not in (''SQLAgent - Job invocation engine'', ''SQLAgent - Generic Refresher'')
 					and programName not like ''%repl%''
 					and hostName <> ''' + @cThisServerName + '''
-					and command <> ''awaiting command''
+--					and command <> ''awaiting command''
 				group by serverName
 			) a'
 
 	insert into #historical
 	exec sp_executeSQL @cSQLString
+
+--select * from #current
+--select * from #historical
 
 	select
 		a.serverName, a.ymd,
@@ -155,8 +169,7 @@ begin
 			else 0
 			end as numWaitingConnections_oledb_delta,
 
-		a.secondsElapsed_avg_oledb as secondsElaps
-ed_avg_oledb_now, b.secondsElapsed_avg_oledb as secondsElapsed_avg_oledb_hist,
+		a.secondsElapsed_avg_oledb as secondsElapsed_avg_oledb_now, b.secondsElapsed_avg_oledb as secondsElapsed_avg_oledb_hist,
 		case when b.secondsElapsed_avg_oledb <> 0
 			then convert(int, (
 						convert(decimal(10,2), a.secondsElapsed_avg_oledb) / convert(decimal(10,2), b.secondsElapsed_avg_oledb)
@@ -283,13 +296,14 @@ ed_avg_oledb_now, b.secondsElapsed_avg_oledb as secondsElapsed_avg_oledb_hist,
 			from #results
 
 			where
-				(
-					numActiveConnections_delta >= 300
+				serverName = @cThisServerName
+				and (
+					numActiveConnections_delta >= 175
 					or numActiveConnections_delta <= 25
-					or numWaitingConnections_delta >= 300
-					or numWaitingConnections_oledb_delta >= 300
+					or numWaitingConnections_delta >= 175
+					or numWaitingConnections_oledb_delta >= 175
 					)
-				and serverName = @cThisServerName
+
 
 		if @@rowcount > 0
 		begin
@@ -307,6 +321,3 @@ ed_avg_oledb_now, b.secondsElapsed_avg_oledb as secondsElapsed_avg_oledb_hist,
 	drop table #results
 
 end
-
-
-GO

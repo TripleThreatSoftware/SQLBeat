@@ -1,4 +1,13 @@
-CREATE procedure [dbo].[pr_rpt_weeklyTailReport]
+USE [Notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_rpt_weeklyTailReport]    Script Date: 12/03/2008 10:26:30 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+ALTER procedure [dbo].[pr_rpt_weeklyTailReport]
 as
 begin
 	-- First, detail on the time and duration of outages in the last week
@@ -8,7 +17,7 @@ begin
 	declare @cThisSubject varchar(500)
 	declare @dLatestViewData dateTime
 
-	set @dStartDate = dateAdd(week, -1, getDate())
+	set @dStartDate = dateAdd(week, -2, getDate())
 
 	create table #tailDetail (ukey int identity, serverName varchar(200), ukey_group int,
 		eventDetail varchar(1000), startDate dateTime, endDate dateTime)
@@ -122,7 +131,7 @@ begin
 		join notification..dm_servers b on a.serverName = b.serverName
 		join notification..dm_serverGroups c on b.ukey_group = c.ukey
 		group by c.ukey, c.groupName, convert(varchar(10), a.startDate, 120), datePart(hour, a.startDate)
-		having count(distinct a.serverName) >= 5
+		having count(distinct a.serverName) >= 10
 
 	delete #outages
 		from #outages a
@@ -133,7 +142,7 @@ begin
 				join notification..dm_servers b on a.serverName = b.serverName
 				join notification..dm_serverGroups c on b.ukey_group = c.ukey
 				group by c.ukey, convert(varchar(10), a.startDate, 120), datePart(hour, a.startDate)
-				having count(distinct a.serverName) >= 2
+				having count(distinct a.serverName) >= 10
 			) d on b.ukey_group = d.ukey_group
 				and a.startDate >= d.startDate
 				and a.endDate <= d.endDate
@@ -214,8 +223,7 @@ begin
 		'Website ' + friendlyName + ' went offline ' +
 			case when endDate is null
 				then 'and is still OFFLINE.'
-				else 'for ' + convert(varchar(20), convert(decima
-l(10,2), dateDiff(second, startDate, endDate) / 60.00)) + ' minutes.'
+				else 'for ' + convert(varchar(20), convert(decimal(10,2), dateDiff(second, startDate, endDate) / 60.00)) + ' minutes.'
 				end as eventDetail,
 		startDate, endDate
 		from #outageStart
@@ -355,7 +363,7 @@ l(10,2), dateDiff(second, startDate, endDate) / 60.00)) + ' minutes.'
 				or message like '%restart of computer%'
 				or message like '%drive array%'
 				)
-			and isConnectivity = 0
+--			and isConnectivity = 0
 			and a.serverName <> @@serverName
 			and a.serverName <> (select top 1 settingValue from dm_settings where settingName = 'current machine name')
 			and ymd >= @dStartDate
@@ -397,7 +405,7 @@ l(10,2), dateDiff(second, startDate, endDate) / 60.00)) + ' minutes.'
 				or message like '%restart of computer%'
 				or message like '%drive array%'
 				)
-			and isConnectivity = 0
+--			and isConnectivity = 0
 			and a.serverName <> @@serverName
 			and a.serverName <> (select top 1 settingValue from dm_settings where settingName = 'current machine name')
 			and ymd >= @dStartDate
@@ -406,13 +414,14 @@ l(10,2), dateDiff(second, startDate, endDate) / 60.00)) + ' minutes.'
 	insert into #tailDetail (serverName, eventDetail, startDate, endDate, ukey_group)
 	select serverName,
 		left(case
-			when subject like '%temperature%' or subject like '%thermal%' then 'Server temperature exceeded thresholds'
+			when subject like '%error is printed in terse mode%' then 'SQL Server has experienced a serious failure, and is unable to report errors'
+			when subject like '%unable to reuse a session%connection pooling%' then 'SQL Server no longer accepting connections'
+			when subject like '%temperature%' or subject like '%thermal%' or subject like '%too hot%' then 'Server temperature exceeded thresholds'
 			when subject like '%array controller%' or subject like '%degraded%' then 'Disk subsystem failure'
 			when subject like '%drive%is down to' then 'Disk space below threshold'
 			when subject like '%CPU load has triggered an alert%' or subject like 'cpu load is%' then 'CPU utilization above threshold'
 
-			when subject like '%event log service was%' or subject like '%initiated the restart
-%' or subject like '%system is shutting down%' then 'Rebooted'
+			when subject like '%event log service was%' or subject like '%initiated the restart%' or subject like '%system is shutting down%' then 'Rebooted'
 
 			when subject like '%shutdown%was%unexpected%' or subject like '%unexpected%shutdown%' then 'Unexpected Shutdown'
 
@@ -420,12 +429,14 @@ l(10,2), dateDiff(second, startDate, endDate) / 60.00)) + ' minutes.'
 			end +
 			' (' + max(subject)  + ')', 1000)  --substring(max(subject), charindex(':', max(subject)) + 1, 200)
 			as eventDetail,
-		min(ymd) as startDate,
-		max(ymd) as endDate,
+		ymd as startDate,
+		ymd as endDate,
 		ukey_group
 		from #otherErrors
-		group by serverName, ukey_group, case
-			when subject like '%temperature%' or subject like '%thermal%' then 'Server temperature exceeded thresholds'
+		group by serverName, ukey_group, ymd, case
+			when subject like '%error is printed in terse mode%' then 'SQL Server has experienced a serious failure, and is unable to report errors'
+			when subject like '%unable to reuse a session%connection pooling%' then 'SQL Server no longer accepting connections'
+			when subject like '%temperature%' or subject like '%thermal%' or subject like '%too hot%' then 'Server temperature exceeded thresholds'
 			when subject like '%array controller%' or subject like '%degraded%' then 'Disk subsystem failure'
 			when subject like '%drive%is down to' then 'Disk space below threshold'
 			when subject like '%CPU load has triggered an alert%' or subject like 'cpu load is%' then 'CPU utilization above threshold'
@@ -435,6 +446,97 @@ l(10,2), dateDiff(second, startDate, endDate) / 60.00)) + ' minutes.'
 			when subject like '%shutdown%was%unexpected%' or subject like '%unexpected%shutdown%' then 'Unexpected Shutdown'
 			else subject
 			end
+
+	if (select count(distinct ukey_group) from #tailDetail where eventDetail like '%temperature%') >= (select count(distinct ukey_group)/2 from dm_servers where isEnabled = 1)
+	begin
+		insert into #tailDetail (serverName, eventDetail, startDate, endDate, ukey_group)
+		select 'ALL',
+			'Between ' + convert(varchar(20), min(startDate), 120) + ' and ' + convert(varchar(20), max(endDate), 120) + ' ' + convert(varchar(20), count(distinct serverName)) + ' servers reported a thermal anomaly',
+			min(startDate), max(endDate), -1
+			from #tailDetail
+			where eventDetail like '%temperature%' or eventDetail like '%thermal%'
+			group by convert(varchar(10), startDate, 120), datePart(hour, startDate) / 4
+
+		delete from #tailDetail where (eventDetail like '%temperature%' or eventDetail like '%thermal%') and servername <> 'ALL'
+	end
+
+	if (select count(*) from #tailDetail where eventDetail like '%temperature%') >= 5
+	begin
+		insert into #tailDetail (serverName, eventDetail, startDate, endDate, ukey_group)
+		select 'ALL',
+			'Between ' + convert(varchar(20), min(startDate), 120) + ' and ' + convert(varchar(20), max(endDate), 120) + ' ' + convert(varchar(20), count(distinct serverName)) + ' servers reported a thermal anomaly',
+			min(startDate), max(endDate), ukey_group
+			from #tailDetail
+			where eventDetail like '%temperature%' or eventDetail like '%thermal%'
+			group by convert(varchar(10), startDate, 120), datePart(hour, startDate) / 4, ukey_group
+
+		delete from #tailDetail where (eventDetail like '%temperature%' or eventDetail like '%thermal%') and servername <> 'ALL'
+	end
+
+	if (select count(*) from #tailDetail where eventDetail like '%unable to report errors%') >= 5
+	begin
+		insert into #tailDetail (serverName, eventDetail, startDate, endDate, ukey_group)
+		select serverName,
+			'Between ' + convert(varchar(20), min(startDate), 120) + ' and ' + convert(varchar(20), max(endDate), 120) + ' ' + serverName + ' recorded ' + convert(varchar(20), count(*)) + ' severe errors.',
+			min(startDate), max(endDate), ukey_group
+			from #tailDetail
+			where eventDetail like '%unable to report errors%'
+			group by serverName, convert(varchar(10), startDate, 120), datePart(hour, startDate) / 4, ukey_group
+
+		delete from #tailDetail where eventDetail like '%unable to report errors%' and eventDetail not like '%between%'
+	end
+
+	if (select count(*) from #tailDetail where eventDetail like '%insufficient system memory to run this query%') >= 5
+	begin
+		insert into #tailDetail (serverName, eventDetail, startDate, endDate, ukey_group)
+		select serverName,
+			'Between ' + convert(varchar(20), min(startDate), 120) + ' and ' + convert(varchar(20), max(endDate), 120) + ' ' + serverName + ' recorded ' + convert(varchar(20), count(*)) + ' severe errors.',
+			min(startDate), max(endDate), ukey_group
+			from #tailDetail
+			where eventDetail like '%insufficient system memory to run this query%'
+			group by serverName, convert(varchar(10), startDate, 120), ukey_group
+
+		delete from #tailDetail where eventDetail like '%insufficient system memory to run this query%' and eventDetail not like '%between%'
+	end
+
+	if (select count(*) from #tailDetail where eventDetail like '%is not accessible%') >= 5
+	begin
+		insert into #tailDetail (serverName, eventDetail, startDate, endDate, ukey_group)
+		select serverName,
+			'Between ' + convert(varchar(20), min(startDate), 120) + ' and ' + convert(varchar(20), max(endDate), 120) + ' ' + serverName + ' was inaccessible ' + convert(varchar(20), count(*)) + ' times.',
+			min(startDate), max(endDate), ukey_group
+			from #tailDetail
+			where eventDetail like '%is not accessible%'
+			group by serverName, convert(varchar(10), startDate, 120), ukey_group
+
+		delete from #tailDetail where eventDetail like '%is not accessible%' and eventDetail not like '%between%'
+	end
+
+	if (select count(*) from #tailDetail where eventDetail like '%no longer accepting connections%') >= 5
+	begin
+		insert into #tailDetail (serverName, eventDetail, startDate, endDate, ukey_group)
+		select serverName,
+			'Between ' + convert(varchar(20), min(startDate), 120) + ' and ' + convert(varchar(20), max(endDate), 120) + ' ' + serverName + ' rejected at least ' + convert(varchar(20), count(*)) + ' connections.',
+			min(startDate), max(endDate), ukey_group
+			from #tailDetail
+			where eventDetail like '%no longer accepting connections%'
+			group by serverName, convert(varchar(10), startDate, 120), datePart(hour, startDate) / 4, ukey_group
+
+		delete from #tailDetail where eventDetail like '%no longer accepting connections%' and eventDetail not like '%between%'
+	end
+
+	if (select count(*) from #tailDetail where eventDetail like '%rebooted%') >= 20
+	begin
+		insert into #tailDetail (serverName, eventDetail, startDate, endDate, ukey_group)
+		select serverName,
+			'Between ' + convert(varchar(20), min(startDate), 120) + ' and ' + convert(varchar(20), max(endDate), 120) + ' ' + serverName + ' rebooted at least once.',
+			min(startDate), max(endDate), ukey_group
+			from #tailDetail
+			where eventDetail like '%rebooted%'
+			group by serverName, convert(varchar(10), startDate, 120), datePart(hour, startDate) / 4, ukey_group
+
+		delete from #tailDetail where eventDetail like '%rebooted%' and eventDetail not like '%between%'
+	end
 
 	--***********************************************************************************************************
 	-- DOE specific errors
@@ -491,5 +593,3 @@ l(10,2), dateDiff(second, startDate, endDate) / 60.00)) + ' minutes.'
 	drop table #tailDetail
 	drop table #otherErrors
 end
-
-GO
