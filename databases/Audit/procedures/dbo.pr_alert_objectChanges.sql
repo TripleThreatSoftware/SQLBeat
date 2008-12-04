@@ -1,5 +1,7 @@
-use [audit]
-go
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 
 
 
@@ -200,7 +202,9 @@ begin
 				set @cThisLine = @cCarryOver + @cThisLine
 				set @cCarryOver = ''
 
-				if right(@cThisLine, 1) <> char(13) and charindex(char(13), @cThisLine) > 0
+				if right(@cThisLine, 1) <> char(13)
+					and (charindex(char(13), reverse(@cThisLine)) - 1) > 0
+					and len(@cThisLine) - charindex(char(13), reverse(@cThisLine)) > 0
 				begin
 					set @cCarryOver = reverse(substring(reverse(@cThisLine), 1, charindex(char(13), reverse(@cThisLine)) - 1))
 					set @cThisLine = left(@cThisLine, len(@cThisLine) - charindex(char(13), reverse(@cThisLine)))
@@ -242,7 +246,9 @@ begin
 			set @cThisLine = @cCarryOver + @cThisLine
 			set @cCarryOver = ''
 
-			if right(@cThisLine, 1) <> char(13) and charindex(char(13), @cThisLine) > 0
+			if right(@cThisLine, 1) <> char(13)
+				and (charindex(char(13), reverse(@cThisLine)) - 1) > 0
+				and len(@cThisLine) - charindex(char(13), reverse(@cThisLine)) > 0
 			begin
 				set @cCarryOver = reverse(substring(reverse(@cThisLine), 1, charindex(char(13), reverse(@cThisLine)) - 1))
 				set @cThisLine = left(@cThisLine, len(@cThisLine) - charindex(char(13), reverse(@cThisLine)))
