@@ -1,5 +1,5 @@
 -- The keyFieldList variable should not contain ymd_id or ymd fields
-CREATE   procedure [pr_partitionTableDaily] (@cTableName varchar(100), @cDateField varchar(100), @cKeyfieldList varchar(100), @lMakeUkey bit)
+ALTER   procedure [dbo].[pr_partitionTableDaily] (@cTableName varchar(100), @cDateField varchar(100), @cKeyfieldList varchar(100), @lMakeUkey bit)
 as
 begin
 	set noCount on
@@ -211,8 +211,7 @@ begin
 		if @cFieldName = 'ukey'
 			set @lHasUkey = 1
 
-		set @cFieldList = @cFieldList + case when len(@cFieldList) > 0 then ',' else '' end + '[' + @cFieldNam
-e + ']'
+		set @cFieldList = @cFieldList + case when len(@cFieldList) > 0 then ',' else '' end + '[' + @cFieldName + ']'
 
 		if @nFieldLength = 0
 			set @cTableStructure = @cTableStructure + case when len(@cTableStructure) > 0 then ',' else '' end +
@@ -420,8 +419,7 @@ create table [' + @cArchiveTableName + '_' + @cToday + '] (' + @cTableStructure 
 	begin
 
 		-- this code removes duplicate data in the incoming records
-		create table #k
-eyFields (fieldName varchar(100))
+		create table #keyFields (fieldName varchar(100))
 		insert into #keyFields
 		select listItem
 			from dbo.fn_makeTableFromList(@cKeyFieldList, ',')
@@ -528,17 +526,23 @@ eyFields (fieldName varchar(100))
 				case
 					when ymd > @dLastDayTable then '[' + @cArchiveDBName + left(ymdString, 6) + ']..[' + @cArchiveTableName + '_' + ymdString + ']'
 					else '[' + @cArchiveDBName + left(ymdString, 6) + ']..[' + @cArchiveTableName + '_' + left(ymdString, 6) + '_week' + convert(varchar(4), [week]) + ']'
-					end as tableName
+					end as tableName,
+
+				@cArchiveDBName + left(ymdString, 6) as databaseName
 
 				into #weeks
 				from #days
 				group by [year], [month], [week], case
 					when ymd > @dLastDayTable then '[' + @cArchiveDBName + left(ymdString, 6) + ']..[' + @cArchiveTableName + '_' + ymdString + ']'
 					else '[' + @cArchiveDBName + left(ymdString, 6) + ']..[' + @cArchiveTableName + '_' + left(ymdString, 6) + '_week' + convert(varchar(4), [week]) + ']'
-					end
+					end,
+					@cArchiveDBName + left(ymdString, 6)
+				order by [year], [month], [week]
+
 			declare @nThisUkey int
 
 			set @nThisUkey = 0
+			set @cDatabaseName = ''
 
 			while exists (select top 1 * from #weeks where ukey > @nThisUkey)
 			begin
@@ -546,7 +550,8 @@ eyFields (fieldName varchar(100))
 					@dStartDate = startDate,
 					@dEndDate = endDate,
 					@nThisUkey = ukey,
-					@cDestinationTableName = tableName
+					@cDestinationTableName = tableName,
+					@cDatabaseName = databaseName
 					from #weeks
 					where ukey > @nThisUkey
 					order by ukey
@@ -580,40 +585,32 @@ eyFields (fieldName varchar(100))
 
 				insert into hist_partitionTableDaily (stepName) values ('Rows inserted for this week')
 
-				if (@nThisUkey % 5) = 0
+				-- if that's all we needed in this database, shrink it
+				if (select count(*) from #weeks where databaseName = @cDatabaseName and ukey > @nThisUkey) = 0
 				begin
-					insert into hist_partitionTableDaily (stepName) values ('Shrinking databases')
+					insert into hist_partitionTableDaily (stepName) values ('Shrinking ' + @cDatabaseName)
 
 					set @cSQLString = '
-declare @cThisDatabase varchar(100)
-declare @cSQLString nvarchar(4000)
-set @cThisDatabase = ''''
-while exists (select top 1 [name] from master..sysdatabases where [name] like ''' + @cArchiveDBName + '20%'' and [name] > @cThisDatabase)
-begin
-	select top 1 @cThisDatabase = [name] from master..sysdatabases where [name] like ''' + @cArchiveDBName + '20%'' and [name] > @cThisDatabase
-
-	set @cSQLString = ''
-use ['' + @cThisDatabase + '']
-backup log ['' + @cThisDatabase + ''] with truncate_only
-exec sp_spaceUsed @updateusage = ''''TRUE''''
-dbcc shrinkfile(2,1)''
-
-	exec sp_executeSQL @cSQLString
-end'
-					exec sp_executeSQL @cSQLString
-
-
-					set @cSQLString = 'use tempdb
-backup log tempdb with truncate_only
+use [' + @cDatabaseName + ']
+backup log [' + @cDatabaseName + '] with truncate_only
+exec sp_spaceUsed @updateusage = ''TRUE''
 dbcc shrinkfile(2,1)'
-					exec sp_executeSQL @cSQLString
 
-					insert into hist_partitionTableDaily (stepName) values ('TEMPDB shrunk')
+					exec sp_executeSQL @cSQLString
+					insert into hist_partitionTableDaily (stepName) values (@cDatabaseName + ' shrunk')
 				end
 
 			end
 
 			drop table #weeks
+
+			set @cSQLString = 'use tempdb
+backup log tempdb with truncate_only
+dbcc shrinkfile(2,1)'
+			exec sp_executeSQL @cSQLString
+
+			insert into hist_partitionTableDaily (stepName) values ('TEMPDB shrunk')
+
 		end
 
 	end
@@ -628,5 +625,4 @@ end
 -- exec pr_partitionTableDaily 'transLines_daily', 'transactionDate', 'transactionSetID, transHeaderID', 1
 -- exec pr_partitionTableDaily 'fact_cardActivityProcessor_daily', 'business_day', 'transID', 1
 -- exec pr_partitionTableDaily 'stage_transactionData', 'importDate', 'iteration, ukey, ukey_parent, ukey_keyName', 0
-
 GO
