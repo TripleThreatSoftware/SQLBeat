@@ -1,4 +1,6 @@
-alter table dm_servers add indexCheck bit default 0, lastIndexCheck dateTime, indexCheckMinuteInterval int default 15
+alter table dm_servers add connectionAlertThreshold int
 GO
-update dm_servers set indexCheck = 1 where isSQLBox = 1
+alter table dm_servers add activeConnectionAlertThreshold int
+GO
+update dm_servers set connectionAlertThreshold = 340, activeConnectionAlertThreshold = 100
 GO
