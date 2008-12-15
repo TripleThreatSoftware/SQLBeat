@@ -548,8 +548,10 @@ begin
 			and datePart(year, a.startTime) <> 1900
 			and b.[name] not like '%trim history%'
 			and b.[name] not like '%eventlog check%'
+			and b.[name] not like '%fragmentation check%'
 			and b.[name] not like '%configuration check%'
 			and b.[name] not like '%import weblogs%'
+			and b.[name] not like 'maintenance%'
 
 	-- jobs that we do not have a history for
 	-- this should be a rare case, only for new jobs
@@ -573,10 +575,12 @@ begin
 			and datePart(year, startTime) <> 1900
 			and b.[name] not like '%trim history%'
 			and b.[name] not like '%eventlog check%'
+			and b.[name] not like '%fragmentation check%'
 			and b.[name] not like '%configuration check%'
 			and b.[name] not like '%import weblogs%'
 			and isnull(b.[name], '') not like '%sqlautomation%'
 			and isnull(b.[name], '') not like '%sqlbeat%'
+			and b.[name] not like 'maintenance%'
 
 	-- if we found some long running jobs, kill 'em off if they're over five times normal runtime
 	if (select count(*) from #results where isLongRunningJob = 1) > 0
