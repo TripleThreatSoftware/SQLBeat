@@ -1,6 +1,8 @@
+use [configuration]
+GO
 --pr_archiveOldLinkedPartitionedTables 'runs_data', 'ukey_run', 'runs', 'ukey', 'ymd', 'ukey_run, ukey_server, ukey_counter, instance, ukey_keyName'
 
-CREATE  procedure [pr_archiveOldLinkedPartitionedTables] (
+CREATE  procedure [dbo].[pr_archiveOldLinkedPartitionedTables] (
 	@cTableName varchar(100),
 	@cForeignKeyField varchar(100),
 	@cForeignTable varchar(100),
@@ -297,6 +299,3 @@ begin
 end
 
 -- exec pr_archiveOldPartitionedTables 'mart_vehicle_byday_daily', 'ukey_auto'
-
-
-GO

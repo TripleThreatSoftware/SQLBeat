@@ -1,9 +1,19 @@
+use [configuration]
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER OFF
+GO
 --********************************************************************
 -- Purpose: To be run after the daily partition SP has completed
 -- to maintain the view which is used to access data from the daily
 -- partitions. This does not need to be run manually and will be called
 -- from other SPs as required.
-CREATE      procedure [pr_maintainPartitionedViews]
+CREATE      procedure [dbo].[pr_maintainPartitionedViews]
 as
 begin
 	set nocount on
@@ -198,8 +208,7 @@ begin
 		where dbname = db_name()
 
 -- 	if @nNumberOfDatabases > 1
--- 		delete from #p
-artitionTables where baseName in (select baseName from #partitionTables group by basename having count(distinct dbname) = 1)
+-- 		delete from #partitionTables where baseName in (select baseName from #partitionTables group by basename having count(distinct dbname) = 1)
 
 	-- and then figure out which tables are in common with almost all the databases
 	insert into #partitionViews
@@ -393,8 +402,7 @@ artitionTables where baseName in (select baseName from #partitionTables group by
 				else
 					if isnumeric(right(@cThisTableName, 6)) = 1
 					begin
-						select @dStartDate = min(ymd), @dEndDate
-= max(ymd)
+						select @dStartDate = min(ymd), @dEndDate = max(ymd)
 							from #dm_ymd
 							where left(ymdString, 6) = right(@cThisTableName, 6)
 					end
@@ -562,8 +570,7 @@ artitionTables where baseName in (select baseName from #partitionTables group by
 -- 			print @cVeryLongString15
 
 			exec(@cVeryLongString1
-				+ @c
-VeryLongString2
+				+ @cVeryLongString2
 				+ @cVeryLongString3
 				+ @cVeryLongString4
 				+ @cVeryLongString5
@@ -626,4 +633,3 @@ VeryLongString2
 end
 
 -- exec pr_maintainPartitionedViews
-GO

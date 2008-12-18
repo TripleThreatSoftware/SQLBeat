@@ -1,5 +1,5 @@
 -- exec pr_partitionLinkedTableDaily 'runs_data', 'ukey_run', 'runs', 'ukey', 'ymd', 'ukey_run, ukey_server, ukey_counter, instance, ukey_keyName, ukey', 0
-CREATE procedure [pr_partitionLinkedTableDaily] (
+CREATE procedure [dbo].[pr_partitionLinkedTableDaily] (
 	@cTableName varchar(100),
 	@cForeignKeyField varchar(100),
 	@cForeignTable varchar(100),
@@ -194,8 +194,7 @@ begin
 	begin
 		set @cSQLString =
 			'select distinct syscolumns.name as fieldName, ' +
-
-		'	systypes.name as fieldType, ' +
+			'	systypes.name as fieldType, ' +
 			' 	syscolumns.xprec as fieldLength, ' +
 			'	syscolumns.xscale as fieldPrecision, ' +
 			'	syscolumns.length as stringLength, ' +
@@ -297,7 +296,9 @@ begin
 				from master.dbo.sysdatabases
 				where left(name, len(@cArchiveDBName)) = @cArchiveDBName
 					and dbo.fn_returnDigits(name, 0) > 0
-				order by dbo.fn_returnDigits(name, 0) desc			if @cOldestDatabasePath is null
+				order by dbo.fn_returnDigits(name, 0) desc
+
+			if @cOldestDatabasePath is null
 			begin
 				select top 1 @cOldestDatabasePath = left(fileName, len(fileName) - charindex('\', reverse(fileName)) + 1)
 					from master.dbo.sysdatabases
@@ -577,5 +578,4 @@ end
 -- exec pr_partitionTableDaily 'transLines_daily', 'transactionDate', 'transactionSetID, transHeaderID', 1
 -- exec pr_partitionTableDaily 'fact_cardActivityProcessor_daily', 'business_day', 'transID', 1
 -- exec pr_partitionTableDaily 'stage_transactionData', 'importDate', 'iteration, ukey, ukey_parent, ukey_keyName', 0
-
 GO

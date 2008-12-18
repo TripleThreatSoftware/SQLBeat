@@ -427,7 +427,9 @@ create table [' + @cArchiveTableName + '_' + @cToday + '] (' + @cTableStructure 
 
 		declare @cWhereClause varchar(1000)
 		declare @cThisKeyField varchar(100)
+		declare @cUniqueFieldList varchar(5000)
 		set @cWhereClause = ''
+		set @cUniqueFieldList = ''
 
 		if @lHasYMD = 1 and @cKeyFieldList not like '%' + @cDateField + '%'
 			set @cWhereClause = 'a.' + @cDateField + ' = b.' + @cDateField
@@ -437,8 +439,30 @@ create table [' + @cArchiveTableName + '_' + @cToday + '] (' + @cTableStructure 
 			select top 1 @cThisKeyField = fieldName from #keyFields
 
 			set @cWhereClause = @cWhereClause + case when @cWhereClause <> '' then ' and ' else '' end + 'a.' + @cThisKeyField + ' = b.' + @cThisKeyField
+			set @cUniqueFieldList = @cUniqueFieldList + @cThisKeyField + ', '
 
 			delete from #keyFields where fieldName = @cThisKeyField
+		end
+
+		if right(@cUniqueFieldList, 2) = ', '
+			set @cUniqueFieldList = left(@cUniqueFieldList, len(@cUniqueFieldList) - 1)
+
+		-- we need to remove duplicate data in the source file
+		if @lHasUkey = 1 and isnull(@cUniqueFieldList, '') <> ''
+		begin
+			set @cSQLString = '
+delete [' + @cTableName + ']
+	from [' + @cTableName + '] a
+	join (
+		select ' + @cUniqueFieldList + ', min(ukey) as minUkey
+			from [' + @cTableName + ']
+			group by ' + @cUniqueFieldList + '
+			having count(*) > 1
+		) b on ' + @cWhereClause + '
+			and a.ukey <> b.minUkey'
+
+			print @cSQLstring
+			exec sp_executeSQL @cSQLString
 		end
 
 		-- end duplicate check
@@ -575,7 +599,7 @@ create table [' + @cArchiveTableName + '_' + @cToday + '] (' + @cTableStructure 
 					('Inserting ' + convert(varchar(10), @dStartDate, 120) + ' - ' + convert(varchar(10), @dEndDate, 120) + ' into ' + @cDestinationTableName)
 
 				set @cSQLString = 'insert into ' + @cDestinationTableName + ' (' + @cFieldList + ')
-				select ' + @cFieldList + '
+				select distinct ' + @cFieldList + '
 					from ' + @cTableName + ' (nolock)
 					where ' + @cDateField + ' >= ''' + convert(varchar(10), @dStartDate, 120) + '''
 						and ' + @cDateField + ' < ''' + convert(varchar(10), dateAdd(day, 1, @dEndDate), 120) + ''''
