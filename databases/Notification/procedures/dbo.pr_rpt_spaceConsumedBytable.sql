@@ -1,5 +1,4 @@
--- exec pr_rpt_spaceConsumedBytable 'mssql-slv2', 'transactions_ap'
-alter procedure pr_rpt_spaceConsumedBytable (@cServerName varchar(100), @cDatabaseName varchar(100))
+ALTER procedure [dbo].[pr_rpt_spaceConsumedBytable] (@cServerName varchar(100), @cDatabaseName varchar(100))
 as
 begin
 	create table #dataValues (seriesName varchar(100), setName varchar(100), axis_x varchar(100), axis_y int, sortOrder int identity)
@@ -8,8 +7,8 @@ begin
 		databaseName, tableName, max(dbo.fn_returnDigits(reserved, 0)) as reserved
 		into #biggestTables
 		from tableSizeLog (nolock)
-		where databaseName = @cDatabaseName
-			and serverName = @cServerName
+		where (databaseName = @cDatabaseName or isnull(@cDatabaseName, '') = '')
+			and (serverName = @cServerName or isnull(@cServerName, '') = '')
 			and ymd >= dateAdd(week, -1, getDate())
 		group by databaseName, tableName
 		order by max(dbo.fn_returnDigits(reserved, 0)) desc
@@ -22,9 +21,9 @@ begin
 		from tableSizeLog a (nolock)
 		join #biggestTables b on a.databaseName = b.databaseName
 			and a.tableName = b.tableName
-		where a.databaseName = @cDatabaseName
+		where (databaseName = @cDatabaseName or isnull(@cDatabaseName, '') = '')
+			and (serverName = @cServerName or isnull(@cServerName, '') = '')
 			and dateDiff(day, a.ymd, getDate()) / 7 <= 10
-			and a.serverName = @cServerName
 		group by a.databaseName, a.tableName, dateDiff(day, a.ymd, getDate()) / 7
 		order by a.databaseName, a.tableName, dateDiff(day, a.ymd, getDate()) / 7 desc
 
@@ -33,3 +32,5 @@ begin
 	drop table #biggestTables
 	drop table #dataValues
 end
+
+go

@@ -1,4 +1,6 @@
--- select * from auditRuns
+--***********************************************************************************************************************************************
+--***********************************************************************************************************************************************
+
 
 ALTER   procedure [dbo].[pr_monitorPermissions]
 as
@@ -354,14 +356,17 @@ begin
 			where a.ukey_auditRun = @nUkeyLastAuditRun
 				and b.ukey is null
 
-		set @cThisSubject = 'SAA : NT Group membership changes'
+		set @cThisSubject = 'NT Group membership changes'
 
 		if @cMessage <> ''
 		begin
-			print @cThisSubject
-			print @cMessage
+--			print @cThisSubject
+--			print @cMessage
+--
+--			exec notification.dbo.pr_sendMessage '', 'DBA', @cThisSubject, @cMessage
 
-			exec notification.dbo.pr_sendMessage '', 'DBA', @cThisSubject, @cMessage
+			insert into notificationLog_stage (serverName, severity, subject, message) values (@cServerName, 2, @cThisSubject, @cMessage)
+
 		end
 
 		--********************************************************************************************************************************************
@@ -606,13 +611,14 @@ begin
 			if @@rowcount > 0
 				set @bChangesFound = 1
 
-			set @cThisSubject = 'SAA : Permission change summary for ' + @cServerName
+			set @cThisSubject = 'Permission change summary for ' + @cServerName
 
 			if @bChangesFound = 1
 			begin
-				print @cThisSubject
-				print @cMessage
-				exec notification.dbo.pr_sendMessage '', 'DBA', @cThisSubject, @cMessage
+				insert into notificationLog_stage (serverName, severity, subject, message) values (@cServerName, 2, @cThisSubject, @cMessage)
+--				print @cThisSubject
+--				print @cMessage
+--				exec notification.dbo.pr_sendMessage '', 'DBA', @cThisSubject, @cMessage
 			end
 		end
 

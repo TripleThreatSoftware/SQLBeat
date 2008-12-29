@@ -1,6 +1,4 @@
-alter table dm_servers add connectionAlertThreshold int
+alter table dm_servers add pageLifeExpectancyAlertThreshold int default 50
 GO
-alter table dm_servers add activeConnectionAlertThreshold int
-GO
-update dm_servers set connectionAlertThreshold = 340, activeConnectionAlertThreshold = 100
+update dm_servers set pageLifeExpectancyAlertThreshold = 50
 GO
