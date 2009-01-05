@@ -1,10 +1,11 @@
-CREATE procedure [dbo].[pr_sendMessage] (@cFrom varchar(100), @cTo varchar(500), @cSubject varchar(500), @cBody varchar(8000))
+ALTER procedure [dbo].[pr_sendMessage] (@cFrom varchar(100), @cTo varchar(500), @cSubject varchar(500), @cBody varchar(8000))
 as
 begin
 	declare @cClientCode varchar(100)
 	set @cClientCode = (select top 1 settingValue from dm_settings where settingName = 'Client Code')
 
-	set @cSubject = '[' + @cClientCode + '] ' + @cSubject
+	if isnull(@cClientCode, '') <> ''
+		set @cSubject = '[' + @cClientCode + '] ' + @cSubject
 
 	if isnull(@cFrom, '') = ''
 		set @cFrom = (select top 1 settingValue from dm_settings where settingName = 'Default Email From')
@@ -31,7 +32,4 @@ begin
 --	set @cTo = 'cole@triplethreatsoftware.com'
 --	exec sp_send_cdosysmail @cFrom, @cTo, @cSubject, @cBody
 end
-
-
-
 GO

@@ -1,8 +1,12 @@
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 --***********************************************************************************************************************************************
 --***********************************************************************************************************************************************
 
 
-CREATE procedure [dbo].[pr_checkDeepSQLStats]
+ALTER procedure [dbo].[pr_checkDeepSQLStats]
 as
 begin
 
@@ -78,7 +82,7 @@ begin
 				order by ukey
 
 			insert into notificationLog_stage (serverName, severity, subject, message)
-				values (@cServerName, 2, 'Deep SQL scan failed at ' + convert(varchar(20), getDate()), @cMessage)
+				values (@cServerName, 2, 'Deep SQL scan failed at ' + convert(varchar(20), getDate(), 120), @cMessage)
 
 			continue
 		end
@@ -199,8 +203,7 @@ begin
 			substring(objectName, charindex('.', objectName) + 1, 99) as tableName,
 			tableScans
 			from (
-				s
-elect
+				select
 					ymd,
 					ukey_server,
 					serverName,
@@ -292,6 +295,3 @@ elect
 	drop table #performance
 	drop table #results
 end
-
-
-GO
