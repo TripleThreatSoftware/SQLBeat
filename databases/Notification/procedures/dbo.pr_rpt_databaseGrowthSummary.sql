@@ -1,5 +1,5 @@
--- exec pr_rpt_databaseGrowthSummary 'mssql-slv2'
-
+drop view v_databaseFileSizeLog_all
+GO
 ALTER procedure [dbo].[pr_rpt_databaseGrowthSummary] (@cServerName varchar(100))
 as
 begin
@@ -32,6 +32,4 @@ begin
 				group by a.dbName
 			) a
 		order by dbName desc
-
-	drop table #dataPoints
 end
