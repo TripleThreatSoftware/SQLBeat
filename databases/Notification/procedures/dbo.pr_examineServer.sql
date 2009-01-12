@@ -1151,6 +1151,14 @@ begin
 				buffercontents = replace(replace(replace(replace(buffercontents, '''', '"'), '**', '*'), '**', '*'), '**', '*'),
 				hostname = rtrim(ltrim(replace(hostname, '  ', ' ')))
 
+		update #processes
+			set isWild = 0
+			where (
+				bufferContents like '%sp%ms%repl%'
+				or bufferContents like '%sp%repl%'
+				)
+				and isWild = 1
+
 		insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Input buffer for running SPIDs', @cSQLString, @nUkeyGroup)
 
 		-- end INPUTBUFFER
@@ -1274,7 +1282,7 @@ begin
 					print @cSQLString
 				EXECUTE(@cProcedureName)
 
-				set @cDatabaseName = (select max(results) from #junkString)
+				set @cDatabaseName = (select top 1 results from #junkString)
 				truncate table #junkString
 
 				if @cDatabaseName is null
@@ -1768,8 +1776,8 @@ union'
 					from #fileSizes
 					group by dbName
 				) a
-			where logSize > (dataSize * 1.5)
-				and logSize > 3000
+			where logSize > (dataSize * 0.5)
+				and logSize > 5000
 
 		-- for MSDE, watch the 2gb file size limit
 		insert into #results (message, severity, subject, isLogSize)
@@ -1802,16 +1810,15 @@ union'
 		isJobFailure, isLogShippingJobFailure, isLongRunningJob, isBlocking, isLongRunningProcess,
 		isDriveSpace, isLogSize, isEventLog,
 		serverName)
-	select
-		left(message, 8000),
+	select message,
 		case
 			when @bIsOffHours = 1 and @nOffHoursPriority <> 1 then 2
 			else severity
 			end,
-		left(subject, 300),
+		subject,
 		isJobFailure, isLogShippingJobFailure, isLongRunningJob, isBlocking, isLongRunningProcess,
 		isDriveSpace, isLogSize, isEventLog,
-		left(case when isnull(isDriveSpace, 0) = 1 then @cServerNamePart else @cFriendlyName end, 100)
+		case when isnull(isDriveSpace, 0) = 1 then @cServerNamePart else @cFriendlyName end
 		from #results
 
 	drop table #results
