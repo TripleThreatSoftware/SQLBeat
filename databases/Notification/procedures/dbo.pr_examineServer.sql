@@ -3,6 +3,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
+
 --select @@servername
 --'doe-cgetzer-2k3\2K3DEVSEED3'
 -- EXEC sp_configure 'xp_cmdshell', '1'
@@ -904,18 +905,42 @@ begin
 	-- SQL Error Log
 	--*********************************************************************************************************************
 
-	-- declare @cSQLString nvarchar(4000)
-	--
-	-- set @cSQlString = '[sqlserver\instance1].master.dbo.xp_readerrorlog'
-	--
-	-- insert into sqlErrorLog (errorMessage, continuationRow)
-	-- exec sp_executeSQL @cSQlString
-	--
-	-- update sqlErrorLog
-	-- 	set serverName = '[sqlserver\instance1]'
-	-- 	where serverName is null
-	--
-	-- select * from sqlErrorLog where errorMessage like '%fail%' or errorMessage like '%error:%'
+	create table #sqlErrors (ymd dateTime, processInfo varchar(100), logMessage varchar(8000), nastyLine varchar(max))
+
+	if @cUserName is not null
+	begin
+		-- with password, for stores
+		set @cSQLString = 'osql -S' + @cServerName + ' -U' + @cUserName + ' -P' + @cPassword + ' -n -h-1 -w8000 -s"|" -dmaster -Q "exec master.dbo.sp_readerrorlog"'
+	end
+	else
+	begin
+		-- without password, for local boxes that'll accept sqladmin under windows authentication
+		set @cSQLString = 'osql -S' + @cServerName + ' -E -n -h-1 -w8000 -s"|" -dmaster -Q "exec master.dbo.sp_readerrorlog"'
+	end
+
+	insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Reading error log', @cSQLString, @nUkeyGroup)
+
+	insert into #sqlErrors (nastyLine)
+	exec master..xp_cmdShell @cSQLString
+
+	delete from #sqlErrors where nastyLine = ''or nastyLine = 'null'
+
+	update #sqlErrors
+		set ymd = dbo.fn_returnListItem(nastyLine, 1, '|'),
+			processInfo = dbo.fn_returnListItem(nastyLine, 2, '|'),
+			logMessage = dbo.fn_returnListItem(nastyLine, 3, '|')
+		where charindex('|', nastyLine) > 0
+			and isnull(dbo.fn_returnListItem(nastyLine, 3, '|'), '') <> ''
+
+	delete from #sqlErrors where ymd is null
+
+	insert into sqlErrorLog (ymd, processInfo, logMessage, serverName)
+	select ymd, processInfo, logMessage, @cServerName
+		from #sqlErrors
+		where ymd > (select isnull(max(ymd), dateAdd(week, -2, getDate())) from sqlErrorLog where serverName = @cServerName)
+		order by ymd
+
+	drop table #sqlErrors
 
 --	--*********************************************************************************************************************
 --	-- Blocked processes
@@ -1053,6 +1078,7 @@ begin
 					'GHOST CLEANUP', 'DBCC', 'RESTORE LOG', 'KILLED/ROLLBACK')
 				and rtrim(command) not like '%backup%'
 				and rtrim(command) not like '%restore%'
+				and rtrim(command) not like '%sp%ms%repl%'
 
 				-- this is a job, and we'll catch it elsewhere
 				and programName not like '%SQLAGENT%'
@@ -1072,6 +1098,7 @@ begin
 					'GHOST CLEANUP', 'DBCC', 'RESTORE LOG', 'KILLED/ROLLBACK')
 				and rtrim(command) not like '%backup%'
 				and rtrim(command) not like '%restore%'
+				and rtrim(command) not like '%sp%ms%repl%'
 
 				-- this is a job, and we'll catch it elsewhere
 				and programName not like '%SQLAGENT%'
@@ -1150,14 +1177,6 @@ begin
 			set command = replace(command, '''', '"'),
 				buffercontents = replace(replace(replace(replace(buffercontents, '''', '"'), '**', '*'), '**', '*'), '**', '*'),
 				hostname = rtrim(ltrim(replace(hostname, '  ', ' ')))
-
-		update #processes
-			set isWild = 0
-			where (
-				bufferContents like '%sp%ms%repl%'
-				or bufferContents like '%sp%repl%'
-				)
-				and isWild = 1
 
 		insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Input buffer for running SPIDs', @cSQLString, @nUkeyGroup)
 
