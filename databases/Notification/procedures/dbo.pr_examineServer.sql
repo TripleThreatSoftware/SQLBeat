@@ -905,42 +905,44 @@ begin
 	-- SQL Error Log
 	--*********************************************************************************************************************
 
-	create table #sqlErrors (ymd dateTime, processInfo varchar(100), logMessage varchar(8000), nastyLine varchar(max))
-
-	if @cUserName is not null
+	if @cVersion like '%2005%'
 	begin
-		-- with password, for stores
-		set @cSQLString = 'osql -S' + @cServerName + ' -U' + @cUserName + ' -P' + @cPassword + ' -n -h-1 -w8000 -s"|" -dmaster -Q "exec master.dbo.sp_readerrorlog"'
+		create table #sqlErrors (ymd dateTime, processInfo varchar(100), logMessage varchar(8000), nastyLine varchar(max))
+
+		if @cUserName is not null
+		begin
+			-- with password, for stores
+			set @cSQLString = 'osql -S' + @cServerName + ' -U' + @cUserName + ' -P' + @cPassword + ' -n -h-1 -w8000 -s"|" -dmaster -Q "exec master.dbo.sp_readerrorlog"'
+		end
+		else
+		begin
+			-- without password, for local boxes that'll accept sqladmin under windows authentication
+			set @cSQLString = 'osql -S' + @cServerName + ' -E -n -h-1 -w8000 -s"|" -dmaster -Q "exec master.dbo.sp_readerrorlog"'
+		end
+
+		insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Reading error log', @cSQLString, @nUkeyGroup)
+
+		insert into #sqlErrors (nastyLine)
+		exec master..xp_cmdShell @cSQLString
+
+		delete from #sqlErrors where nastyLine = ''or nastyLine = 'null'
+
+		update #sqlErrors
+			set ymd = dbo.fn_returnListItem(nastyLine, 1, '|'),
+				processInfo = dbo.fn_returnListItem(nastyLine, 2, '|'),
+				logMessage = dbo.fn_returnListItem(nastyLine, 3, '|')
+			where charindex('|', nastyLine) > 0
+
+		delete from #sqlErrors where ymd is null
+
+		insert into sqlErrorLog (ymd, processInfo, logMessage, serverName)
+		select ymd, processInfo, logMessage, @cServerName
+			from #sqlErrors
+			where ymd > (select isnull(max(ymd), dateAdd(week, -2, getDate())) from sqlErrorLog where serverName = @cServerName)
+			order by ymd
+
+		drop table #sqlErrors
 	end
-	else
-	begin
-		-- without password, for local boxes that'll accept sqladmin under windows authentication
-		set @cSQLString = 'osql -S' + @cServerName + ' -E -n -h-1 -w8000 -s"|" -dmaster -Q "exec master.dbo.sp_readerrorlog"'
-	end
-
-	insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Reading error log', @cSQLString, @nUkeyGroup)
-
-	insert into #sqlErrors (nastyLine)
-	exec master..xp_cmdShell @cSQLString
-
-	delete from #sqlErrors where nastyLine = ''or nastyLine = 'null'
-
-	update #sqlErrors
-		set ymd = dbo.fn_returnListItem(nastyLine, 1, '|'),
-			processInfo = dbo.fn_returnListItem(nastyLine, 2, '|'),
-			logMessage = dbo.fn_returnListItem(nastyLine, 3, '|')
-		where charindex('|', nastyLine) > 0
-			and isnull(dbo.fn_returnListItem(nastyLine, 3, '|'), '') <> ''
-
-	delete from #sqlErrors where ymd is null
-
-	insert into sqlErrorLog (ymd, processInfo, logMessage, serverName)
-	select ymd, processInfo, logMessage, @cServerName
-		from #sqlErrors
-		where ymd > (select isnull(max(ymd), dateAdd(week, -2, getDate())) from sqlErrorLog where serverName = @cServerName)
-		order by ymd
-
-	drop table #sqlErrors
 
 --	--*********************************************************************************************************************
 --	-- Blocked processes
@@ -1177,6 +1179,12 @@ begin
 			set command = replace(command, '''', '"'),
 				buffercontents = replace(replace(replace(replace(buffercontents, '''', '"'), '**', '*'), '**', '*'), '**', '*'),
 				hostname = rtrim(ltrim(replace(hostname, '  ', ' ')))
+
+		update #processes
+			set ignoreSPID = 1
+			where bufferContents like '%sp_repl%'
+				or bufferContents like '%repl%'
+				or dbName = 'distribution'
 
 		insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Input buffer for running SPIDs', @cSQLString, @nUkeyGroup)
 
