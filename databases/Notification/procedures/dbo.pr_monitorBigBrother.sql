@@ -1,7 +1,11 @@
+USE [Notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_monitorBigBrother]    Script Date: 03/02/2009 11:40:04 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 
 -- select top 100 * from messagesSent order by ymd desc
 
@@ -61,7 +65,7 @@ begin
 
 	create table #userActivity (spid int, macAddress varchar(50), bufferContents varchar(3000), nastyLine varchar(3000), ukey int identity)
 
-	create table #locks (spid int, dbid int, objid int, indid int, type varchar(20), resource varchar(20), mode varchar(10), status varchar(20))
+	create table #locks (spid int, dbid int, objid int, indid int, type varchar(8000), resource varchar(8000), mode varchar(8000), status varchar(8000))
 
 	create table #lockSummary (dbid int, objid int, type varchar(20), mode varchar(10), locks int)
 
@@ -102,7 +106,7 @@ begin
 		where rtrim(command) in ('LOG WRITER', 'CHECKPOINT SLEEP', 'TASK MANAGER',
 				'AWAITING COMMAND', 'GHOST CLEANUP', 'DBCC', 'BACKUP', 'SIGNAL HANDLER', 'LOCK MONITOR')
 			or rtrim(ltrim(hostName)) = '.'
-			or rtrim(ltrim(hostname)) = 'sqlautomation'
+			or rtrim(ltrim(hostname)) = @@servername
 
 	-- blocked
 	update #processes
@@ -540,7 +544,7 @@ begin
 			and (
 				(
 					minutesRunning > d.runtime * 2 -- running 4x longer than average
-					and a.minutesRunning > 5
+					and a.minutesRunning > 15
 					)
  				)
 		where a.running = 1
@@ -855,7 +859,7 @@ begin
 			set nextJobStartTime = getDate()
 			where nextJobStartTime is null
 
-		insert into #results (message, severity, subject, isJobFailure)
+		insert into #results (message, severity, subject, isJobFailure, serverName)
 		select left(
 			'The notification system failed on the ''' + isnull(b.stepName, 'N/A') + ''' step ' +
 			'after ' + isnull(convert(varchar(20), dateDiff(second, b.ymd, a.failureTime)), 'N/A') + ' seconds ' +
@@ -864,9 +868,9 @@ begin
 			'ran for ' + convert(varchar(20), dateDiff(second, a.jobStartTime, a.failureTime)) + ' seconds ' +
 			'and was able to process ' + convert(varchar(20), a.numServers) + ' other servers without error.' + char(13) +
 			'Error Message: ' + char(13) + a.errorMessage, 2000) as message,
-			2 as severity,
+			c.offHoursPriority as severity,
 			'Lost communication with ' + isnull(b.serverName, 'N/A') + ' at ' + right(convert(varchar(30), a.failureTime, 120), 8) + '.' as subject,
-			1 as isJobFailure
+			1 as isJobFailure, c.serverName
 
 			from (
 				select a.jobStartTime, a.failureTime, a.nextJobStartTime, a.errorMessage, a.ukey_group,
