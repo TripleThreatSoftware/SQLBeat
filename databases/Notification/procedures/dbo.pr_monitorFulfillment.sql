@@ -1,4 +1,8 @@
-CREATE procedure [dbo].[pr_monitorFulfillment]
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER procedure [dbo].[pr_monitorFulfillment]
 as
 begin
 	declare @cThisMessage varchar(8000)
@@ -10,12 +14,12 @@ begin
 	if dbo.fn_isBusinessHours() = 1
 	begin
 		set @bIsOffHours = 0
-		set @nMinimumThreshold = 180
+		set @nMinimumThreshold = 10
 	end
 	else
 	begin
 		set @bIsOffHours = 1
-		set @nMinimumThreshold = 240
+		set @nMinimumThreshold = 15
 	end
 
 	create table #results (serverName varchar(200), messageBody varchar(8000))
@@ -59,7 +63,7 @@ begin
 				else ''
 				end
 
-		from dm_servers
+		from dm_servers (nolock)
 		where isEnabled = 1
 			and (
 					(
@@ -84,16 +88,16 @@ begin
 							) > convert(decimal(10,2), detailedCheckMinuteInterval) * 1.50
 						and dateDiff(minute, lastDetailedCheck, getDate()) > (@nMinimumThreshold + detailedCheckMinuteInterval)
 						)
-					or (
-						serviceCheck = 1
-						and convert(decimal(10,2),
-							dateDiff(minute,
-								isnull(lastServiceCheck, dateAdd(day, -1, getDate())),
-								getDate()
-								)
-							) > convert(decimal(10,2), serviceCheckMinuteInterval) * 1.50
-						and dateDiff(minute, lastServiceCheck, getDate()) > (@nMinimumThreshold + serviceCheckMinuteInterval)
-						)
+					--or (
+					--	serviceCheck = 1
+					--	and convert(decimal(10,2),
+					--		dateDiff(minute,
+					--			isnull(lastServiceCheck, dateAdd(day, -1, getDate())),
+					--			getDate()
+					--			)
+					--		) > convert(decimal(10,2), serviceCheckMinuteInterval) * 1.50
+					--	and dateDiff(minute, lastServiceCheck, getDate()) > (@nMinimumThreshold + serviceCheckMinuteInterval)
+					--	)
 					or (
 						pingCheck = 1
 						and convert(decimal(10,2),
@@ -104,40 +108,40 @@ begin
 							) > convert(decimal(10,2), pingCheckMinuteInterval) * 1.50
 						and dateDiff(minute, lastPingCheck, getDate()) > (@nMinimumThreshold + pingCheckMinuteInterval)
 						)
-					or (
-						integrityCheck = 1
-						and convert(decimal(10,2),
-							dateDiff(minute,
-								isnull(lastIntegrityCheck, dateAdd(day, -1, getDate())),
-								getDate()
-								)
-							) > convert(decimal(10,2), integrityCheckMinuteInterval) * 1.50
-						and dateDiff(minute, lastIntegrityCheck, getDate()) > (@nMinimumThreshold + integrityCheckMinuteInterval)
-						and right(convert(varchar(20), getDate(), 120), 8) >= right(convert(varchar(20), maintenanceWindowStart, 120), 8)
-						and right(convert(varchar(20), getDate(), 120), 8) <= right(convert(varchar(20), maintenanceWindowStop, 120), 8)
-						)
-					or (
-						configurationCheck = 1
-						and convert(decimal(10,2),
-							dateDiff(minute,
-								isnull(lastConfigurationCheck, dateAdd(day, -1, getDate())),
-								getDate()
-								)
-							) > convert(decimal(10,2), configurationCheckMinuteInterval) * 3
-						and dateDiff(minute, lastConfigurationCheck, getDate()) > (@nMinimumThreshold + configurationCheckMinuteInterval)
-						)
-					or (
-						fragmentationCheck = 1
-						and convert(decimal(10,2),
-							dateDiff(minute,
-								isnull(lastFragmentationCheck, dateAdd(day, -1, getDate())),
-								getDate()
-								)
-							) > convert(decimal(10,2), fragmentationCheckMinuteInterval) * 1.50
-						and dateDiff(minute, lastFragmentationCheck, getDate()) > (@nMinimumThreshold + fragmentationCheckMinuteInterval)
-						and right(convert(varchar(20), getDate(), 120), 8) >= right(convert(varchar(20), maintenanceWindowStart, 120), 8)
-						and right(convert(varchar(20), getDate(), 120), 8) <= right(convert(varchar(20), maintenanceWindowStop, 120), 8)
-						)
+					--or (
+					--	integrityCheck = 1
+					--	and convert(decimal(10,2),
+					--		dateDiff(minute,
+					--			isnull(lastIntegrityCheck, dateAdd(day, -1, getDate())),
+					--			getDate()
+					--			)
+					--		) > convert(decimal(10,2), integrityCheckMinuteInterval) * 1.50
+					--	and dateDiff(minute, lastIntegrityCheck, getDate()) > (@nMinimumThreshold + integrityCheckMinuteInterval)
+					--	and right(convert(varchar(20), getDate(), 120), 8) >= right(convert(varchar(20), maintenanceWindowStart, 120), 8)
+					--	and right(convert(varchar(20), getDate(), 120), 8) <= right(convert(varchar(20), maintenanceWindowStop, 120), 8)
+					--	)
+					--or (
+					--	configurationCheck = 1
+					--	and convert(decimal(10,2),
+					--		dateDiff(minute,
+					--			isnull(lastConfigurationCheck, dateAdd(day, -1, getDate())),
+					--			getDate()
+					--			)
+					--		) > convert(decimal(10,2), configurationCheckMinuteInterval) * 3
+					--	and dateDiff(minute, lastConfigurationCheck, getDate()) > (@nMinimumThreshold + configurationCheckMinuteInterval)
+					--	)
+					--or (
+					--	fragmentationCheck = 1
+					--	and convert(decimal(10,2),
+					--		dateDiff(minute,
+					--			isnull(lastFragmentationCheck, dateAdd(day, -1, getDate())),
+					--			getDate()
+					--			)
+					--		) > convert(decimal(10,2), fragmentationCheckMinuteInterval) * 1.50
+					--	and dateDiff(minute, lastFragmentationCheck, getDate()) > (@nMinimumThreshold + fragmentationCheckMinuteInterval)
+					--	and right(convert(varchar(20), getDate(), 120), 8) >= right(convert(varchar(20), maintenanceWindowStart, 120), 8)
+					--	and right(convert(varchar(20), getDate(), 120), 8) <= right(convert(varchar(20), maintenanceWindowStop, 120), 8)
+					--	)
 					)
 			and isServerPingable = 1
 
@@ -149,12 +153,8 @@ begin
 			and isEnabled = 1
 
 	insert into notificationLog_stage (serverName, subject, message, severity)
-	select serverName, 'Fulfillment failure at ' + convert(varchar(20), getDate(), 120), messageBody, 2 as severity
+	select serverName, 'Fulfillment failure at ' + convert(varchar(20), getDate(), 120), messageBody, 1 as severity
 		from #results
 
 	drop table #results
 end
-
-
-
-GO
