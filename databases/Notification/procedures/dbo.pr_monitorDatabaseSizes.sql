@@ -1,78 +1,61 @@
-create procedure pr_monitorDatabaseSizes
+/****** Object:  StoredProcedure [dbo].[pr_monitorDatabaseSizes]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE procedure [dbo].[pr_monitorDatabaseSizes]
 as
 begin
 
 	select
-		serverName,
-		databaseName,
-		ymd,
-		sum(convert(bigint, reserved)) as reserved,
-		convert(bigint, 0) as lastReserved,
-		identity(int) as ukey
+		serverName, databaseName,
+		convert(varchar(10), ymd, 120) as ymd,
+		max(reserved) as reserved
 		into #sizeHistory
-		from tableSizeLog
-		where ymd >= dateAdd(day, -3, getDate())
-		group by serverName, databaseName, ymd
+		from (
+			select
+				serverName,
+				databaseName,
+				ymd,
+				sum(convert(bigint, reserved)) as reserved
+				from tableSizeLog (nolock)
+				where ymd >= dateAdd(week, -1, getDate())
+				group by serverName, databaseName, ymd
+			) a
+		group by serverName, databaseName, convert(varchar(10), ymd, 120)
 		order by serverName, databaseName, ymd
 
-	update a
-		set lastReserved = b.reserved
-		from #sizeHistory a
-		join #sizeHistory b on a.ukey = b.ukey + 1
-			and a.serverName = b.serverName
-			and a.databaseName = b.databaseName
-
-	delete from #sizeHistory where lastReserved = 0
+	delete from #sizeHistory where reserved = 0
 
 	insert into notificationLog_stage (serverName, severity, subject, message)
 	select
-		serverName, 2 as severity,
-		'Database ' + databaseName + ' increased in size by ' + convert(varchar(20), delta) + '% on ' + convert(varchar(10), ymd, 120) + '.' as subject,
-		'Database ' + databaseName + ' increased in size from ' + convert(varchar(20), lastReserved) + ' to ' + convert(varchar(20), reserved) + ' (' + convert(varchar(20), delta) + '%) as of the check at ' + convert(varchar(20), ymd, 120) + '.' as message
+		a.serverName, 2 as severity,
+		'Database ' + a.databaseName + ' increased in size by ' + convert(varchar(20), delta) + '% on ' + convert(varchar(10), getDate(), 120) + '.' as subject,
+		'Database ' + a.databaseName + ' increased in size from ' + dbo.fn_returnFormattedInt(sizeBefore) + ' to ' + dbo.fn_returnFormattedInt(sizeNow) + ' (' + convert(varchar(20), delta) + '%) as of ' + convert(varchar(20), getDate(), 120) + '.' as message
 		from (
 			select *,
-				convert(decimal(20,2), 100 * convert(decimal(20,4), reserved - lastReserved) / convert(decimal(20,4), lastReserved)) as delta
-				from #sizeHistory
+				case when sizeBefore = 0 then 100
+					else convert(decimal(20,2), 100 * convert(decimal(20,4), sizeNow - sizeBefore) / convert(decimal(20,4), sizeBefore))
+					end as delta
+				from (
+					select serverName, databaseName,
+						max(case when ymd = convert(varchar(10), getDate(), 120) then reserved else 0 end) as sizeNow,
+						max(case when ymd < convert(varchar(10), getDate(), 120) then reserved else 0 end) as sizeBefore
+						from #sizeHistory
+						group by serverName, databaseName
+					) a
 			) a
+		join dm_servers b on a.serverName = b.serverName
+		join dm_serverGroups c on b.ukey_group = c.ukey
+			and c.isProduction = 1
 		where delta > 5
-		order by serverName, databaseName, ymd
+			and (sizeNow - sizeBefore) > 500
+			and sizeNow > 5000
+		order by a.serverName, a.databaseName
 
 	drop table #sizeHistory
 
+
+
 end
-
-go
-
-USE [msdb]
-GO
-/****** Object:  Step [pr_checkTableSizes]    Script Date: 12/10/2008 15:54:08 ******/
-EXEC msdb.dbo.sp_delete_jobstep @job_name=N'Monitor table sizes', @step_id=1
-GO
-USE [msdb]
-GO
-EXEC msdb.dbo.sp_add_jobstep @job_name=N'Monitor table sizes', @step_name=N'pr_checkTableSizes',
-		@step_id=1,
-		@cmdexec_success_code=0,
-		@on_success_action=3,
-		@on_fail_action=2,
-		@retry_attempts=0,
-		@retry_interval=0,
-		@os_run_priority=0, @subsystem=N'TSQL',
-		@command=N'exec pr_checkTableSizes',
-		@database_name=N'Notification',
-		@flags=0
-GO
-USE [msdb]
-GO
-EXEC msdb.dbo.sp_add_jobstep @job_name=N'Monitor table sizes', @step_name=N'pr_monitorDatabaseSizes',
-		@step_id=2,
-		@cmdexec_success_code=0,
-		@on_success_action=1,
-		@on_fail_action=2,
-		@retry_attempts=0,
-		@retry_interval=0,
-		@os_run_priority=0, @subsystem=N'TSQL',
-		@command=N'pr_monitorDatabaseSizes',
-		@database_name=N'msdb',
-		@flags=0
 GO

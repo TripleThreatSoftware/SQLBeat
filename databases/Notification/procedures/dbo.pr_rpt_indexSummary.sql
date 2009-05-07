@@ -1,12 +1,17 @@
-ALTER procedure [dbo].[pr_rpt_indexSummary] (@cServerName varchar(200) = '', @nNumHours int = 24)
+/****** Object:  StoredProcedure [dbo].[pr_rpt_indexSummary]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE procedure [dbo].[pr_rpt_indexSummary] (@cServerName varchar(200) = '', @nNumHours int = 24)
 as
 begin
 	select serverName, max(ymd) as ymd
 		into #latestRun
 		from indexPerformanceLog (nolock)
 		where (serverName = @cServerName or isnull(@cServerName, '') = '')
+			and ymd >= dateAdd(week, -1, getDate())
 		group by servername
-		having max(ymd) >= dateAdd(week, -1, getDate())
 
 	select serverName, min(ymd) as ymd
 		into #previousRun
@@ -20,43 +25,59 @@ begin
 		into #latestTableSizeData
 		from tableSizeLog (nolock)
 		where (serverName = @cServerName or isnull(@cServerName, '') = '')
+			and ymd >= dateAdd(week, -1, getDate())
 		group by servername
 
+	create clustered index ix_tmp_latestTableSizeData on #latestTableSizeData (serverName, ymd) with fillfactor = 100
+	create clustered index ix_tmp_previousRun on #previousRun (serverName, ymd) with fillfactor = 100
+	create clustered index ix_tmp_latestRun on #latestRun (serverName, ymd) with fillfactor = 100
+
+
+	create table #performanceSummary (serverName varchar(100), databaseName varchar(100), tableName varchar(100), indexName varchar(100),
+		user_updates bigint, user_seeks bigint, user_scans bigint, user_lookups bigint,
+		user_updates_24 bigint, user_seeks_24 bigint, user_scans_24 bigint, user_lookups_24 bigint,
+		lastScan dateTime, numRows bigint)
+
+	insert into #performanceSummary (serverName, databaseName, tableName, indexName, user_updates, user_seeks, user_scans, user_lookups)
 	select
 		a.servername, a.databaseName, a.tableName,
 		left(a.indexName, 40) as indexName,
-		a.user_updates, a.user_seeks, a.user_scans,a.user_lookups,
-
-		a.user_updates - isnull(d.user_updates, 0) as user_updates_24,
-		a.user_seeks - isnull(d.user_seeks, 0) as user_seeks_24,
-		a.user_scans - isnull(d.user_scans, 0) as user_scans_24,
-		a.user_lookups - isnull(d.user_lookups, 0) as user_lookups_24,
-
-		d.ymd as lastScan,
-		c.rows as numRows
-
-		into #performanceSummary
-
-		from indexPerformanceLog a
+		a.user_updates, a.user_seeks, a.user_scans,a.user_lookups
+		from indexPerformanceLog a (nolock)
 		join #latestRun b on a.serverName = b.serverName
 			and a.ymd = b.ymd
+		where not (isnull(a.user_updates, 0) + isnull(a.user_seeks, 0) + isnull(a.user_scans, 0) + isnull(a.user_lookups, 0)) = 0
+
+	update #performanceSummary
+		set numRows = isnull(b.rows, 0)
+		from #performanceSummary a
 		left outer join (
 			select a.serverName, a.databaseName, a.tableName, a.rows
-				from tableSizeLog a
+				from tableSizeLog a (nolock)
 				join #latestTableSizeData b on a.serverName = b.serverName
 					and a.ymd = b.ymd
-			) c on a.serverName = c.serverName
-				and a.databaseName = c.databaseName
-				and a.tableName = c.tableName
+			) b on a.serverName = b.serverName
+				and a.databaseName = b.databaseName
+				and a.tableName = b.tableName
+
+	update #performanceSummary
+		set lastScan = b.ymd,
+			user_updates_24 = a.user_updates - isnull(b.user_updates, 0),
+			user_seeks_24 = a.user_seeks - isnull(b.user_seeks, 0),
+			user_scans_24 = a.user_scans - isnull(b.user_scans, 0),
+			user_lookups_24 = a.user_lookups - isnull(b.user_lookups, 0)
+		from #performanceSummary a
 		left outer join (
 			select a.*
-				from indexPerformanceLog a
+				from indexPerformanceLog a (nolock)
 				join #previousRun b on a.serverName = b.serverName
 					and a.ymd = b.ymd
-			) d on a.serverName = d.serverName
-				and a.databasename = d.databaseName
-				and a.tableName = d.tableName
-				and a.indexName = d.indexName
+				where not (isnull(a.user_updates, 0) + isnull(a.user_seeks, 0) + isnull(a.user_scans, 0) + isnull(a.user_lookups, 0)) = 0
+			) b on a.serverName = b.serverName
+				and a.databasename = b.databaseName
+				and a.tableName = b.tableName
+				and a.indexName = b.indexName
+
 
 	-- lose any inactive databases
 	delete #performanceSummary
@@ -71,21 +92,13 @@ begin
 
 	select *
 		from #performanceSummary
-		order by servername, databaseName, tableName, indexName
+		order by (user_scans_24 * isnull(numRows, 1)) desc
 
---	-- lots of scans
---	select *
---		from #performanceSummary
---		where user_scans_24 > 500
---
---	-- updated and not SEEK'd
---	select *
---		from #performanceSummary
---		where user_updates_24 > user_seeks_24 * 100
---			and numRows > 50000
 
 	drop table #latestRun
 	drop table #latestTableSizeData
 	drop table #previousRun
 	drop table #performanceSummary
+
 end
+GO

@@ -1,3 +1,8 @@
+/****** Object:  StoredProcedure [dbo].[pr_partitionLinkedTableDaily]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 -- exec pr_partitionLinkedTableDaily 'runs_data', 'ukey_run', 'runs', 'ukey', 'ymd', 'ukey_run, ukey_server, ukey_counter, instance, ukey_keyName, ukey', 0
 CREATE procedure [dbo].[pr_partitionLinkedTableDaily] (
 	@cTableName varchar(100),
@@ -547,7 +552,6 @@ begin
 
 	set @cSQLString = ''
 	use ['' + @cThisDatabase + '']
-	backup log ['' + @cThisDatabase + ''] with truncate_only
 	exec sp_spaceUsed @updateusage = ''''TRUE''''
 	dbcc shrinkfile(2,1)''
 
@@ -557,7 +561,6 @@ end'
 
 
 				set @cSQLString = 'use tempdb
-backup log tempdb with truncate_only
 dbcc shrinkfile(2,1)'
 				exec sp_executeSQL @cSQLString
 

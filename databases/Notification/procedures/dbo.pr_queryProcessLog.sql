@@ -1,3 +1,8 @@
+/****** Object:  StoredProcedure [dbo].[pr_queryProcessLog]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 -- exec pr_queryProcessLog @cServerName = '10.3.10.110', @cDatabaseName = 'sandbox', @nNumHours = 720
 -- exec pr_queryProcessLog @cServerName = 'ttssvr', @nNumHours = 6
 
@@ -64,7 +69,4 @@ begin
 		order by ymd, spid
 
 end
-
-
-
 GO

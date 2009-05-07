@@ -1,4 +1,9 @@
-CREATE function [fn_returnShortDate] (@dToday dateTime)
+/****** Object:  UserDefinedFunction [dbo].[fn_returnShortDate]    Script Date: 05/07/2009 10:30:23 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE function [dbo].[fn_returnShortDate] (@dToday dateTime)
 returns varchar(14)
 as
 begin
@@ -15,7 +20,4 @@ begin
 
 	return @cReturnString
 end
-
-
-
 GO

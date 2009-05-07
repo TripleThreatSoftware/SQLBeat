@@ -1,4 +1,9 @@
-CREATE procedure [pr_processPerformanceLog_stage]
+/****** Object:  StoredProcedure [dbo].[pr_processPerformanceLog_stage]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE procedure [dbo].[pr_processPerformanceLog_stage]
 as
 begin
 
@@ -67,7 +72,4 @@ end
 --			dbo.fn_padl(convert(varchar(3), datePart(millisecond, ymd)), 3, '0')
 --		)
 --	where runStamp = 20071012101303660
-
-
-
 GO

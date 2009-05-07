@@ -1,4 +1,9 @@
-ALTER function [dbo].[fn_removeFormatting](@cString varchar(8000))
+/****** Object:  UserDefinedFunction [dbo].[fn_removeFormatting]    Script Date: 05/07/2009 10:30:23 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE function [dbo].[fn_removeFormatting](@cString varchar(8000))
 returns varchar(8000)
 as
 begin
@@ -21,3 +26,4 @@ begin
 
 	return @cReturnString
 end
+GO

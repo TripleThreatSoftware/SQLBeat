@@ -1,4 +1,9 @@
-CREATE    procedure [pr_examineAllServers] (@nServerGroup int)
+/****** Object:  StoredProcedure [dbo].[pr_examineAllServers]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE    procedure [dbo].[pr_examineAllServers] (@nServerGroup int)
 as
 begin
 	set nocount on
@@ -50,7 +55,7 @@ begin
 			if @@error <> 0
 			begin
 				set @cSubject = 'SQL Automated Alerts : Failed to make contact with ' + @cServerName
-				set @cMessage = 'SQLAutomation failed to make contact with ' + @cServerName
+				set @cMessage = 'SQLBeat failed to make contact with ' + @cServerName
 
 				insert into notificationLog_stage (subject, message, serverName, severity) values (
 					@cSubject, @cMessage, @cServerName, 1)
@@ -71,7 +76,4 @@ begin
 
 	end
 end
-
-
-
 GO

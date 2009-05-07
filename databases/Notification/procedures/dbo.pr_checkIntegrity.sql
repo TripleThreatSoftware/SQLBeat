@@ -1,4 +1,9 @@
-CREATE  procedure [pr_checkIntegrity] (@nServerGroup int)
+/****** Object:  StoredProcedure [dbo].[pr_checkIntegrity]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE  procedure [dbo].[pr_checkIntegrity] (@nServerGroup int)
 as
 begin
 
@@ -128,7 +133,4 @@ begin
 	drop table #results
 end
 -- exec pr_stores_checkIntegrity 3
-
-
-
 GO

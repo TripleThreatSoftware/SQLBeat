@@ -1,5 +1,10 @@
+/****** Object:  StoredProcedure [dbo].[pr_rpt_enterprisePacketLoss]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 -- exec pr_rpt_enterprisePacketLoss null, null
-create procedure pr_rpt_enterprisePacketLoss (@dStartDate dateTime, @dEndDate dateTime)
+create procedure [dbo].[pr_rpt_enterprisePacketLoss] (@dStartDate dateTime, @dEndDate dateTime)
 as
 begin
 	set @dStartDate = isnull(@dStartDate, dateAdd(hour, -72, getDate()))
@@ -15,7 +20,4 @@ begin
 			and ymd <= @dEndDate
 		order by ymd desc
 end
-
-
-
 GO

@@ -1,4 +1,9 @@
-CREATE function [fn_at] (@cSourceString varchar(2000), @cStringToFind varchar(500), @nInstance int)
+/****** Object:  UserDefinedFunction [dbo].[fn_at]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER OFF
+GO
+CREATE function [dbo].[fn_at] (@cSourceString varchar(2000), @cStringToFind varchar(500), @nInstance int)
 returns int
 as
 begin
@@ -27,7 +32,4 @@ begin
 
 	return 0
 end
-
-
-
 GO

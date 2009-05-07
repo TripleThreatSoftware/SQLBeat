@@ -1,12 +1,9 @@
-use [notification]
-go
-
-if not exists (select top 1 settingValue from dm_settings where settingName = 'Default Email To')
-	insert into dm_settings (settingName, settingValue) values ('Default Email To', 'jmcgarvey@www.example.com')
-
+/****** Object:  StoredProcedure [dbo].[pr_sendAlerts]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
 GO
-
-ALTER procedure [dbo].[pr_sendAlerts] (@cUserName varchar(100) = '', @bIsPreview bit = 0, @bOverride bit = 0)
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE procedure [dbo].[pr_sendAlerts] (@cUserName varchar(100) = '', @bIsPreview bit = 0, @bOverride bit = 0)
 as
 begin
 	set nocount off
@@ -159,7 +156,7 @@ begin
 			set @cThisSubject = 'SQLBeat (' + @@servername + '): More than 500 messages are queued to send'
 			set @cThisMessage = 'There are ' + convert(varchar(20), (select count(*) from #messagesToSend)) + ' messages in the hopper to send for ' + @@servername + '.'
 
-			exec pr_sendMessage '', 'DBA', 'More than 100 messages are queued to send', @cThisMessage
+			exec pr_sendMessage '', 'cole@sqlbeat.com', 'More than 100 messages are queued to send', @cThisMessage
 		end
 		else
 		begin
@@ -200,3 +197,4 @@ begin
 	drop table #messages
 	drop table #messagesToSend
 end
+GO

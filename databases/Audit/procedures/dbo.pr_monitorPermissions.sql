@@ -1,8 +1,13 @@
+/****** Object:  StoredProcedure [dbo].[pr_monitorPermissions]    Script Date: 05/07/2009 10:30:18 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 --***********************************************************************************************************************************************
 --***********************************************************************************************************************************************
 
 
-ALTER   procedure [dbo].[pr_monitorPermissions]
+CREATE   procedure [dbo].[pr_monitorPermissions]
 as
 begin
 	declare @cServerName varchar(200)
@@ -21,9 +26,12 @@ begin
 	set @nUkeyAuditRun = null
 	set @nUkeyLastAuditRun = (select max(ukey) from auditRuns)
 
+
+--set @nUkeyAuditRun = 13999
+--set @nUkeyLastAuditRun = 1
 --	set @nUkeyAuditRun = (select max(ukey) from auditRuns)
 --	set @nUkeyLastAuditRun = (select max(ukey) from auditRuns where ukey < @nUkeyAuditRun) --22
-
+--select * from auditRuns
 	set nocount on
 
 	--********************************************************************************************************************************************
@@ -77,7 +85,7 @@ begin
 	-- parse each server, if we're not just comparing past runs
 	--********************************************************************************************************************************************
 
-	print 'Last run was ' + convert(varchar(20), isnull(@nUkeyAuditRun, 0))
+--	print 'Last run was ' + convert(varchar(20), isnull(@nUkeyAuditRun, 0))
 
 	if isnull(@nUkeyAuditRun, 0) = 0
 	begin
@@ -97,7 +105,7 @@ begin
 					and securityCheck = 1
 				order by servername
 
-			print 'Processing ' + @cServerName
+--			print 'Processing ' + @cServerName
 
 			set @cDatabaseName = ''
 
@@ -137,8 +145,6 @@ begin
 						where serverName = ''' + @cServerName + ''' and databaseName > @cThisDatabase
 						order by databaseName
 					)
-
-				print @cThisDatabase
 
 				set @cSQLString = ''
 					create procedure pr_securityauditData_temp2
@@ -204,7 +210,6 @@ begin
 
 			end
 		end'
-			print @cSQLString
 			exec sp_executeSQL @cSQLString
 
 			exec pr_securityauditData_temp
@@ -362,10 +367,10 @@ begin
 		begin
 --			print @cThisSubject
 --			print @cMessage
---
---			exec notification.dbo.pr_sendMessage '', 'DBA', @cThisSubject, @cMessage
 
-			insert into notificationLog_stage (serverName, severity, subject, message) values (@cServerName, 2, @cThisSubject, @cMessage)
+--			exec notification.dbo.pr_sendMessage '', 'cole@sqlbeat.com', @cThisSubject, @cMessage
+
+			insert into notification..notificationLog_stage (serverName, severity, subject, message) values (@cServerName, 2, @cThisSubject, @cMessage)
 
 		end
 
@@ -443,56 +448,29 @@ begin
 
 				group by a.serverName, b.databaseName, b.[name], case when b.uid = b.gid then 'X' else '' end, b.isNTGroup, b.isNTUser
 
-			print convert(varchar(20), @@rowcount) + ' records for ' + @cServerName + ', run ' + convert(varchar(20), @nUkeyAuditRun)
+--			print convert(varchar(20), @@rowcount) + ' records for ' + @cServerName + ', run ' + convert(varchar(20), @nUkeyAuditRun)
 
-			set @cMessage = '
-	(permissions changes since the last audit)
-																						  BEFORE                AFTER
-																				   --------------------- ---------------------
-																			 N    |                     |                     |
-																			 T  N |                     |                     |
-																				T | S  I  D  U          | S  I  D  U          |
-																			 G    | e  n  e  p  A       | e  n  e  p  A       |
-																		  R  r  U | l  s  l  d  l  E    | l  s  l  d  l  E    |
-																		  o  o  s | e  e  e  a  t  x  D | e  e  e  a  t  x  D |
-																		  l  u  e | c  r  t  t  e  e  B | c  r  t  t  e  e  B |
-	NT Group       User           Server              Database            e  p  r | t  t  e  e  r  c  O | t  t  e  e  r  c  O |
-	============== ============== =================== =================== ======== ===================== =====================
-	'
-
-			-- new rights
-			select @cMessage = @cMessage +
-				left(a.groupName + space(15), 15) +
-					left(a.userName + space(15), 15) +
-					left(a.serverName + space(20), 20) +
-					left(a.databaseName + space(20), 20) +
-
-					left(a.isRole + space(3), 3) +
-					left(case when a.isNTGroup = 1 then 'X' else '' end + space(3), 3) +
-					left(case when a.isNTUser = 1 then 'X' else '' end + space(3), 3) +
-
-					space(1) +
-
-					left(isnull(b.canSelect, '-') + space(3), 3) +
-					left(isnull(b.canInsert, '-') + space(3), 3) +
-					left(isnull(b.canDelete, '-') + space(3), 3) +
-					left(isnull(b.canUpdate, '-') + space(3), 3) +
-					left(isnull(b.canChangeStructure, '-') + space(3), 3) +
-					left(isnull(b.canExecute, '-') + space(3), 3) +
-					left(isnull(b.isDBO, '-') + space(3), 3) +
-
-					space(1) +
-
-					left(a.canSelect + space(3), 3) +
-					left(a.canInsert + space(3), 3) +
-					left(a.canDelete + space(3), 3) +
-					left(a.canUpdate + space(3), 3) +
-					left(a.canChangeStructure + space(3), 3) +
-					left(a.canExecute + space(3), 3) +
-					left(a.isDBO + space(3), 3) +
-
-					char(13)
-
+			insert into notification..notificationLog_stage (serverName, severity, subject, message)
+			select
+				@cServerName, 2,
+				'Rights have changed for ' +
+					case when isnull(a.username, '') <> '' then a.userName
+						when isnull(a.groupName, '') <> '' then a.groupName
+						else a.databaseName end as subject,
+				'NT Group: ' + a.groupName + char(13) +
+					'User: ' + a.userName + char(13) +
+					'Server: ' + a.serverName + char(13) +
+					'Database: ' + a.databaseName + char(13) +
+					'Role: ' + case when a.isRole = 'X' then 'Yes' else 'No' end + char(13) +
+					'NT Group: ' + case when a.isNTGroup = 'X' then 'Yes' else 'No' end + char(13) +
+					'NT User: ' + case when a.isNTUser = 'X' then 'Yes' else 'No' end + char(13) +
+					'Select: ' + case when isnull(b.canSelect, '') = 'X' then 'Yes' else 'No' end + '/' + case when isnull(a.canSelect, '') = 'X' then 'Yes' else 'No' end + char(13) +
+					'Insert: ' + case when isnull(b.canInsert, '') = 'X' then 'Yes' else 'No' end + '/' + case when isnull(a.canInsert, '') = 'X' then 'Yes' else 'No' end + char(13) +
+					'Delete: ' + case when isnull(b.canDelete, '') = 'X' then 'Yes' else 'No' end + '/' + case when isnull(a.canDelete, '') = 'X' then 'Yes' else 'No' end + char(13) +
+					'Update: ' + case when isnull(b.canUpdate, '') = 'X' then 'Yes' else 'No' end + '/' + case when isnull(a.canUpdate, '') = 'X' then 'Yes' else 'No' end + char(13) +
+					'Schema: ' + case when isnull(b.canChangeStructure, '') = 'X' then 'Yes' else 'No' end + '/' + case when isnull(a.canChangeStructure, '') = 'X' then 'Yes' else 'No' end + char(13) +
+					'Execute: ' + case when isnull(b.canExecute, '') = 'X' then 'Yes' else 'No' end + '/' + case when isnull(a.canExecute, '') = 'X' then 'Yes' else 'No' end + char(13) +
+					'DBO: ' + case when isnull(b.isDBO, '') = 'X' then 'Yes' else 'No' end + '/' + case when isnull(a.isDBO, '') = 'X' then 'Yes' else 'No' end as message
 				from (
 					select isnull(a.groupName, '') as groupName, isnull(a.userName, b.userName) as userName, b.serverName, b.databaseName,
 						b.isRole, b.isNTGroup, b.isNTUser, b.canSelect, b.canInsert, b.canDelete, b.canUpdate, b.canChangeStructure, b.canExecute, b.isDBO
@@ -537,37 +515,27 @@ begin
 				set @bChangesFound = 1
 
 			-- rights taken away
-			select @cMessage = @cMessage +
-				left(a.groupName + space(15), 15) +
-					left(a.userName + space(15), 15) +
-					left(a.serverName + space(20), 20) +
-					left(a.databaseName + space(20), 20) +
-
-					left(a.isRole + space(3), 3) +
-					left(case when a.isNTGroup = 1 then 'X' else '' end + space(3), 3) +
-					left(case when a.isNTUser = 1 then 'X' else '' end + space(3), 3) +
-
-					space(1) +
-
-					left(a.canSelect + space(3), 3) +
-					left(a.canInsert + space(3), 3) +
-					left(a.canDelete + space(3), 3) +
-					left(a.canUpdate + space(3), 3) +
-					left(a.canChangeStructure + space(3), 3) +
-					left(a.canExecute + space(3), 3) +
-					left(a.isDBO + space(3), 3) +
-
-					space(1) +
-
-					left(isnull(b.canSelect, '-') + space(3), 3) +
-					left(isnull(b.canInsert, '-') + space(3), 3) +
-					left(isnull(b.canDelete, '-') + space(3), 3) +
-					left(isnull(b.canUpdate, '-') + space(3), 3) +
-					left(isnull(b.canChangeStructure, '-') + space(3), 3) +
-					left(isnull(b.canExecute, '-') + space(3), 3) +
-					left(isnull(b.isDBO, '-') + space(3), 3) +
-
-					char(13)
+			insert into notification..notificationLog_stage (serverName, severity, subject, message)
+			select
+				@cServerName, 2,
+				'Rights have changed for ' +
+					case when isnull(a.username, '') <> '' then a.userName
+						when isnull(a.groupName, '') <> '' then a.groupName
+						else a.databaseName end as subject,
+				'NT Group: ' + a.groupName + char(13) +
+					'User: ' + a.userName + char(13) +
+					'Server: ' + a.serverName + char(13) +
+					'Database: ' + a.databaseName + char(13) +
+					'Role: ' + case when a.isRole = 'X' then 'Yes' else 'No' end + char(13) +
+					'NT Group: ' + case when a.isNTGroup = 'X' then 'Yes' else 'No' end + char(13) +
+					'NT User: ' + case when a.isNTUser = 'X' then 'Yes' else 'No' end + char(13) +
+					'Select: ' + case when isnull(b.canSelect, '') = 'X' then 'Yes' else 'No' end + '/' + case when isnull(a.canSelect, '') = 'X' then 'Yes' else 'No' end + char(13) +
+					'Insert: ' + case when isnull(b.canInsert, '') = 'X' then 'Yes' else 'No' end + '/' + case when isnull(a.canInsert, '') = 'X' then 'Yes' else 'No' end + char(13) +
+					'Delete: ' + case when isnull(b.canDelete, '') = 'X' then 'Yes' else 'No' end + '/' + case when isnull(a.canDelete, '') = 'X' then 'Yes' else 'No' end + char(13) +
+					'Update: ' + case when isnull(b.canUpdate, '') = 'X' then 'Yes' else 'No' end + '/' + case when isnull(a.canUpdate, '') = 'X' then 'Yes' else 'No' end + char(13) +
+					'Schema: ' + case when isnull(b.canChangeStructure, '') = 'X' then 'Yes' else 'No' end + '/' + case when isnull(a.canChangeStructure, '') = 'X' then 'Yes' else 'No' end + char(13) +
+					'Execute: ' + case when isnull(b.canExecute, '') = 'X' then 'Yes' else 'No' end + '/' + case when isnull(a.canExecute, '') = 'X' then 'Yes' else 'No' end + char(13) +
+					'DBO: ' + case when isnull(b.isDBO, '') = 'X' then 'Yes' else 'No' end + '/' + case when isnull(a.isDBO, '') = 'X' then 'Yes' else 'No' end as message
 				from (
 					select isnull(a.groupName, '') as groupName, isnull(a.userName, b.userName) as userName, b.serverName, b.databaseName,
 						b.isRole, b.isNTGroup, b.isNTUser, b.canSelect, b.canInsert, b.canDelete, b.canUpdate, b.canChangeStructure, b.canExecute, b.isDBO
@@ -611,15 +579,6 @@ begin
 			if @@rowcount > 0
 				set @bChangesFound = 1
 
-			set @cThisSubject = 'Permission change summary for ' + @cServerName
-
-			if @bChangesFound = 1
-			begin
-				insert into notificationLog_stage (serverName, severity, subject, message) values (@cServerName, 2, @cThisSubject, @cMessage)
---				print @cThisSubject
---				print @cMessage
---				exec notification.dbo.pr_sendMessage '', 'DBA', @cThisSubject, @cMessage
-			end
 		end
 
 		drop table #lastRunGroupPermissions

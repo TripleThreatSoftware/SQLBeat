@@ -1,3 +1,8 @@
+/****** Object:  StoredProcedure [dbo].[pr_rpt_recompiledObjects]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 -- exec pr_rpt_recompiledObjects 'funmssql02', null, null
 CREATE procedure [dbo].[pr_rpt_recompiledObjects] (@cServerName varchar(100), @nNumHours int = 6)
 as
@@ -33,7 +38,4 @@ begin
 
 
 end
-
-
-
 GO

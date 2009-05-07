@@ -1,29 +1,21 @@
-create view v_drivespaceLog_all as
-	select driveLetter,driveSpace,serverName,ukey,ymd
-	from Notification200809..drivespaceLog_20080917  union all
-	select driveLetter,driveSpace,serverName,ukey,ymd
-	from Notification200809..drivespaceLog_20080916  union all
-	select driveLetter,driveSpace,serverName,ukey,ymd
-	from Notification200809..drivespaceLog_20080915  union all
-	select driveLetter,driveSpace,serverName,ukey,ymd
-	from Notification200809..drivespaceLog_20080911  union all
-	select driveLetter,driveSpace,serverName,ukey,ymd
-	from Notification200809..drivespaceLog_20080908  union all
-	select driveLetter,driveSpace,serverName,ukey,ymd
-	from Notification200809..drivespaceLog_200809_week36  union all
-	select driveLetter,driveSpace,serverName,ukey,ymd
-	from Notification200807..drivespaceLog_200807_week29  union all
-	select driveLetter,driveSpace,serverName,ukey,ymd
-	from Notification200807..drivespaceLog_200807_week27  union all
-	select driveLetter,driveSpace,serverName,ukey,ymd
-	from Notification200806..drivespaceLog_200806_week27  union all
-	select driveLetter,driveSpace,serverName,ukey,ymd
-	from Notification200806..drivespaceLog_200806_week26  union all
-	select driveLetter,driveSpace,serverName,ukey,ymd
-	from Notification200806..drivespaceLog_200806_week24  union all
-	select driveLetter,driveSpace,serverName,ukey,ymd
-	from Notification200806..drivespaceLog_200806_week23
-
-
-
+/****** Object:  View [dbo].[v_drivespaceLog_all]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER OFF
+GO
+create view [dbo].[v_drivespaceLog_all] as
+	select ukey,ymd,driveSpace,driveLetter,serverName
+	from Notification200812..drivespaceLog_20081229  union all
+	select ukey,ymd,driveSpace,driveLetter,serverName
+	from Notification200812..drivespaceLog_20081228  union all
+	select ukey,ymd,driveSpace,driveLetter,serverName
+	from Notification200812..drivespaceLog_20081227  union all
+	select ukey,ymd,driveSpace,driveLetter,serverName
+	from Notification200812..drivespaceLog_20081223  union all
+	select ukey,ymd,driveSpace,driveLetter,serverName
+	from Notification200812..drivespaceLog_20081222  union all
+	select ukey,ymd,driveSpace,driveLetter,serverName
+	from Notification200812..drivespaceLog_200812_week50  union all
+	select ukey,ymd,driveSpace,driveLetter,serverName
+	from Notification200812..drivespaceLog_200812_week49
 GO

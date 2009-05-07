@@ -1,3 +1,8 @@
+/****** Object:  StoredProcedure [dbo].[pr_dashboard_returnAlerts]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 -- pr_dashboard_returnAlerts '10.2.1.156'
 CREATE procedure [dbo].[pr_dashboard_returnAlerts] (@cServerName varchar(100) = '', @nNumHours int = 12)
 as
@@ -17,7 +22,4 @@ begin
 end
 
 --select * from notificationLog where servername = 'vpdb16'
-
-
-
 GO

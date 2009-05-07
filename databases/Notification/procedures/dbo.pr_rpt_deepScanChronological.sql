@@ -1,6 +1,11 @@
+/****** Object:  StoredProcedure [dbo].[pr_rpt_deepScanChronological]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 -- pr_rpt_deepScanChronological 'funmssql02', '2008-01-10 15:00:00.000', '2008-01-10 17:00:00.000'
 
-CREATE procedure [pr_rpt_deepScanChronological] (@cServerName varchar(100), @dStartDate dateTime, @dEndDate dateTime)
+CREATE procedure [dbo].[pr_rpt_deepScanChronological] (@cServerName varchar(100), @dStartDate dateTime, @dEndDate dateTime)
 as
 begin
 
@@ -70,7 +75,4 @@ begin
 					end,
 				ymd
 end
-
-
-
 GO

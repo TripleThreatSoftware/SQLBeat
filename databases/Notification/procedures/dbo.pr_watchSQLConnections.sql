@@ -1,8 +1,13 @@
+/****** Object:  StoredProcedure [dbo].[pr_watchSQLConnections]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 -- ALTER  table watchedConnections (ukey int identity, alertEmail varchar(200),
 -- 	login varchar(100), hostname varchar(100), dbName varchar(100), programName varchar(100), serverName varchar(200))
 -- insert into watchedConnections (hostname, login, serverName, alertEmail) values ('webtests', 'atm', 'sqlserver\instance4', 'dba@example.com')
 
-CREATE  procedure [pr_watchSQLConnections]
+CREATE  procedure [dbo].[pr_watchSQLConnections]
 as
 begin
 
@@ -68,7 +73,4 @@ begin
 
 	drop table #messages
 end
-
-
-
 GO

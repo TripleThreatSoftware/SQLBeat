@@ -1,15 +1,11 @@
-USE [Notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_monitorBigBrother]    Script Date: 03/02/2009 11:40:04 ******/
+/****** Object:  StoredProcedure [dbo].[pr_monitorBigBrother]    Script Date: 05/07/2009 10:30:39 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
-
 -- select top 100 * from messagesSent order by ymd desc
 
-ALTER       procedure [dbo].[pr_monitorBigBrother]
+CREATE       procedure [dbo].[pr_monitorBigBrother]
 as
 begin
 	set nocount on
@@ -1225,3 +1221,4 @@ begin
 	-- insert into hist_monitorBigBrother (stepName) values ('Alerts sent')
 
 end
+GO

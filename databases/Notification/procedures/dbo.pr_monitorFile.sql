@@ -1,5 +1,10 @@
+/****** Object:  StoredProcedure [dbo].[pr_monitorFile]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 -- exec pr_monitorFile '\\appapps02\c$\AppServices\UnisonFolderSync\unisonFileSync.log', 'Error', 'appapps02'
-create procedure [pr_monitorFile] (@cFileToMonitor varchar(500), @cStringToFind varchar(100), @cServerName varchar(200))
+create procedure [dbo].[pr_monitorFile] (@cFileToMonitor varchar(500), @cStringToFind varchar(100), @cServerName varchar(200))
 as
 begin
 
@@ -85,7 +90,4 @@ begin
 	drop table #fileData
 	drop table #linesFound
 end
-
-
-
 GO

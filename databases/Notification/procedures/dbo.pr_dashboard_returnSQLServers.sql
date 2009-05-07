@@ -1,3 +1,8 @@
+/****** Object:  StoredProcedure [dbo].[pr_dashboard_returnSQLServers]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 CREATE procedure [dbo].[pr_dashboard_returnSQLServers]
 as
 begin
@@ -9,7 +14,7 @@ begin
 
 	insert into #results (serverName, ukey_server)
 	select serverName, ukey
-		from dm_servers
+		from dm_servers (nolock)
 		where isnull(isSQLBox, 0) = 1
 			and isnull(isClusterNode, 0) = 0
 
@@ -17,38 +22,6 @@ begin
 		insert into #results (serverName) values (@@serverName)
 
 	create clustered index ix_tmp_results_serverName on #results (serverName) with fillfactor = 100
-
---	update #results
---		set averageCPU = convert(varchar(20), b.averageCPU) + '%',
---			maxCPU = convert(varchar(20), b.maxCPU) + '%'
---		from #results a
---		join (
---			select
---				a.ukey_server,
---				convert(decimal(10,1), avg(convert(decimal(10,2), processorLoad))) as averageCPU,
---				convert(decimal(10,1), max(convert(decimal(10,2), processorLoad))) as maxCPU
---
---				from (
---					select
---						f.ymd,
---						a.ukey_server,
---						a.instance,
---						max(case when d.counterName = 'Win32_Processor' and e.keyName = 'loadPercentage' then convert(int, keyValue) else 0 end) as processorLoad
---
---						from configuration.dbo.runs_data a (nolock)
---						join #results b on a.ukey_server = b.ukey_server
---						join configuration.dbo.dm_counters d (nolock) on a.ukey_counter = d.ukey
---							and d.counterName = 'Win32_Processor'
---						join configuration.dbo.dm_keyNames e (nolock) on a.ukey_keyName = e.ukey
---							and e.keyName = 'LoadPercentage'
---						join configuration.dbo.runs f (nolock) on a.ukey_run = f.ukey
---							and f.ymd > dateAdd(hour, -3, getDate())
---
---						group by a.ukey_server, f.ymd, a.instance
---
---					) a
---				group by a.ukey_server
---			) b on a.ukey_server = b.ukey_server
 
 	declare @databasesSizes table (serverName varchar(100), dbname varchar(100), startSize bigint, endSize bigint,
 		startDate dateTime, endDate dateTime, driveLetter varchar(1), isLog bit)
@@ -101,16 +74,17 @@ begin
 
 	insert into @uniqueUsers (serverName, uniqueUsers, activeDatabases)
 	select
-		serverName,
-		count(distinct isnull(login, '') + isnull(hostname, '') + convert(varchar(20), spid)) as uniqueUsers,
-		count(distinct isnull(dbname, '')) as activeDatabases
+		a.serverName,
+		count(distinct isnull(a.login, '') + isnull(a.hostname, '') + convert(varchar(20), a.spid)) as uniqueUsers,
+		count(distinct isnull(a.dbname, '')) as activeDatabases
 
 		from processLog a (nolock)
-		where ymd >= dateAdd(hour, -1, getDate())
+		join #results b on a.serverName = b.serverName
+		where a.ymd >= dateAdd(hour, -1, getDate())
 			and a.spid > 52
-			and hostname <> @@serverName
-			and dbName not in ('master', 'model', 'msdb', 'tempdb', 'pubs', 'distribution')
-		group by serverName
+			and a.hostname <> @@serverName
+			and a.dbName not in ('master', 'model', 'msdb', 'tempdb', 'pubs', 'distribution')
+		group by a.serverName
 
 	--create index ix_processLog_serverName_unique on processLog (ymd, serverName, spid, dbName, login, hostname) with fillfactor = 70
 
@@ -208,8 +182,7 @@ begin
 		left outer join (
 			select a.*,
 				convert(decimal(10,2), convert(decimal(15,10), droppedPings)/convert(decimal(15,10), totalPings) * 100) as failureRate,
-				convert(decimal(10,2), convert(decimal(15,10), (totalPings -
-droppedPings))/convert(decimal(15,10), totalPings) * 100) as availability
+				convert(decimal(10,2), convert(decimal(15,10), (totalPings - droppedPings))/convert(decimal(15,10), totalPings) * 100) as availability
 				from (
 					select
 						a.serverName,
@@ -221,6 +194,7 @@ droppedPings))/convert(decimal(15,10), totalPings) * 100) as availability
 						count(distinct case when a.isServerPingable = 0 or a.isSQLPingable = 0 or a.isRouterPingable = 0 then a.ukey else null end) as droppedPings,
 						count(*) as totalPings
 						from pingLog a (nolock)
+						join #results b on a.serverName = b.serverName
 						where a.ymd >= dateAdd(hour, -24, getDate())
 						group by a.serverName
 					) a
@@ -229,6 +203,4 @@ droppedPings))/convert(decimal(15,10), totalPings) * 100) as availability
 	drop table #results
 	drop table #databaseReadings
 end
-
-
 GO

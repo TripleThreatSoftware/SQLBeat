@@ -1,3 +1,8 @@
+/****** Object:  StoredProcedure [dbo].[pr_pingServer]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 -- select top 100 * from pingResults order by ymd desc
 -- exec pr_pingServer 'appweb01'
 -- update pingResults set sqlPingResults = pingResults where sqlPingResults is null
@@ -54,8 +59,8 @@ begin
 		where serverName = @cServerName
 --			and isEnabled = 1
 
---	if isnull(@bPingServer, 1) = 0
---		return 1
+	if isnull(@bPingServer, 1) = 0
+		return 1
 
 	--*********************************************************************************************************
 	-- Sort out the proper naming of the server
@@ -236,6 +241,4 @@ begin
 	else
 		return 1
 end
-
-
 GO

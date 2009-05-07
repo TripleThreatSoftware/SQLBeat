@@ -1,3 +1,8 @@
+/****** Object:  StoredProcedure [dbo].[pr_rpt_blockingQueries]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 -- exec pr_rpt_blockingQueries 'doe-monitor-sql', null, null
 CREATE procedure [dbo].[pr_rpt_blockingQueries] (@cServerName varchar(100), @nNumHours int = 6)
 as
@@ -41,7 +46,4 @@ begin
 			dbname, bufferContents,
 			max(lastBatchTime) desc
 end
-
-
-
 GO

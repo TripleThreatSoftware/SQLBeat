@@ -1,6 +1,9 @@
---drop view v_tableSizeLog_all
+/****** Object:  StoredProcedure [dbo].[pr_rpt_spaceConsumedBytable]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
 GO
-ALTER procedure [dbo].[pr_rpt_spaceConsumedByTable] (@cServerName varchar(100), @cDatabaseName varchar(100))
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE procedure [dbo].[pr_rpt_spaceConsumedBytable] (@cServerName varchar(100), @cDatabaseName varchar(100))
 as
 begin
 	create table #dataValues (seriesName varchar(100), setName varchar(100), axis_x varchar(100), axis_y int, sortOrder int identity)
@@ -34,3 +37,4 @@ begin
 	drop table #biggestTables
 	drop table #dataValues
 end
+GO

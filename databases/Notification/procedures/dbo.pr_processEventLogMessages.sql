@@ -1,15 +1,14 @@
+/****** Object:  StoredProcedure [dbo].[pr_processEventLogMessages]    Script Date: 05/07/2009 10:30:39 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
-
 -- create table eventLog_stage_hist (ukey_group int, ymd dateTime default getDate(), step varchar(200))
 -- pr_processEventLogMessages 1
 -- select * from eventLog_history order by ymd desc
 -- select * from eventLog_stage
 
-ALTER procedure [dbo].[pr_processEventLogMessages] (@nUkeyGroup int)
+CREATE procedure [dbo].[pr_processEventLogMessages] (@nUkeyGroup int)
 as
 begin
 
@@ -67,15 +66,13 @@ begin
 					or a.message like '%eaas%'
 					or a.message like '%degraded%'
 					or a.message like '%sensor%'
-					or a.message like '%disk offline%'
-					or a.message like '%disk removed%'
-					or a.message like '%redundancy%'
-					or a.message like '%physical disk%'
-					or a.message like '%device failed%'
 					or a.message like '%drive array%'
 					or a.message like '%power supply%'
+					or a.message like '%connectivity has been lost%'
+					or a.message like '%network link is down%'
 					or a.message like '%The Event log service was stopped%'
 					or a.message like '%The Event log service was started%'
+					or ((sourceName like '%clussvc%' or sourceName like '%mssqlserver%') and type = 'Error')
 					then 1
 					else 2 end as severity,
 				'EventLog @ ' + left(right(convert(varchar(20), convert(dateTime, a.timeWritten), 120), 8), 5) + ' : ' + isnull(a.message, 'BAD MESSAGE') as subject,
@@ -121,6 +118,18 @@ begin
 					and message not like '%Security policies were propagated with warning%'
 					and message not like '%Group Policy client-side extension Security failed to log RSOP%'
 					and not (message like '%rsop%' and message like '%hostingmodel%')
+
+					and message not like '%landesk%'
+					and message not like '%time service%'
+					and message not like '%local activation permission%'
+					and message not like '%profile cannot be loaded%'
+
+					and message not like '%http server is terminating%'
+					and message not like '%JIT Debugging%'
+					and message not like '%waiting for a transaction response%'
+					and message not like '%performance counter data collection%'
+					and message not like '%open procedure name%'
+
 
 					and isnull(a.message, '') <> ''
 			) a
@@ -209,3 +218,4 @@ begin
 	drop table #eventLogFailures
 	drop table #eventLog
 end
+GO

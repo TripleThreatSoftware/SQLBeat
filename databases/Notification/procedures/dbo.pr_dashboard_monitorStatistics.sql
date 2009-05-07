@@ -1,4 +1,9 @@
-CREATE procedure [pr_dashboard_monitorStatistics]
+/****** Object:  StoredProcedure [dbo].[pr_dashboard_monitorStatistics]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE procedure [dbo].[pr_dashboard_monitorStatistics]
 as
 begin
 	declare @results table (ukey int identity, keyName varchar(100), keyValue int, hyperlink varchar(200))
@@ -40,7 +45,4 @@ begin
 end
 
 --unionselect * from dm_servers
-
-
-
 GO

@@ -1,3 +1,8 @@
+/****** Object:  StoredProcedure [dbo].[pr_rpt_querySummary]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 -- exec pr_rpt_querySummary 'mssql-ny', null, null
 -- select * from tmp_messageLog
 CREATE procedure [dbo].[pr_rpt_querySummary] (@cServerName varchar(100), @nHours int = 6)
@@ -33,7 +38,4 @@ begin
 	drop table #activity
 
 end
-
-
-
 GO

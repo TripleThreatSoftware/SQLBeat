@@ -1,7 +1,12 @@
+/****** Object:  StoredProcedure [dbo].[pr_alert_replicationSynchronization]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 -- exec pr_alert_replicationSynchronization 'mssql-ny', 'mssql_slv-ny', 'transactions_ap'
 -- exec pr_alert_replicationSynchronization 'mssql-ny', 'mssql_slv-ny', 'transactions_hk'
 
-CREATE procedure [pr_alert_replicationSynchronization] (@cServerName_Publisher varchar(100), @cServerName_Subscriber varchar(100), @cDatabaseName varchar(100))
+CREATE procedure [dbo].[pr_alert_replicationSynchronization] (@cServerName_Publisher varchar(100), @cServerName_Subscriber varchar(100), @cDatabaseName varchar(100))
 as
 begin
 
@@ -103,7 +108,4 @@ begin
 
 	drop table #results
 end
-
-
-
 GO

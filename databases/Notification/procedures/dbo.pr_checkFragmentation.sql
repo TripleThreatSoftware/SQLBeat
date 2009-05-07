@@ -1,3 +1,8 @@
+/****** Object:  StoredProcedure [dbo].[pr_checkFragmentation]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 --create table fragmentationLog (ukey int identity, ukey_group int, ukey_server int, ymd dateTime, dbName varchar(200), objectName varchar(200),
 --	indexName varchar(200), [rows] bigint, extents bigint, extentSwitches bigint, scanDensity decimal(20,5))
 --
@@ -156,7 +161,4 @@ begin
 
 	drop table #results
 end
-
-
-
 GO

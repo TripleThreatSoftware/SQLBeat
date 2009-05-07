@@ -1,3 +1,8 @@
+/****** Object:  StoredProcedure [dbo].[pr_rpt_indexAnalysis_notUsed]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 -- exec pr_rpt_indexAnalysis_notUsed 'funmssql02', null, null
 CREATE procedure [dbo].[pr_rpt_indexAnalysis_notUsed] (@cServerName varchar(100) = '')
 as
@@ -94,7 +99,4 @@ begin
 	drop table #performanceSummary
 
 end
-
-
-
 GO

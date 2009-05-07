@@ -1,9 +1,9 @@
+/****** Object:  StoredProcedure [dbo].[pr_checkObjects]    Script Date: 05/07/2009 10:30:18 ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
-
-ALTER procedure [dbo].[pr_checkObjects]
+CREATE procedure [dbo].[pr_checkObjects]
 as
 begin
 	set nocount on
@@ -38,6 +38,7 @@ begin
 				and isSQLBox = 1
 				and (lastObjectCheck is null or dateDiff(minute, lastObjectCheck, getDate()) > isnull(objectCheckMinuteInterval, 5))
 				and isServerPingable = 1
+				and skipNextRun <> 1
 		)
 	begin
 		truncate table #objectText
@@ -55,6 +56,7 @@ begin
 				and isSQLBox = 1
 				and (lastObjectCheck is null or dateDiff(minute, lastObjectCheck, getDate()) > isnull(objectCheckMinuteInterval, 5))
 				and isServerPingable = 1
+				and skipNextRun <> 1
 			order by servername
 
 		print 'Processing ' + @cServerName
@@ -404,3 +406,4 @@ begin
 	drop table #indexes
 	drop table #foreignKeys
 end
+GO

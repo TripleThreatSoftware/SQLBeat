@@ -1,3 +1,8 @@
+/****** Object:  StoredProcedure [dbo].[pr_rpt_sqlCPUWaits]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 -- exec pr_rpt_sqlCPUWaits '10.3.10.110', 720
 
 CREATE procedure [dbo].[pr_rpt_sqlCPUWaits] (@cServerName varchar(100), @nNumHours int = 12)
@@ -15,7 +20,4 @@ begin
 
 
 end
-
-
-
 GO

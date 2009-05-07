@@ -1,6 +1,9 @@
-drop view v_databaseFileSizeLog_all
+/****** Object:  StoredProcedure [dbo].[pr_rpt_databaseGrowthSummary]    Script Date: 05/07/2009 10:30:38 ******/
+SET ANSI_NULLS ON
 GO
-ALTER procedure [dbo].[pr_rpt_databaseGrowthSummary] (@cServerName varchar(100))
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE procedure [dbo].[pr_rpt_databaseGrowthSummary] (@cServerName varchar(100))
 as
 begin
 
@@ -33,3 +36,4 @@ begin
 			) a
 		order by dbName desc
 end
+GO

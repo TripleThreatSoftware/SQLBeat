@@ -1,3 +1,8 @@
+/****** Object:  StoredProcedure [dbo].[pr_checkTableSizes]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 --
 --create table tableSizeLog (ymd dateTime default getDate(), serverName varchar(200),
 --	databaseName varchar(200), tableName varchar(200), rows varchar(100), reserved varchar(50), data varchar(50), indexSize varchar(50), unused varchar(50))
@@ -89,7 +94,4 @@ begin
 
 	drop table #history
 end
-
-
-
 GO

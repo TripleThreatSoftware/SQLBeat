@@ -1,4 +1,9 @@
-CREATE function [fn_returnKeyValuePair] (@cString varchar(500), @nKeyNumber int, @cPairDelimiter varchar(10))
+/****** Object:  UserDefinedFunction [dbo].[fn_returnKeyValuePair]    Script Date: 05/07/2009 10:30:23 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER OFF
+GO
+CREATE function [dbo].[fn_returnKeyValuePair] (@cString varchar(500), @nKeyNumber int, @cPairDelimiter varchar(10))
 returns varchar(200)
 as
 begin
@@ -33,7 +38,4 @@ begin
 
 	return null
 end
-
-
-
 GO

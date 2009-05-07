@@ -1,4 +1,9 @@
-create function [fn_returnRunStamp] (@dToday dateTime)
+/****** Object:  UserDefinedFunction [dbo].[fn_returnRunStamp]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+create function [dbo].[fn_returnRunStamp] (@dToday dateTime)
 returns bigint
 as
 begin
@@ -16,7 +21,4 @@ begin
 
 	return @nRunStamp
 end
-
-
-
 GO

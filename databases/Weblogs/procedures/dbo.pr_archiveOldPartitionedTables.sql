@@ -1,3 +1,8 @@
+/****** Object:  StoredProcedure [dbo].[pr_archiveOldPartitionedTables]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER OFF
+GO
 -- The keyFieldList variable should not contain ymd_id or ymd fields
 CREATE  procedure [dbo].[pr_archiveOldPartitionedTables] (@cTableName varchar(100), @cDateField varchar(100), @cKeyfieldList varchar(100))
 as
@@ -227,8 +232,7 @@ begin
 				set @cSQLString = 'use ' + @cThisDatabase + '
 					select distinct a.name
 						from syscolumns a
-						join sysobjects b on a.id
-= b.id and b.name = ''' + @cThisTable + ''' and b.xtype = ''U'''
+						join sysobjects b on a.id = b.id and b.name = ''' + @cThisTable + ''' and b.xtype = ''U'''
 
 --				print @cSQLString
 				insert into #fields
@@ -279,6 +283,4 @@ begin
 end
 
 -- exec pr_archiveOldPartitionedTables 'mart_vehicle_byday_daily', 'ukey_auto'
-
-
 GO

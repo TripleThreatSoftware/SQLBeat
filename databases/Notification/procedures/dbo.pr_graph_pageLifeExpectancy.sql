@@ -1,5 +1,10 @@
+/****** Object:  StoredProcedure [dbo].[pr_graph_pageLifeExpectancy]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 -- exec pr_graph_pageLifeExpectancy '10.3.10.110'
-create procedure pr_graph_pageLifeExpectancy (@cServerName varchar(100))
+create procedure [dbo].[pr_graph_pageLifeExpectancy] (@cServerName varchar(100))
 as
 begin
 

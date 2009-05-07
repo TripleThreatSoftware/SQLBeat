@@ -1,29 +1,21 @@
-create view v_pingLog_all as
-	select friendlyName,isRouterPingable,isServerPingable,isSQLPingable,routerPingResults,serverName,serverPingResults,sqlPingResults,ukey,ymd
-	from Notification200809..pingLog_20080917  union all
-	select friendlyName,isRouterPingable,isServerPingable,isSQLPingable,routerPingResults,serverName,serverPingResults,sqlPingResults,ukey,ymd
-	from Notification200809..pingLog_20080916  union all
-	select friendlyName,isRouterPingable,isServerPingable,isSQLPingable,routerPingResults,serverName,serverPingResults,sqlPingResults,ukey,ymd
-	from Notification200809..pingLog_20080915  union all
-	select friendlyName,isRouterPingable,isServerPingable,isSQLPingable,routerPingResults,serverName,serverPingResults,sqlPingResults,ukey,ymd
-	from Notification200809..pingLog_20080911  union all
-	select friendlyName,isRouterPingable,isServerPingable,isSQLPingable,routerPingResults,serverName,serverPingResults,sqlPingResults,ukey,ymd
-	from Notification200809..pingLog_20080908  union all
-	select friendlyName,isRouterPingable,isServerPingable,isSQLPingable,routerPingResults,serverName,serverPingResults,sqlPingResults,ukey,ymd
-	from Notification200809..pingLog_200809_week36  union all
-	select friendlyName,isRouterPingable,isServerPingable,isSQLPingable,routerPingResults,serverName,serverPingResults,sqlPingResults,ukey,ymd
-	from Notification200807..pingLog_200807_week29  union all
-	select friendlyName,isRouterPingable,isServerPingable,isSQLPingable,routerPingResults,serverName,serverPingResults,sqlPingResults,ukey,ymd
-	from Notification200807..pingLog_200807_week27  union all
-	select friendlyName,isRouterPingable,isServerPingable,isSQLPingable,routerPingResults,serverName,serverPingResults,sqlPingResults,ukey,ymd
-	from Notification200806..pingLog_200806_week27  union all
-	select friendlyName,isRouterPingable,isServerPingable,isSQLPingable,routerPingResults,serverName,serverPingResults,sqlPingResults,ukey,ymd
-	from Notification200806..pingLog_200806_week26  union all
-	select friendlyName,isRouterPingable,isServerPingable,isSQLPingable,routerPingResults,serverName,serverPingResults,sqlPingResults,ukey,ymd
-	from Notification200806..pingLog_200806_week24  union all
-	select friendlyName,isRouterPingable,isServerPingable,isSQLPingable,routerPingResults,serverName,serverPingResults,sqlPingResults,ukey,ymd
-	from Notification200806..pingLog_200806_week23
-
-
-
+/****** Object:  View [dbo].[v_pingLog_all]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER OFF
+GO
+create view [dbo].[v_pingLog_all] as
+	select ukey,ymd,isRouterPingable,isServerPingable,isSQLPingable,serverName,serverPingResults,sqlPingResults,friendlyName,routerPingResults
+	from Notification200812..pingLog_20081229  union all
+	select ukey,ymd,isRouterPingable,isServerPingable,isSQLPingable,serverName,serverPingResults,sqlPingResults,friendlyName,routerPingResults
+	from Notification200812..pingLog_20081228  union all
+	select ukey,ymd,isRouterPingable,isServerPingable,isSQLPingable,serverName,serverPingResults,sqlPingResults,friendlyName,routerPingResults
+	from Notification200812..pingLog_20081227  union all
+	select ukey,ymd,isRouterPingable,isServerPingable,isSQLPingable,serverName,serverPingResults,sqlPingResults,friendlyName,routerPingResults
+	from Notification200812..pingLog_20081223  union all
+	select ukey,ymd,isRouterPingable,isServerPingable,isSQLPingable,serverName,serverPingResults,sqlPingResults,friendlyName,routerPingResults
+	from Notification200812..pingLog_20081222  union all
+	select ukey,ymd,isRouterPingable,isServerPingable,isSQLPingable,serverName,serverPingResults,sqlPingResults,friendlyName,routerPingResults
+	from Notification200812..pingLog_200812_week50  union all
+	select ukey,ymd,isRouterPingable,isServerPingable,isSQLPingable,serverName,serverPingResults,sqlPingResults,friendlyName,routerPingResults
+	from Notification200812..pingLog_200812_week49
 GO

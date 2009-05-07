@@ -1,3 +1,8 @@
+/****** Object:  StoredProcedure [dbo].[pr_graph_sqlDiskLoad_byDatabase_pie]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 -- exec pr_graph_sqlCPULoad_byDatabase_pie '10.3.10.110'
 
 create procedure [dbo].[pr_graph_sqlDiskLoad_byDatabase_pie] (@cServerName varchar(100))
@@ -96,7 +101,4 @@ begin
 	drop table #dataValues
 	drop table #activity
 end
-
-
-
 GO

@@ -1,9 +1,10 @@
+/****** Object:  StoredProcedure [dbo].[pr_rpt_waitTypesSummary]    Script Date: 05/07/2009 10:30:39 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
 -- exec pr_rpt_waitTypesSummary 'doesqlcluster'
-ALTER procedure [dbo].[pr_rpt_waitTypesSummary] (@cServerName varchar(100))
+CREATE procedure [dbo].[pr_rpt_waitTypesSummary] (@cServerName varchar(100))
 as
 begin
 
@@ -123,3 +124,4 @@ begin
 	drop table #waitData
 
 end
+GO

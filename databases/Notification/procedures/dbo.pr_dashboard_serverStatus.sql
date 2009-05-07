@@ -1,4 +1,9 @@
-CREATE procedure [pr_dashboard_serverStatus] (@cUserName varchar(100))
+/****** Object:  StoredProcedure [dbo].[pr_dashboard_serverStatus]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE procedure [dbo].[pr_dashboard_serverStatus] (@cUserName varchar(100))
 as
 begin
 
@@ -78,8 +83,7 @@ begin
 				union
 				select 'SQL checks are being performed by more than one monitor box.' as messageText, 3 as severity
 				union
-				select 'WMI checks are being performed by more than one monitor box.' as messageText, 3 as se
-verity
+				select 'WMI checks are being performed by more than one monitor box.' as messageText, 3 as severity
 				) b
 
 	--**********************************************************************************************
@@ -277,6 +281,4 @@ end
 -- exec pr_dashboard_serverStatus 'cole'
 -- select * from messageRules
 -- delete from messageRules where ukey = 11
-
-
 GO

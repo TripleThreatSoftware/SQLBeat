@@ -1,8 +1,9 @@
+/****** Object:  StoredProcedure [dbo].[pr_monitorFulfillment]    Script Date: 05/07/2009 10:30:39 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-ALTER procedure [dbo].[pr_monitorFulfillment]
+CREATE procedure [dbo].[pr_monitorFulfillment]
 as
 begin
 	declare @cThisMessage varchar(8000)
@@ -158,3 +159,4 @@ begin
 
 	drop table #results
 end
+GO

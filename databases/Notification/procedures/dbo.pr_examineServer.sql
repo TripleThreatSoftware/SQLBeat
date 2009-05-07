@@ -1,9 +1,8 @@
+/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 05/07/2009 10:30:39 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
-
 --select @@servername
 --'doe-cgetzer-2k3\2K3DEVSEED3'
 -- EXEC sp_configure 'xp_cmdshell', '1'
@@ -14,7 +13,7 @@ GO
 -- select top 100 * from processLog order by ukey desc
 -- exec pr_examineServer 'sqlcluster01', 600
 -- exec pr_examineServer '10.3.10.197', 600
-ALTER procedure [dbo].[pr_examineServer] (@cServerName varchar(100), @nMinutesBackToLook int)
+CREATE procedure [dbo].[pr_examineServer] (@cServerName varchar(100), @nMinutesBackToLook int)
 as
 begin
 -- 	declare @cServerName varchar(100)
@@ -1871,3 +1870,4 @@ end
 -- select top 100 * from notificationLog order by ukey desc
 -- select top 100 * from notificationLog_history order by ukey desc
 -- delete from notificationLog where ukey >= 50239
+GO

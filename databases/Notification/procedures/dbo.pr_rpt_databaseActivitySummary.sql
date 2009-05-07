@@ -1,5 +1,10 @@
+/****** Object:  StoredProcedure [dbo].[pr_rpt_databaseActivitySummary]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 -- pr_rpt_databaseActivitySummary 'uatmssql02', null, null
-ALTER procedure [dbo].[pr_rpt_databaseActivitySummary] (@cServerName varchar(100) = '')
+CREATE procedure [dbo].[pr_rpt_databaseActivitySummary] (@cServerName varchar(100) = '')
 as
 begin
 
@@ -130,5 +135,4 @@ begin
 	drop table #performanceSummary
 
 end
-
-go
+GO

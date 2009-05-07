@@ -1,61 +1,27 @@
-create view v_notificationLog_all as
-	select isBlocking,isConfiguration,isConnectivity,isDriveSpace,isEventLog,isInstalledSoftware,isJobFailure,isLogShippingJobFailure,isLogSize,isLongRunningJob,isLongRunningProcess,isMonitorMessage,isService,message,messageSent,messageSentDate,serverName,severity,subject,ukey,ymd
-	from Notification200809..notificationLog_20080917  union all
-	select isBlocking,isConfiguration,isConnectivity,isDriveSpace,isEventLog,isInstalledSoftware,isJobFailure,isLogShippingJobFailure,isLogSize,isLongRunningJob,isLongRunningProcess,isMonitorMessage,isService,message,messageSent,messageSentDate,serverName,severity,subject,ukey,ymd
-	from Notification200809..notificationLog_20080916  union all
-	select isBlocking,isConfiguration,isConnectivity,isDriveSpace,isEventLog,isInstalledSoftware,isJobFailure,isLogShippingJobFailure,isLogSize,isLongRunningJob,isLongRunningProcess,isMonitorMessage,isService,message,messageSent,messageSentDate,serverName,severity,subject,ukey,ymd
-	from Notification200809..notificationLog_20080915  union all
-	select isBlocking,isConfiguration,isConnectivity,isDriveSpace,isEventLog,isInstalledSoftware,isJobFailure,isLogShippingJobFailure,isLogSize,isLongRunningJob,isLongRunningProcess,isMonitorMessage,isService,message,messageSent,messageSentDate,serverName,severity,subject,ukey,ymd
-	from Notification200809..notificationLog_20080914  union all
-	select isBlocking,isConfiguration,isConnectivity,isDriveSpace,isEventLog,isInstalledSoftware,isJobFailure,isLogShippingJobFailure,isLogSize,isLongRunningJob,isLongRunningProcess,isMonitorMessage,isService,message,messageSent,messageSentDate,serverName,severity,subject,ukey,ymd
-	from Notification200809..notificationLog_20080913  union all
-	select isBlocking,isConfiguration,isConnectivity,isDriveSpace,isEventLog,isInstalledSoftware,isJobFailure,isLogShippingJobFailure,isLogSize,isLongRunningJob,isLongRunningProcess,isMonitorMessage,isService,message,messageSent,messageSentDate,serverName,severity,subject,ukey,ymd
-	from Notification200809..notificationLog_20080912  union all
-	select isBlocking,isConfiguration,isConnectivity,isDriveSpace,isEventLog,isInstalledSoftware,isJobFailure,isLogShippingJobFailure,isLogSize,isLongRunningJob,isLongRunningProcess,isMonitorMessage,isService,message,messageSent,messageSentDate,serverName,severity,subject,ukey,ymd
-	from Notification200809..notificationLog_20080911  union all
-	select isBlocking,isConfiguration,isConnectivity,isDriveSpace,isEventLog,isInstalledSoftware,isJobFailure,isLogShippingJobFailure,isLogSize,isLongRunningJob,isLongRunningProcess,isMonitorMessage,isService,message,messageSent,messageSentDate,serverName,severity,subject,ukey,ymd
-	from Notification200809..notificationLog_20080910  union all
-	select isBlocking,isConfiguration,isConnectivity,isDriveSpace,isEventLog,isInstalledSoftware,isJobFailure,isLogShippingJobFailure,isLogSize,isLongRunningJob,isLongRunningProcess,isMonitorMessage,isService,message,messageSent,messageSentDate,serverName,severity,subject,ukey,ymd
-	from Notification200809..notificationLog_20080909  union all
-	select isBlocking,isConfiguration,isConnectivity,isDriveSpace,isEventLog,isInstalledSoftware,isJobFailure,isLogShippingJobFailure,isLogSize,isLongRunningJob,isLongRunningProcess,isMonitorMessage,isService,message,messageSent,messageSentDate,serverName,severity,subject,ukey,ymd
-	from Notification200809..notificationLog_20080908  union all
-	select isBlocking,isConfiguration,isConnectivity,isDriveSpace,isEventLog,isInstalledSoftware,isJobFailure,isLogShippingJobFailure,isLogSize,isLongRunningJob,isLongRunningProcess,isMonitorMessage,isService,message,messageSent,messageSentDate,serverName,severity,subject,ukey,ymd
-	from Notification200809..notificationLog_20080907  union all
-	select isBlocking,isConfiguration,isConnectivity,isDriveSpace,isEventLog,isInstalledSoftware,isJobFailure,isLogShippingJobFailure,isLogSize,isLongRunningJob,isLongRunningProcess,isMonitorMessage,isService,message,messageSent,messageSentDate,serverName,severity,subject,ukey,ymd
-	from Notification200809..notificationLog_200809_week36  union all
-	select isBlocking,isConfiguration,isConnectivity,isDriveSpace,isEventLog,isInstalledSoftware,isJobFailure,isLogShippingJobFailure,isLogSize,isLongRunningJob,isLongRunningProcess,isMonitorMessage,isService,message,messageSent,messageSentDate,serverName,severity,subject,ukey,ymd
-	from Notification200808..notificationLog_200808_week36  union all
-	select isBlocking,isConfiguration,isConnectivity,isDriveSpace,isEventLog,isInstalledSoftware,isJobFailure,isLogShippingJobFailure,isLogSize,isLongRunningJob,isLongRunningProcess,isMonitorMessage,isService,message,messageSent,messageSentDate,serverName,severity,subject,ukey,ymd
-	from Notification200808..notificationLog_200808_week35  union all
-	select isBlocking,isConfiguration,isConnectivity,isDriveSpace,isEventLog,isInstalledSoftware,isJobFailure,isLogShippingJobFailure,isLogSize,isLongRunningJob,isLongRunningProcess,isMonitorMessage,isService,message,messageSent,messageSentDate,serverName,severity,subject,ukey,ymd
-	from Notification200808..notificationLog_200808_week34  union all
-	select isBlocking,isConfiguration,isConnectivity,isDriveSpace,isEventLog,isInstalledSoftware,isJobFailure,isLogShippingJobFailure,isLogSize,isLongRunningJob,isLongRunningProcess,isMonitorMessage,isService,message,messageSent,messageSentDate,serverName,severity,subject,ukey,ymd
-	from Notification200808..notificationLog_200808_week33  union all
-	select isBlocking,isConfiguration,isConnectivity,isDriveSpace,isEventLog,isInstalledSoftware,isJobFailure,isLogShippingJobFailure,isLogSize,isLongRunningJob,isLongRunningProcess,isMonitorMessage,isService,message,messageSent,messageSentDate,serverName,severity,subject,ukey,ymd
-	from Notification200808..notificationLog_200808_week32  union all
-	select isBlocking,isConfiguration,isConnectivity,isDriveSpace,isEventLog,isInstalledSoftware,isJobFailure,isLogShippingJobFailure,isLogSize,isLongRunningJob,isLongRunningProcess,isMonitorMessage,isService,message,messageSent,messageSentDate,serverName,severity,subject,ukey,ymd
-	from Notification200808..notificationLog_200808_week31  union all
-	select isBlocking,isConfiguration,isConnectivity,isDriveSpace,isEventLog,isInstalledSoftware,isJobFailure,isLogShippingJobFailure,isLogSize,isLongRunningJob,isLongRunningProcess,isMonitorMessage,isService,message,messageSent,messageSentDate,serverName,severity,subject,ukey,ymd
-	from Notification200807..notificationLog_200807_week31  union all
-	select isBlocking,isConfiguration,isConnectivity,isDriveSpace,isEventLog,isInstalledSoftware,isJobFailure,isLogShippingJobFailure,isLogSize,isLongRunningJob,isLongRunningProcess,isMonitorMessage,isService,message,messageSent,messageSentDate,serverName,severity,subject,ukey,ymd
-	from Notification200807..notificationLog_200807_week30  union all
-	select isBlocking,isConfiguration,isConnectivity,isDriveSpace,isEventLog,isInstalledSoftware,isJobFailure,isLogShippingJobFailure,isLogSize,isLongRunningJob,isLongRunningProcess,isMonitorMessage,isService,message,messageSent,messageSentDate,serverName,severity,subject,ukey,ymd
-	from Notification200807..notificationLog_200807_week29  union all
-	select isBlocking,isConfiguration,isConnectivity,isDriveSpace,isEventLog,isInstalledSoftware,isJobFailure,isLogShippingJobFailure,isLogSize,isLongRunningJob,isLongRunningProcess,isMonitorMessage,isService,message,messageSent,messageSentDate,serverName,severity,subject,ukey,ymd
-	from Notification200807..notificationLog_200807_week28  union all
-	select isBlocking,isConfiguration,isConnectivity,isDriveSpace,isEventLog,isInstalledSoftware,isJobFailure,isLogShippingJobFailure,isLogSize,isLongRunningJob,isLongRunningProcess,isMonitorMessage,isService,message,messageSent,messageSentDate,serverName,severity,subject,ukey,ymd
-	from Notification200807..notificationLog_200807_week27  u
-nion all
-	select isBlocking,isConfiguration,isConnectivity,isDriveSpace,isEventLog,isInstalledSoftware,isJobFailure,isLogShippingJobFailure,isLogSize,isLongRunningJob,isLongRunningProcess,isMonitorMessage,isService,message,messageSent,messageSentDate,serverName,severity,subject,ukey,ymd
-	from Notification200806..notificationLog_200806_week27  union all
-	select isBlocking,isConfiguration,isConnectivity,isDriveSpace,isEventLog,isInstalledSoftware,isJobFailure,isLogShippingJobFailure,isLogSize,isLongRunningJob,isLongRunningProcess,isMonitorMessage,isService,message,messageSent,messageSentDate,serverName,severity,subject,ukey,ymd
-	from Notification200806..notificationLog_200806_week26  union all
-	select isBlocking,isConfiguration,isConnectivity,isDriveSpace,isEventLog,isInstalledSoftware,isJobFailure,isLogShippingJobFailure,isLogSize,isLongRunningJob,isLongRunningProcess,isMonitorMessage,isService,message,messageSent,messageSentDate,serverName,severity,subject,ukey,ymd
-	from Notification200806..notificationLog_200806_week25  union all
-	select isBlocking,isConfiguration,isConnectivity,isDriveSpace,isEventLog,isInstalledSoftware,isJobFailure,isLogShippingJobFailure,isLogSize,isLongRunningJob,isLongRunningProcess,isMonitorMessage,isService,message,messageSent,messageSentDate,serverName,severity,subject,ukey,ymd
-	from Notification200806..notificationLog_200806_week24  union all
-	select isBlocking,isConfiguration,isConnectivity,isDriveSpace,isEventLog,isInstalledSoftware,isJobFailure,isLogShippingJobFailure,isLogSize,isLongRunningJob,isLongRunningProcess,isMonitorMessage,isService,message,messageSent,messageSentDate,serverName,severity,subject,ukey,ymd
-	from Notification200806..notificationLog_200806_week23
-
-
+SET ANSI_PADDING OFF
+GO
+/****** Object:  View [dbo].[v_notificationLog_all]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER OFF
+GO
+create view [dbo].[v_notificationLog_all] as
+	select severity,ukey,messageSentDate,ymd,isBlocking,isConfiguration,isConnectivity,isDriveSpace,isEventLog,isInstalledSoftware,isService,messageSent,isJobFailure,isLogShippingJobFailure,isLogSize,isLongRunningJob,isLongRunningProcess,isMonitorMessage,message,serverName,subject
+	from Notification200812..notificationLog_20081229  union all
+	select severity,ukey,messageSentDate,ymd,isBlocking,isConfiguration,isConnectivity,isDriveSpace,isEventLog,isInstalledSoftware,isService,messageSent,isJobFailure,isLogShippingJobFailure,isLogSize,isLongRunningJob,isLongRunningProcess,isMonitorMessage,message,serverName,subject
+	from Notification200812..notificationLog_20081228  union all
+	select severity,ukey,messageSentDate,ymd,isBlocking,isConfiguration,isConnectivity,isDriveSpace,isEventLog,isInstalledSoftware,isService,messageSent,isJobFailure,isLogShippingJobFailure,isLogSize,isLongRunningJob,isLongRunningProcess,isMonitorMessage,message,serverName,subject
+	from Notification200812..notificationLog_20081227  union all
+	select severity,ukey,messageSentDate,ymd,isBlocking,isConfiguration,isConnectivity,isDriveSpace,isEventLog,isInstalledSoftware,isService,messageSent,isJobFailure,isLogShippingJobFailure,isLogSize,isLongRunningJob,isLongRunningProcess,isMonitorMessage,message,serverName,subject
+	from Notification200812..notificationLog_20081226  union all
+	select severity,ukey,messageSentDate,ymd,isBlocking,isConfiguration,isConnectivity,isDriveSpace,isEventLog,isInstalledSoftware,isService,messageSent,isJobFailure,isLogShippingJobFailure,isLogSize,isLongRunningJob,isLongRunningProcess,isMonitorMessage,message,serverName,subject
+	from Notification200812..notificationLog_20081225  union all
+	select severity,ukey,messageSentDate,ymd,isBlocking,isConfiguration,isConnectivity,isDriveSpace,isEventLog,isInstalledSoftware,isService,messageSent,isJobFailure,isLogShippingJobFailure,isLogSize,isLongRunningJob,isLongRunningProcess,isMonitorMessage,message,serverName,subject
+	from Notification200812..notificationLog_20081224  union all
+	select severity,ukey,messageSentDate,ymd,isBlocking,isConfiguration,isConnectivity,isDriveSpace,isEventLog,isInstalledSoftware,isService,messageSent,isJobFailure,isLogShippingJobFailure,isLogSize,isLongRunningJob,isLongRunningProcess,isMonitorMessage,message,serverName,subject
+	from Notification200812..notificationLog_20081223  union all
+	select severity,ukey,messageSentDate,ymd,isBlocking,isConfiguration,isConnectivity,isDriveSpace,isEventLog,isInstalledSoftware,isService,messageSent,isJobFailure,isLogShippingJobFailure,isLogSize,isLongRunningJob,isLongRunningProcess,isMonitorMessage,message,serverName,subject
+	from Notification200812..notificationLog_20081222  union all
+	select severity,ukey,messageSentDate,ymd,isBlocking,isConfiguration,isConnectivity,isDriveSpace,isEventLog,isInstalledSoftware,isService,messageSent,isJobFailure,isLogShippingJobFailure,isLogSize,isLongRunningJob,isLongRunningProcess,isMonitorMessage,message,serverName,subject
+	from Notification200812..notificationLog_20081221
 GO

@@ -1,3 +1,8 @@
+/****** Object:  StoredProcedure [dbo].[pr_checkServices]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 CREATE      procedure [dbo].[pr_checkServices] (@nUkeyGroup int)
 as
 begin
@@ -81,7 +86,7 @@ begin
 		if @cUserName is not null
 		begin
 			-- with password, for stores
-			set @cSQLString = 'osql -S' + @cServerName + ' -Usa -P -n -h-1 -w300 -dmaster -i"\\' + @cThisServerName + '\shared\runningServices.SQL"'
+			set @cSQLString = 'osql -S' + @cServerName + ' -U' + @cUserName + ' -P' + @cPassword + ' -n -h-1 -w300 -dmaster -i"\\' + @cThisServerName + '\shared\runningServices.SQL"'
 		end
 		else
 		begin
@@ -182,8 +187,7 @@ begin
 				begin
 					insert into #messages (subject, message, severity) values ('SQLSERVERAGENT service is offline on ' + @cFriendlyName + '.', 'SQLSERVER service is offline on ' + @cFriendlyName + ' (' + @cServerName + ')', 1)
 					update dm_servers with (rowlock) set isSQLAgentServiceRunning = 0 where serverName = @cServerName
-				e
-nd
+				end
 				else
 					update dm_servers with (rowlock) set isSQLAgentServiceRunning = 1 where serverName = @cServerName
 			end
@@ -216,6 +220,4 @@ nd
 	drop table #messages
 	drop table #runningServices
 end
-
-
 GO

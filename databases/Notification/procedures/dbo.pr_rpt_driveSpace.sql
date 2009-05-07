@@ -1,3 +1,9 @@
+/****** Object:  StoredProcedure [dbo].[pr_rpt_driveSpace]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- select top 100 * from notificationLog order by ymd desc
 CREATE       procedure [dbo].[pr_rpt_driveSpace]
 as
 begin
@@ -65,7 +71,7 @@ begin
 
 	-- consistent drop
 	insert into @messages (serverName, driveLetter, subject, message)
-	select serverName, driveLetter, 'SQLBeat : Drop in space from ' +
+	select serverName, driveLetter, 'Drop in space from ' +
 			convert(varchar(20), driveSpace_14) + 'mb to ' + convert(varchar(20), driveSpace_today) +
 			' on ' + serverName + ' (' + driveLetter + ') in the last two weeks.' as subject,
 		'Drive ' + driveLetter + ' on ' + serverName + ' has triggered an alert - space has fallen by ' + convert(varchar(20), percentDrop_14) + '% over the last two weeks.' + char(13) +
@@ -85,7 +91,7 @@ begin
 
 	-- hard and fast drop
 	insert into @messages (serverName, driveLetter, subject, message)
-	select serverName, driveLetter, 'SQLBeat : Drop in space from ' +
+	select serverName, driveLetter, 'Drop in space from ' +
 			convert(varchar(20), driveSpace_3) + 'mb to ' + convert(varchar(20), driveSpace_today) +
 			' on ' + serverName + ' (' + driveLetter + ') in the last three days.' as subject,
 		'Drive ' + driveLetter + ' on ' + serverName + ' has triggered an alert - space fell by more than 10% in the last seven days.' + char(13) +
@@ -105,7 +111,7 @@ begin
 
 	-- low on time
 	insert into @messages (serverName, driveLetter, subject, message)
-	select serverName, driveLetter, 'SQLBeat : Space on ' +  serverName + ' (' + driveLetter + ') down to ' + convert(varchar(20), driveSpace_today) + 'mb, '
+	select serverName, driveLetter, 'Space on ' +  serverName + ' (' + driveLetter + ') down to ' + convert(varchar(20), driveSpace_today) + 'mb, '
 			 + convert(varchar(20), weeksLeft_14) + ' weeks.' as subject,
 		'Drive ' + driveLetter + ' on ' + serverName + ' has triggered an alert - at the rate of consumption observed over the last 14 days, there remains enough space for ' + convert(varchar(20), weeksLeft_14) + ' weeks.' + char(13) +
 			'14 Days: ' + isnull(convert(varchar(20), driveSpace_14), 'N/A') + 'mb' + char(13) +
@@ -118,31 +124,9 @@ begin
 			and driveSpace_3 > driveSpace_today
 			and percentDrop_3 > 5
 
-	insert into notificationLog(serverName, subject, message, severity)
+	insert into notificationLog_stage (serverName, subject, message, severity)
 	select serverName, subject, message, 2
 		from @messages
 
-
-
---	set @nThisUkey = 0
---
---	while exists (select top 1 ukey from @messages where ukey > @nThisUkey)
---	begin
---		select top 1
---			@nThisUkey = ukey ,
---			@cThisSubject = subject,
---			@cThisMessage = message
---
---			from @messages
---			where ukey > @nThisUkey
---			order by ukey
---
---		exec pr_sendMessage '', 'DBA', @cThisSubject, @cThisMessage
---	end
-
-
 end
-
-
-
 GO

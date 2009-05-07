@@ -1,13 +1,9 @@
-USE [Notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_rpt_weeklyTailReport]    Script Date: 12/03/2008 10:26:30 ******/
+/****** Object:  StoredProcedure [dbo].[pr_rpt_weeklyTailReport]    Script Date: 05/07/2009 10:30:39 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
-
-ALTER procedure [dbo].[pr_rpt_weeklyTailReport]
+CREATE procedure [dbo].[pr_rpt_weeklyTailReport]
 as
 begin
 	-- First, detail on the time and duration of outages in the last week
@@ -593,3 +589,4 @@ begin
 	drop table #tailDetail
 	drop table #otherErrors
 end
+GO

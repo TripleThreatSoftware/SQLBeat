@@ -1,3 +1,8 @@
+/****** Object:  StoredProcedure [dbo].[pr_rpt_jobHistory]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 --exec pr_rpt_jobHistory 'mssql-ny', null, null
 
 CREATE procedure [dbo].[pr_rpt_jobHistory] (@cServerName varchar(200), @dStartDate dateTime, @nMinuteInterval int = 10)
@@ -109,7 +114,4 @@ begin
 	exec sp_executeSQL @cSQLString
 
 end
-
-
-
 GO

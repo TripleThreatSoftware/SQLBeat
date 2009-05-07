@@ -1,9 +1,9 @@
+/****** Object:  StoredProcedure [dbo].[pr_rpt_databaseLastUserActivity]    Script Date: 05/07/2009 10:30:39 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
-ALTER procedure [dbo].[pr_rpt_databaseLastUserActivity] (@cServerName varchar(200))
+CREATE procedure [dbo].[pr_rpt_databaseLastUserActivity] (@cServerName varchar(200))
 as
 begin
 
@@ -36,3 +36,4 @@ begin
 		order by a.dbName
 
 end
+GO

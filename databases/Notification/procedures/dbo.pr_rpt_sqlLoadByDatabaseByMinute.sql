@@ -1,3 +1,8 @@
+/****** Object:  StoredProcedure [dbo].[pr_rpt_sqlLoadByDatabaseByMinute]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 CREATE procedure [dbo].[pr_rpt_sqlLoadByDatabaseByMinute] (@cServerName varchar(100), @dStartDate dateTime, @dEndDate dateTime)
 as
 begin
@@ -6,7 +11,7 @@ begin
 --	declare @dEndDate dateTime
 --	set @cServerName = 'mssql-ny'
 
-	set @dStartDate = isnull(@dStartDate, dateAdd(hour, -36, getDate()))
+	set @dStartDate = isnull(@dStartDate, dateAdd(hour, -12, getDate()))
 	set @dEndDate = isnull(@dEndDate, getDate())
 
 	set nocount on
@@ -82,18 +87,15 @@ begin
 
 	select
 		dbName,
-		dbo.fn_returnShortDate(lastBatchTime) as ymd,
+		dbo.fn_returnShortDate(min(lastBatchTime)) as ymd,
 		sum(cpuTime_delta) as cpuTime,
 		sum(diskIO_delta) as diskIO
 
 		from #activity
-		group by dbName, dbo.fn_returnShortDate(lastBatchTime)
-		order by dbName, dbo.fn_returnShortDate(lastBatchTime)
+		group by dbName, convert(varchar(10), lastbatchtime, 120), datePart(hour, lastBatchTime), datePart(minute, lastBatchTime) / 5
+		order by dbName, convert(varchar(10), lastbatchtime, 120), datePart(hour, lastBatchTime), datePart(minute, lastBatchTime) / 5
 
 	drop table #activity
 
 end
-
-
-
 GO

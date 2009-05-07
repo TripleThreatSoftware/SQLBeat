@@ -1,8 +1,13 @@
+/****** Object:  StoredProcedure [dbo].[pr_processStagedAlerts]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 --select top 100 * from notificationLog
 --select top 100 * from notificationLog_stage
 
 
-CREATE procedure [pr_processStagedAlerts]
+CREATE procedure [dbo].[pr_processStagedAlerts]
 as
 begin
 	declare @nMaxUkey int
@@ -218,8 +223,7 @@ begin
 				where isServerPingable = 1
 				group by serverName
 				having dateDiff(minute, max(ymd), getDate()) >= 15
-			) b on a.serverName = b.serve
-rName
+			) b on a.serverName = b.serverName
 		where isConnectivity = 1
 
 	--***************************************************************************************************
@@ -248,6 +252,4 @@ rName
 
 	drop table #exceptions
 end
-
-
 GO

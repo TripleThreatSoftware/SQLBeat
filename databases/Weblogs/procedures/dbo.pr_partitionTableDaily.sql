@@ -1,5 +1,10 @@
+/****** Object:  StoredProcedure [dbo].[pr_partitionTableDaily]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 -- The keyFieldList variable should not contain ymd_id or ymd fields
-ALTER   procedure [dbo].[pr_partitionTableDaily] (@cTableName varchar(100), @cDateField varchar(100), @cKeyfieldList varchar(100), @lMakeUkey bit)
+CREATE   procedure [dbo].[pr_partitionTableDaily] (@cTableName varchar(100), @cDateField varchar(100), @cKeyfieldList varchar(100), @lMakeUkey bit)
 as
 begin
 	set noCount on
@@ -427,9 +432,7 @@ create table [' + @cArchiveTableName + '_' + @cToday + '] (' + @cTableStructure 
 
 		declare @cWhereClause varchar(1000)
 		declare @cThisKeyField varchar(100)
-		declare @cUniqueFieldList varchar(5000)
 		set @cWhereClause = ''
-		set @cUniqueFieldList = ''
 
 		if @lHasYMD = 1 and @cKeyFieldList not like '%' + @cDateField + '%'
 			set @cWhereClause = 'a.' + @cDateField + ' = b.' + @cDateField
@@ -439,30 +442,8 @@ create table [' + @cArchiveTableName + '_' + @cToday + '] (' + @cTableStructure 
 			select top 1 @cThisKeyField = fieldName from #keyFields
 
 			set @cWhereClause = @cWhereClause + case when @cWhereClause <> '' then ' and ' else '' end + 'a.' + @cThisKeyField + ' = b.' + @cThisKeyField
-			set @cUniqueFieldList = @cUniqueFieldList + @cThisKeyField + ', '
 
 			delete from #keyFields where fieldName = @cThisKeyField
-		end
-
-		if right(@cUniqueFieldList, 2) = ', '
-			set @cUniqueFieldList = left(@cUniqueFieldList, len(@cUniqueFieldList) - 1)
-
-		-- we need to remove duplicate data in the source file
-		if @lHasUkey = 1 and isnull(@cUniqueFieldList, '') <> ''
-		begin
-			set @cSQLString = '
-delete [' + @cTableName + ']
-	from [' + @cTableName + '] a
-	join (
-		select ' + @cUniqueFieldList + ', min(ukey) as minUkey
-			from [' + @cTableName + ']
-			group by ' + @cUniqueFieldList + '
-			having count(*) > 1
-		) b on ' + @cWhereClause + '
-			and a.ukey <> b.minUkey'
-
-			print @cSQLstring
-			exec sp_executeSQL @cSQLString
 		end
 
 		-- end duplicate check
@@ -616,7 +597,6 @@ delete [' + @cTableName + ']
 
 					set @cSQLString = '
 use [' + @cDatabaseName + ']
-backup log [' + @cDatabaseName + '] with truncate_only
 exec sp_spaceUsed @updateusage = ''TRUE''
 dbcc shrinkfile(2,1)'
 
@@ -629,7 +609,6 @@ dbcc shrinkfile(2,1)'
 			drop table #weeks
 
 			set @cSQLString = 'use tempdb
-backup log tempdb with truncate_only
 dbcc shrinkfile(2,1)'
 			exec sp_executeSQL @cSQLString
 

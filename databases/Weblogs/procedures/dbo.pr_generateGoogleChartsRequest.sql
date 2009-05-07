@@ -1,3 +1,8 @@
+/****** Object:  StoredProcedure [dbo].[pr_generateGoogleChartsRequest]    Script Date: 05/07/2009 10:30:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 CREATE procedure [dbo].[pr_generateGoogleChartsRequest] (@nWidth int, @nHeight int, @bRelativeToTotal bit = 0, @bAbsoluteYAxis bit = 0, @bShowPie bit = 0, @bLeavePeaks bit = 0)
 as
 begin
@@ -93,16 +98,17 @@ begin
 			set @nAvgValue = (select avg(axis_y) from (select axis_x, sum(axis_y) as axis_y from #dataValues where seriesName = @cSeriesName group by axis_x) a)
 
 			-- anything that doesn't hit at least 5% of overall load at a reading point, ignore
-			delete #dataValues
-				from #dataValues a
-				join (
-					select setName, max(axis_y) as maxValue
-						from #dataValues
-						where seriesName = @cSeriesName
-						group by setName
-						having (max(axis_y) / @nMaxValue) < .05
-					) b on a.setName = b.setName
-				where a.seriesName = @cSeriesName
+			if @nMaxValue <> 0
+				delete #dataValues
+					from #dataValues a
+					join (
+						select setName, max(axis_y) as maxValue
+							from #dataValues
+							where seriesName = @cSeriesName
+							group by setName
+							having (max(axis_y) / @nMaxValue) < .05
+						) b on a.setName = b.setName
+					where a.seriesName = @cSeriesName
 		end
 
 		print 'Working on series: ' + @cSeriesName
@@ -229,7 +235,4 @@ begin
 
 	drop table #xAxis
 end
-
-
-
 GO

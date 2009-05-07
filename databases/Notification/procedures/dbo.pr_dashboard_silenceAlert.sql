@@ -1,6 +1,11 @@
+/****** Object:  StoredProcedure [dbo].[pr_dashboard_silenceAlert]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 -- select * from messageRules
 -- update messageRules set ukey_userEmail = 0 where ukey_userEmail is null
-CREATE procedure [pr_dashboard_silenceAlert] (@cUserName varchar(100), @cServerName varchar(100), @cMessage varchar(500), @cMessageSource varchar(100))
+CREATE procedure [dbo].[pr_dashboard_silenceAlert] (@cUserName varchar(100), @cServerName varchar(100), @cMessage varchar(500), @cMessageSource varchar(100))
 as
 begin
 	declare @bIsJobFailure bit
@@ -70,7 +75,4 @@ end
 
 
 --alter table messageRules add constraint pk_messageRules_ukey primary key (ukey)
-
-
-
 GO

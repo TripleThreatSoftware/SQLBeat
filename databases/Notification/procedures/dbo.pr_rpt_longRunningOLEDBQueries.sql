@@ -1,3 +1,8 @@
+/****** Object:  StoredProcedure [dbo].[pr_rpt_longRunningOLEDBQueries]    Script Date: 05/07/2009 10:30:39 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 -- exec pr_rpt_longRunningOLEDBQueries 'sqlcluster01', null, null
 CREATE procedure [dbo].[pr_rpt_longRunningOLEDBQueries] (@cServerName varchar(100), @nNumHours int = 6)
 as
@@ -25,7 +30,4 @@ begin
 		order by [login], dbname, left(dbo.fn_returnTrimmedBuffer(bufferContents), 200)
 
 end
-
-
-
 GO
