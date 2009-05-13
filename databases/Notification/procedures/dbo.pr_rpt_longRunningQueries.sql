@@ -1,11 +1,13 @@
-/****** Object:  StoredProcedure [dbo].[pr_rpt_longRunningQueries]    Script Date: 05/07/2009 10:30:39 ******/
+USE [Notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_rpt_longRunningQueries]    Script Date: 05/13/2009 19:10:52 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
 -- exec pr_rpt_longRunningQueries
 
-CREATE procedure [dbo].[pr_rpt_longRunningQueries] (@cServerName varchar(200) = '', @nNumHours int = 6)
+ALTER procedure [dbo].[pr_rpt_longRunningQueries] (@cServerName varchar(200) = '', @nNumHours int = 6)
 as
 begin
 
@@ -21,4 +23,3 @@ begin
 		order by servername, ymd
 
 end
-GO
