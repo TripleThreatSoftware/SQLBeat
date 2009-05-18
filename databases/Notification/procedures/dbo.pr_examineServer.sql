@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 05/19/2009 13:59:45 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -81,6 +81,8 @@ begin
 		from dm_servers
 		where serverName = @cServerName
 
+	update dm_servers set skipNextRun = 0 where serverName = @cServerName
+
 	set @cServerNamePart = @cFriendlyName
 
 	if charindex('\', @cFriendlyName) > 0
@@ -113,6 +115,7 @@ begin
 		exec sp_addlinkedserver @server=@cServerName, @srvproduct='', @provider='SQLOLEDB', @datasrc=@cServerName
 		exec sp_serveroption @cServerName, 'rpc', TRUE
 		exec sp_serveroption @cServerName, 'rpc out', TRUE
+		exec sp_serveroption @cServerName, 'use remote collation', FALSE
 
 		-- if there's a local password we're to use, map all users to it
 		if isnull(@cUserName, '') <> ''
@@ -668,7 +671,7 @@ begin
 					b.command as stepBody
 
 					from [' + @cServerName + '].msdb.dbo.sysjobhistory d
-					join [' + @cServerName + '].msdb.dbo.sysJobSteps b on d.job_id = b.job_id
+					join [' + @cServerName + '].msdb.dbo.sysjobsteps b on d.job_id = b.job_id
 						and d.step_id = b.step_id
 
 					where d.run_status = 0
@@ -797,7 +800,7 @@ begin
 
 							max(case when isnull(c.run_status, 0) = 0 then c.instance_id else '''' end) as instance_id
 							from #allJobs a
-							join [' + @cServerName + '].msdb.dbo.sysJobHistory c  on a.job_id = c.job_id
+							join [' + @cServerName + '].msdb.dbo.sysjobhistory c  on a.job_id = c.job_id
 								and c.step_id <> 0
 								and left(c.run_date, 2) = ''20''
 								and dateDiff(minute,

@@ -1,4 +1,4 @@
-/****** Object:  Table [dbo].[notificationLog_stage]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  Table [dbo].[notificationLog_stage]    Script Date: 05/19/2009 13:59:45 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -50,45 +50,45 @@ CREATE NONCLUSTERED INDEX [ix_notificationLogStage_ymd] ON [dbo].[notificationLo
 	[ukey] ASC
 )WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
 GO
-/****** Object:  Default [DF__notificatio__ymd__59063A47]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  Default [DF__notificatio__ymd__59063A47]    Script Date: 05/19/2009 13:59:45 ******/
 ALTER TABLE [dbo].[notificationLog_stage] ADD  DEFAULT (getdate()) FOR [ymd]
 GO
-/****** Object:  Default [DF__notificat__isJob__59FA5E80]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  Default [DF__notificat__isJob__59FA5E80]    Script Date: 05/19/2009 13:59:45 ******/
 ALTER TABLE [dbo].[notificationLog_stage] ADD  DEFAULT ((0)) FOR [isJobFailure]
 GO
-/****** Object:  Default [DF__notificat__isLog__5AEE82B9]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  Default [DF__notificat__isLog__5AEE82B9]    Script Date: 05/19/2009 13:59:45 ******/
 ALTER TABLE [dbo].[notificationLog_stage] ADD  DEFAULT ((0)) FOR [isLogShippingJobFailure]
 GO
-/****** Object:  Default [DF__notificat__isLon__5BE2A6F2]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  Default [DF__notificat__isLon__5BE2A6F2]    Script Date: 05/19/2009 13:59:45 ******/
 ALTER TABLE [dbo].[notificationLog_stage] ADD  DEFAULT ((0)) FOR [isLongRunningJob]
 GO
-/****** Object:  Default [DF__notificat__isBlo__5CD6CB2B]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  Default [DF__notificat__isBlo__5CD6CB2B]    Script Date: 05/19/2009 13:59:45 ******/
 ALTER TABLE [dbo].[notificationLog_stage] ADD  DEFAULT ((0)) FOR [isBlocking]
 GO
-/****** Object:  Default [DF__notificat__isLon__5DCAEF64]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  Default [DF__notificat__isLon__5DCAEF64]    Script Date: 05/19/2009 13:59:45 ******/
 ALTER TABLE [dbo].[notificationLog_stage] ADD  DEFAULT ((0)) FOR [isLongRunningProcess]
 GO
-/****** Object:  Default [DF__notificat__isDri__5EBF139D]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  Default [DF__notificat__isDri__5EBF139D]    Script Date: 05/19/2009 13:59:45 ******/
 ALTER TABLE [dbo].[notificationLog_stage] ADD  DEFAULT ((0)) FOR [isDriveSpace]
 GO
-/****** Object:  Default [DF__notificat__isLog__5FB337D6]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  Default [DF__notificat__isLog__5FB337D6]    Script Date: 05/19/2009 13:59:45 ******/
 ALTER TABLE [dbo].[notificationLog_stage] ADD  DEFAULT ((0)) FOR [isLogSize]
 GO
-/****** Object:  Default [DF__notificat__isEve__60A75C0F]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  Default [DF__notificat__isEve__60A75C0F]    Script Date: 05/19/2009 13:59:45 ******/
 ALTER TABLE [dbo].[notificationLog_stage] ADD  DEFAULT ((0)) FOR [isEventLog]
 GO
-/****** Object:  Default [DF__notificat__isSer__619B8048]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  Default [DF__notificat__isSer__619B8048]    Script Date: 05/19/2009 13:59:45 ******/
 ALTER TABLE [dbo].[notificationLog_stage] ADD  DEFAULT ((0)) FOR [isService]
 GO
-/****** Object:  Default [DF__notificat__isCon__628FA481]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  Default [DF__notificat__isCon__628FA481]    Script Date: 05/19/2009 13:59:45 ******/
 ALTER TABLE [dbo].[notificationLog_stage] ADD  DEFAULT ((0)) FOR [isConnectivity]
 GO
-/****** Object:  Default [DF__notificat__isCon__6383C8BA]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  Default [DF__notificat__isCon__6383C8BA]    Script Date: 05/19/2009 13:59:45 ******/
 ALTER TABLE [dbo].[notificationLog_stage] ADD  DEFAULT ((0)) FOR [isConfiguration]
 GO
-/****** Object:  Default [DF__notificat__isIns__6477ECF3]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  Default [DF__notificat__isIns__6477ECF3]    Script Date: 05/19/2009 13:59:45 ******/
 ALTER TABLE [dbo].[notificationLog_stage] ADD  DEFAULT ((0)) FOR [isInstalledSoftware]
 GO
-/****** Object:  Default [DF__notificat__isMon__656C112C]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  Default [DF__notificat__isMon__656C112C]    Script Date: 05/19/2009 13:59:45 ******/
 ALTER TABLE [dbo].[notificationLog_stage] ADD  DEFAULT ((0)) FOR [isMonitorMessage]
 GO

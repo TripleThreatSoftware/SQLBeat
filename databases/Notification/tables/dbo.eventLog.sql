@@ -1,4 +1,4 @@
-/****** Object:  Table [dbo].[eventLog]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  Table [dbo].[eventLog]    Script Date: 05/19/2009 13:59:45 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -41,9 +41,9 @@ CREATE UNIQUE NONCLUSTERED INDEX [ix_eventLog_ukey] ON [dbo].[eventLog]
 	[computerName] ASC
 )WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
 GO
-/****** Object:  Default [DF__eventLog__data_t__0EA330E9]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  Default [DF__eventLog__data_t__0EA330E9]    Script Date: 05/19/2009 13:59:45 ******/
 ALTER TABLE [dbo].[eventLog] ADD  DEFAULT (getdate()) FOR [data_timestamp]
 GO
-/****** Object:  Default [DF__eventLog__monito__0F975522]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  Default [DF__eventLog__monito__0F975522]    Script Date: 05/19/2009 13:59:45 ******/
 ALTER TABLE [dbo].[eventLog] ADD  DEFAULT (getdate()) FOR [monitorDate]
 GO

@@ -1,4 +1,4 @@
-/****** Object:  Table [dbo].[indexPerformanceLog]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  Table [dbo].[indexPerformanceLog]    Script Date: 05/19/2009 13:59:45 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -35,6 +35,6 @@ CREATE NONCLUSTERED INDEX [ix_indexPerformanceLog_serverName_ymd] ON [dbo].[inde
 	[ymd] ASC
 )WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 60) ON [PRIMARY]
 GO
-/****** Object:  Default [DF__indexPerfor__ymd__71355D62]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  Default [DF__indexPerfor__ymd__71355D62]    Script Date: 05/19/2009 13:59:45 ******/
 ALTER TABLE [dbo].[indexPerformanceLog] ADD  DEFAULT (getdate()) FOR [ymd]
 GO

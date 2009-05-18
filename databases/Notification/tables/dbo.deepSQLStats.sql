@@ -1,4 +1,4 @@
-/****** Object:  Table [dbo].[deepSQLStats]    Script Date: 05/07/2009 10:30:38 ******/
+/****** Object:  Table [dbo].[deepSQLStats]    Script Date: 05/19/2009 13:59:44 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -31,6 +31,6 @@ CREATE NONCLUSTERED INDEX [ix_deepSQLStats_serverName_ymd_keyName_subkeyName] ON
 	[subkeyName] ASC
 )WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
 GO
-/****** Object:  Default [DF__deepSQLStat__ymd__17036CC0]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  Default [DF__deepSQLStat__ymd__17036CC0]    Script Date: 05/19/2009 13:59:44 ******/
 ALTER TABLE [dbo].[deepSQLStats] ADD  DEFAULT (getdate()) FOR [ymd]
 GO

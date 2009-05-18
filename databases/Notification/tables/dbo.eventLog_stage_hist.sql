@@ -1,4 +1,4 @@
-/****** Object:  Table [dbo].[eventLog_stage_hist]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  Table [dbo].[eventLog_stage_hist]    Script Date: 05/19/2009 13:59:45 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -11,6 +11,6 @@ CREATE TABLE [dbo].[eventLog_stage_hist](
 	[step] [varchar](200) NULL
 ) ON [PRIMARY]
 GO
-/****** Object:  Default [DF__eventLog_st__ymd__123EB7A3]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  Default [DF__eventLog_st__ymd__123EB7A3]    Script Date: 05/19/2009 13:59:45 ******/
 ALTER TABLE [dbo].[eventLog_stage_hist] ADD  DEFAULT (getdate()) FOR [ymd]
 GO

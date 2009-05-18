@@ -1,9 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[pr_checkIntegrity]    Script Date: 05/07/2009 10:30:39 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-CREATE  procedure [dbo].[pr_checkIntegrity] (@nServerGroup int)
+ALTER  procedure [dbo].[pr_checkIntegrity] (@nServerGroup int)
 as
 begin
 
@@ -85,9 +80,6 @@ begin
 		delete from #results
 			where left(resultLine, 10) = '** DBNAME:'
 				or resultLine is null
-				or resultLine like '%does not exist or access denied%'
-				or resultLine like '%timeout%'
-				or resultLine like '%ConnectionOpen%'
 
 		update #results
 			set databaseName = 'BAD DB NAME'
@@ -98,12 +90,17 @@ begin
 		select distinct
 			'Credentials (' + isnull(@cUserName, '') + '/' + isnull(@cPassword, '') + ') supplied for ' + isnull(@cFriendlyName, @cServerName) + ' invalid.' as subject,
 			'Integrity checks failed for "' + isnull(@cFriendlyName, @cServerName) + '.' + databaseName + '" as "' + isnull(@cUserName, '') + '/' + isnull(@cPassword, '') + '" with the following error: ' + char(13) +
-				isnull(resultLine, 'NULL MESSAGE') as message,
+				isnull(resultLine, 'NULL MESSAGE') + char(13) + char(13) +
+				'Further checks of this server will be automatically DISABLED.' as message,
 			2 as severity,
 			isnull(@cFriendlyName, @cServerName) as serverName
 			from #results
 			where resultLine like '%login failed%'
 				or resultLine like '%connecting to sql server%'
+				or resultLine like '%unable to complete login process%'
+				or resultLine like '%does not exist or access denied%'
+				or resultLine like '%timeout%'
+				or resultLine like '%ConnectionOpen%'
 
 		if @@rowcount > 0
 		begin
@@ -111,6 +108,14 @@ begin
 			update dm_servers
 				set integrityCheck = 0
 				where serverName = @cServerName
+
+			delete from #results
+				where resultLine like '%login failed%'
+					or resultLine like '%connecting to sql server%'
+					or resultLine like '%unable to complete login process%'
+					or resultLine like '%does not exist or access denied%'
+					or resultLine like '%timeout%'
+					or resultLine like '%ConnectionOpen%'
 		end
 
 		-- these should be just failures
@@ -122,7 +127,6 @@ begin
 			2 as severity,
 			isnull(@cFriendlyName, @cServerName) as serverName
 			from #results
-			where resultLine not like '%login failed%'
 
 		update dm_servers with (rowlock)
 			set lastIntegrityCheck = getDate()
@@ -133,4 +137,3 @@ begin
 	drop table #results
 end
 -- exec pr_stores_checkIntegrity 3
-GO

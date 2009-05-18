@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[pr_archiveOldLinkedPartitionedTables]    Script Date: 05/07/2009 10:30:54 ******/
+/****** Object:  StoredProcedure [dbo].[pr_archiveOldLinkedPartitionedTables]    Script Date: 05/19/2009 13:59:57 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -303,7 +303,7 @@ end
 
 -- exec pr_archiveOldPartitionedTables 'mart_vehicle_byday_daily', 'ukey_auto'
 GO
-/****** Object:  StoredProcedure [dbo].[pr_archiveOldLinkedPartitionedTables]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  StoredProcedure [dbo].[pr_archiveOldLinkedPartitionedTables]    Script Date: 05/19/2009 13:59:45 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON

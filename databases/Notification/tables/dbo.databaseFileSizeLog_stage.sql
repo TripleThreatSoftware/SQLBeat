@@ -1,4 +1,4 @@
-/****** Object:  Table [dbo].[databaseFileSizeLog_stage]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  Table [dbo].[databaseFileSizeLog_stage]    Script Date: 05/19/2009 13:59:44 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON

@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[pr_maintainPartitionedViews]    Script Date: 05/07/2009 10:30:42 ******/
+/****** Object:  StoredProcedure [dbo].[pr_maintainPartitionedViews]    Script Date: 05/19/2009 13:59:48 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER OFF
@@ -629,7 +629,7 @@ end
 
 -- exec pr_maintainPartitionedViews
 GO
-/****** Object:  StoredProcedure [dbo].[pr_maintainPartitionedViews]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  StoredProcedure [dbo].[pr_maintainPartitionedViews]    Script Date: 05/19/2009 13:59:45 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER OFF

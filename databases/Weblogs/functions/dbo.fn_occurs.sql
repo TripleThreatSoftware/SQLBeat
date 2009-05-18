@@ -1,4 +1,4 @@
-/****** Object:  UserDefinedFunction [dbo].[fn_occurs]    Script Date: 05/07/2009 10:30:23 ******/
+/****** Object:  UserDefinedFunction [dbo].[fn_occurs]    Script Date: 05/19/2009 13:59:31 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER OFF
@@ -28,7 +28,7 @@ begin
 end
 -- select dbo.fn_occurs(' ', 'test test')
 GO
-/****** Object:  UserDefinedFunction [dbo].[fn_occurs]    Script Date: 05/07/2009 10:30:41 ******/
+/****** Object:  UserDefinedFunction [dbo].[fn_occurs]    Script Date: 05/19/2009 13:59:47 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER OFF

@@ -1,4 +1,4 @@
-/****** Object:  Table [dbo].[messagesSent]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  Table [dbo].[messagesSent]    Script Date: 05/19/2009 13:59:45 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -14,6 +14,6 @@ CREATE TABLE [dbo].[messagesSent](
 	[body] [varchar](8000) NULL
 ) ON [PRIMARY]
 GO
-/****** Object:  Default [DF__messagesSen__ymd__3F466844]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  Default [DF__messagesSen__ymd__3F466844]    Script Date: 05/19/2009 13:59:45 ******/
 ALTER TABLE [dbo].[messagesSent] ADD  DEFAULT (getdate()) FOR [ymd]
 GO

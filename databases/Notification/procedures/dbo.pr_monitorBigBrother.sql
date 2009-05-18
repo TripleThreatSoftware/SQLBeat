@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[pr_monitorBigBrother]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  StoredProcedure [dbo].[pr_monitorBigBrother]    Script Date: 05/19/2009 13:59:45 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -551,6 +551,9 @@ begin
 			and b.[name] not like '%fragmentation check%'
 			and b.[name] not like '%configuration check%'
 			and b.[name] not like '%import weblogs%'
+			and b.[name] not like '%monitor sql objects%'
+			and b.[name] not like '%monitor sql statistics%'
+			and b.[name] not like '%monitor table sizes%'
 			and b.[name] not like 'maintenance%'
 
 	-- jobs that we do not have a history for
@@ -578,6 +581,9 @@ begin
 			and b.[name] not like '%fragmentation check%'
 			and b.[name] not like '%configuration check%'
 			and b.[name] not like '%import weblogs%'
+			and b.[name] not like '%monitor sql objects%'
+			and b.[name] not like '%monitor sql statistics%'
+			and b.[name] not like '%monitor table sizes%'
 			and isnull(b.[name], '') not like '%sqlautomation%'
 			and isnull(b.[name], '') not like '%sqlbeat%'
 			and b.[name] not like 'maintenance%'
@@ -602,7 +608,10 @@ begin
 					and b.[name] not like '%trim history%'
 					and b.[name] not like '%eventlog check%'
 					and b.[name] not like '%configuration check%'
+					and b.[name] not like '%monitor sql objects%'
 					and b.[name] not like '%import weblogs%'
+					and b.[name] not like '%monitor sql statistics%'
+					and b.[name] not like '%monitor table sizes%'
 					and b.[name] > @cThisJob
 					and minutesRunning > 180
 					and (
@@ -626,7 +635,10 @@ begin
 					and b.[name] not like '%trim history%'
 					and b.[name] not like '%eventlog check%'
 					and b.[name] not like '%configuration check%'
+					and b.[name] not like '%monitor sql objects%'
 					and b.[name] not like '%import weblogs%'
+					and b.[name] not like '%monitor sql statistics%'
+					and b.[name] not like '%monitor table sizes%'
 					and b.[name] > @cThisJob
 					and minutesRunning > 180
 					and (

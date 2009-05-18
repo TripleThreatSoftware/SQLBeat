@@ -1,4 +1,4 @@
-/****** Object:  Table [dbo].[pingLog]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  Table [dbo].[pingLog]    Script Date: 05/19/2009 13:59:45 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -34,15 +34,15 @@ CREATE NONCLUSTERED INDEX [ix_pingLog_serverName_ymd_ukey] ON [dbo].[pingLog]
 	[ukey] ASC
 )WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 60) ON [PRIMARY]
 GO
-/****** Object:  Default [DF__pingLog__ymd__6C190EBB]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  Default [DF__pingLog__ymd__6C190EBB]    Script Date: 05/19/2009 13:59:45 ******/
 ALTER TABLE [dbo].[pingLog] ADD  DEFAULT (getdate()) FOR [ymd]
 GO
-/****** Object:  Default [DF__pingLog__isServe__6D0D32F4]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  Default [DF__pingLog__isServe__6D0D32F4]    Script Date: 05/19/2009 13:59:45 ******/
 ALTER TABLE [dbo].[pingLog] ADD  DEFAULT ((0)) FOR [isServerPingable]
 GO
-/****** Object:  Default [DF__pingLog__isSQLPi__6E01572D]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  Default [DF__pingLog__isSQLPi__6E01572D]    Script Date: 05/19/2009 13:59:45 ******/
 ALTER TABLE [dbo].[pingLog] ADD  DEFAULT ((0)) FOR [isSQLPingable]
 GO
-/****** Object:  Default [DF__pingLog__isRoute__6EF57B66]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  Default [DF__pingLog__isRoute__6EF57B66]    Script Date: 05/19/2009 13:59:45 ******/
 ALTER TABLE [dbo].[pingLog] ADD  DEFAULT ((0)) FOR [isRouterPingable]
 GO

@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[pr_monitorDatabaseSizes]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  StoredProcedure [dbo].[pr_monitorDatabaseSizes]    Script Date: 05/19/2009 13:59:45 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -40,10 +40,12 @@ begin
 				from (
 					select serverName, databaseName,
 						max(case when ymd = convert(varchar(10), getDate(), 120) then reserved else 0 end) as sizeNow,
-						max(case when ymd < convert(varchar(10), getDate(), 120) then reserved else 0 end) as sizeBefore
+						max(case when ymd < convert(varchar(10), getDate(), 120) then reserved else null end) as sizeBefore
 						from #sizeHistory
 						group by serverName, databaseName
 					) a
+				-- this needs to not be the first time we've seen this DB
+				where sizeBefore is not null
 			) a
 		join dm_servers b on a.serverName = b.serverName
 		join dm_serverGroups c on b.ukey_group = c.ukey

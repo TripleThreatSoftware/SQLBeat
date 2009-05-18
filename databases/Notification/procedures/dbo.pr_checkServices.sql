@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[pr_checkServices]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  StoredProcedure [dbo].[pr_checkServices]    Script Date: 05/19/2009 13:59:45 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -106,12 +106,21 @@ begin
 
 		delete from #runningServices where rtrim(ltrim(isnull(serviceName, ''))) = ''
 
+		if (select count(*) from #runningServices where serviceName like '%xp_cmdshell%') > 0
+		begin
+			insert into notificationLog_stage (serverName, subject, message, severity) values (@cServerName, 'XP_CMDSHELL is disabled', 'Unable to check running services - XP_CMDSHELL access is disabled.', 2)
+			update dm_servers set serviceCheck = 0 where serverName = @cServerName
+			truncate table #runningServices
+			continue
+		end
+
 		if (
 			select count(*) from #runningServices
 				where serviceName like '%login failed%'
 					or serviceName like '%no user selected%'
 					or serviceName like '%timeout%'
 					or serviceName like '%dbnetlib%'
+					or serviceName like '%xp_cmdshell%'
 					or serviceName like '%sspi context%'
 					or serviceName like '%Cannot open input file%'
 					or serviceName like '%unable to complete login process%'

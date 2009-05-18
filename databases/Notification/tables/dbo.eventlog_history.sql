@@ -1,4 +1,4 @@
-/****** Object:  Table [dbo].[eventlog_history]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  Table [dbo].[eventlog_history]    Script Date: 05/19/2009 13:59:45 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -29,6 +29,6 @@ CREATE NONCLUSTERED INDEX [ix_eventLogHistory_ukeyGroup_serverName_ukey] ON [dbo
 	[ukey] ASC
 )WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 60) ON [PRIMARY]
 GO
-/****** Object:  Default [DF__eventlog_hi__ymd__1367E606]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  Default [DF__eventlog_hi__ymd__1367E606]    Script Date: 05/19/2009 13:59:45 ******/
 ALTER TABLE [dbo].[eventlog_history] ADD  DEFAULT (getdate()) FOR [ymd]
 GO

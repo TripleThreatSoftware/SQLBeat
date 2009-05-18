@@ -1,6 +1,6 @@
 SET ANSI_PADDING OFF
 GO
-/****** Object:  View [dbo].[v_notificationLog_all]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  View [dbo].[v_notificationLog_all]    Script Date: 05/19/2009 13:59:45 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER OFF

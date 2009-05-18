@@ -1,11 +1,9 @@
-USE [Notification]
-GO
-/****** Object:  UserDefinedFunction [dbo].[fn_returnFormattedBuffer]    Script Date: 05/13/2009 19:11:20 ******/
+/****** Object:  UserDefinedFunction [dbo].[fn_returnFormattedBuffer]    Script Date: 05/19/2009 13:59:31 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-ALTER function [dbo].[fn_returnFormattedBuffer] (@cBuffer varchar(8000))
+CREATE function [dbo].[fn_returnFormattedBuffer] (@cBuffer varchar(8000))
 returns varchar(8000)
 as
 begin
@@ -22,3 +20,4 @@ begin
 
 	return @cReturnString
 end
+GO

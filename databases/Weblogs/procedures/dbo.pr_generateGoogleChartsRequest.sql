@@ -1,9 +1,12 @@
-/****** Object:  StoredProcedure [dbo].[pr_generateGoogleChartsRequest]    Script Date: 05/07/2009 10:30:27 ******/
+USE [Notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_generateGoogleChartsRequest]    Script Date: 05/18/2009 14:30:26 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE procedure [dbo].[pr_generateGoogleChartsRequest] (@nWidth int, @nHeight int, @bRelativeToTotal bit = 0, @bAbsoluteYAxis bit = 0, @bShowPie bit = 0, @bLeavePeaks bit = 0)
+
+ALTER procedure [dbo].[pr_generateGoogleChartsRequest] (@nWidth int, @nHeight int, @bRelativeToTotal bit = 0, @bAbsoluteYAxis bit = 0, @bShowPie bit = 0, @bLeavePeaks bit = 0)
 as
 begin
 	if isnull(@nHeight, 0) = 0
@@ -21,7 +24,7 @@ begin
 
 	if (select count(*) from #dataValues) = 0
 	begin
-		select '' as graphURL
+		select 'images/not-available.jpg' as graphURL
 		return
 	end
 
@@ -231,8 +234,7 @@ begin
 					else '100'
 					end
 
-	select @cURLString as graphURL
+	select isnull(@cURLString , 'images/not-available.jpg') as graphURL
 
 	drop table #xAxis
 end
-GO

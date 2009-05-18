@@ -1,4 +1,4 @@
-/****** Object:  UserDefinedFunction [dbo].[fn_hex_to_char]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  UserDefinedFunction [dbo].[fn_hex_to_char]    Script Date: 05/19/2009 13:59:44 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER OFF

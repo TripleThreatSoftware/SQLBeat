@@ -1,4 +1,4 @@
-/****** Object:  Table [dbo].[processLog]    Script Date: 05/07/2009 10:30:38 ******/
+/****** Object:  Table [dbo].[processLog]    Script Date: 05/19/2009 13:59:44 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -69,15 +69,15 @@ CREATE NONCLUSTERED INDEX [ix_processLog_serverName_unique] ON [dbo].[processLog
 	[hostname] ASC
 )WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
 GO
-/****** Object:  Default [DF__processLo__isBlo__70DDC3D8]    Script Date: 05/07/2009 10:30:38 ******/
+/****** Object:  Default [DF__processLo__isBlo__70DDC3D8]    Script Date: 05/19/2009 13:59:44 ******/
 ALTER TABLE [dbo].[processLog] ADD  DEFAULT ((0)) FOR [isBlocked]
 GO
-/****** Object:  Default [DF__processLo__isBlo__71D1E811]    Script Date: 05/07/2009 10:30:38 ******/
+/****** Object:  Default [DF__processLo__isBlo__71D1E811]    Script Date: 05/19/2009 13:59:44 ******/
 ALTER TABLE [dbo].[processLog] ADD  DEFAULT ((0)) FOR [isBlocker]
 GO
-/****** Object:  Default [DF__processLo__isWil__72C60C4A]    Script Date: 05/07/2009 10:30:38 ******/
+/****** Object:  Default [DF__processLo__isWil__72C60C4A]    Script Date: 05/19/2009 13:59:44 ******/
 ALTER TABLE [dbo].[processLog] ADD  DEFAULT ((0)) FOR [isWild]
 GO
-/****** Object:  Default [DF__processLog__ymd__73BA3083]    Script Date: 05/07/2009 10:30:38 ******/
+/****** Object:  Default [DF__processLog__ymd__73BA3083]    Script Date: 05/19/2009 13:59:44 ******/
 ALTER TABLE [dbo].[processLog] ADD  DEFAULT (getdate()) FOR [ymd]
 GO

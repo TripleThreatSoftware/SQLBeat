@@ -1,6 +1,6 @@
 SET ANSI_PADDING OFF
 GO
-/****** Object:  Table [dbo].[fragmentationLog]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  Table [dbo].[fragmentationLog]    Script Date: 05/19/2009 13:59:45 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -32,6 +32,6 @@ CREATE CLUSTERED INDEX [ix_fragmentationLog_ukeyServer_ymd_dbName_objectName] ON
 	[ukey] ASC
 )WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 80) ON [PRIMARY]
 GO
-/****** Object:  Default [DF__fragmentati__ymd__0CBAE877]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  Default [DF__fragmentati__ymd__0CBAE877]    Script Date: 05/19/2009 13:59:45 ******/
 ALTER TABLE [dbo].[fragmentationLog] ADD  DEFAULT (getdate()) FOR [ymd]
 GO

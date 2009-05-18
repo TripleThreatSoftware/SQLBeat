@@ -1,6 +1,6 @@
 SET ANSI_PADDING OFF
 GO
-/****** Object:  Table [dbo].[eventLog_stage]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  Table [dbo].[eventLog_stage]    Script Date: 05/19/2009 13:59:45 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -27,6 +27,6 @@ CREATE CLUSTERED INDEX [ix_eventLog_stage_computerName_message] ON [dbo].[eventL
 	[message] ASC
 )WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
 GO
-/****** Object:  Default [DF__eventLog___monit__6A30C649]    Script Date: 05/07/2009 10:30:39 ******/
+/****** Object:  Default [DF__eventLog___monit__6A30C649]    Script Date: 05/19/2009 13:59:45 ******/
 ALTER TABLE [dbo].[eventLog_stage] ADD  DEFAULT (getdate()) FOR [monitorDate]
 GO
