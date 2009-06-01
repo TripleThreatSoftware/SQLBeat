@@ -1,11 +1,6 @@
-/****** Object:  StoredProcedure [dbo].[pr_monitorBigBrother]    Script Date: 05/19/2009 13:59:45 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
 -- select top 100 * from messagesSent order by ymd desc
 
-CREATE       procedure [dbo].[pr_monitorBigBrother]
+ALTER       procedure [dbo].[pr_monitorBigBrother]
 as
 begin
 	set nocount on
@@ -21,6 +16,11 @@ begin
 	declare @cProcedureName varchar(100)
 	declare @nSPID int
 	declare @dStartTime dateTime
+	declare @bMonitorProcesses bit
+	declare @nUkey int
+
+	-- if we need to watch this server, flip this bit on
+	set @bMonitorProcesses = 0
 
 	-- insert into hist_monitorBigBrother (stepName) values ('Starting')
 
@@ -45,10 +45,11 @@ begin
 	-- Tables
 	--*********************************************************************************************************************
 
-	create table #results (ukey int identity, subject varchar(300), message varchar(2000), severity int default 1,
+	create table #results (ukey int identity, subject varchar(300), message varchar(8000), severity int default 1,
 			isJobFailure bit default 0, isLogShippingJobFailure bit default 0, isLongRunningJob bit default 0,
 			isBlocking bit default 0, isLongRunningProcess bit default 0, isDriveSpace bit default 0,
-			isLogSize bit default 0, isEventLog bit default 0, serverName varchar(100) default @@serverName)
+			isLogSize bit default 0, isEventLog bit default 0, serverName varchar(100) default @@serverName,
+			ymd dateTime default getDate())
 
 	create table #processes (spid int, status varchar(100), login varchar(100), hostname varchar(128),
 		blockedBy varchar(20), dbName varchar(128), command varchar(100), cputime int, diskio int,
@@ -71,299 +72,303 @@ begin
 
 	-- insert into hist_monitorBigBrother (stepName) values ('Tables Created')
 
-	--*********************************************************************************************************************
-	-- Blocked processes
-	--*********************************************************************************************************************
 
-	set @cSQLString = '
-		SELECT a.spid, a.status, convert(sysname, rtrim(a.loginame)) as login, a.hostname,
-				case when a.blocked = 0 Then space(0) else convert(varchar(5), a.blocked) end as blkBy,
-				b.[name] as DBName, a.cmd as command, a.cpu as cputime, a.physical_io as diskio,
-				substring( convert(varchar,a.last_batch,111) ,6  ,5 ) + space(1) + substring( convert(varchar,a.last_batch,113) ,13 ,8 ) as LastBatch,
-				a.program_name, a.lastWaitType, a.login_time, a.net_address, a.last_batch, a.waitType, a.waitTime, a.waitResource,
-				getDate() as ymd
-				from master.dbo.sysprocesses a
-				left outer join master.dbo.sysdatabases b on a.dbid = b.dbid
-				where a.spid > 50'
-
-	insert into #processes (spid, status, login, hostname, blockedby, dbname, command, cputime, diskio,
-		lastbatch, programName, lastWaitType, login_time, net_address, lastBatchTime, waitType, waitTime,
-		waitResource, ymd)
-	exec sp_executeSQL @cSQLString
-
-	-- insert into hist_monitorBigBrother (stepName) values ('Processes returned')
-
-	update #processes
-		set blockedBy = rtrim(ltrim(replace(blockedBy, '.', '')))
-
-	-- get rid of any system processes that we don't so much care about
-	update #processes
-		set ignoreSPID = 1
-		where rtrim(command) in ('LOG WRITER', 'CHECKPOINT SLEEP', 'TASK MANAGER',
-				'AWAITING COMMAND', 'GHOST CLEANUP', 'DBCC', 'BACKUP', 'SIGNAL HANDLER', 'LOCK MONITOR')
-			or rtrim(ltrim(hostName)) = '.'
-			or rtrim(ltrim(hostname)) = @@servername
-
-	-- blocked
-	update #processes
-		set isBlocked = 1
-		from #processes a
-		join (
-			select a.spid
-				from #processes a
-				left outer join #processes b on a.blockedBy = b.spid
-				where a.blockedBy <> ''
-					-- we don't care if both SPIDs are restoring logs because there isn't really much we can do about it
-					and isnull(a.command, '') not like '%RESTORE LOG%'
-					and isnull(b.command, '') not like '%RESTORE LOG%'
-					and a.spid <> b.spid
-
-					and not (isnull(b.login, '') = '' and isnull(rtrim(b.command), '') = '')
-			) b on a.spid = b.spid
-
-	update #processes
-		set isBlocker = 1
-		where spid in (select distinct blockedBy from #processes where blockedBy <> '')
-
-	-- wild
-	update #processes
-		set isWild = 1
-		from #processes
-		where (cputime > 400000 or diskio > 125000)
-
-			and programName <> 'SQLAgent - Alert Engine'			and rtrim(command) not in ('LOG WRITER', 'CHECKPOINT SLEEP', 'TASK MANAGER',
-				'GHOST CLEANUP', 'DBCC', 'RESTORE LOG', 'KILLED/ROLLBACK')
-			and rtrim(command) not like '%backup%'
-			and rtrim(command) not like '%restore%'
-			-- this is a job, and we'll catch it elsewhere
-			and programName not like '%SQLAGENT%'
-			and (
-				abs(dateDiff(minute, lastBatchTime, getDate())) >= 5 --between 5 and @nMinutesBackToLook*3
-				or datePart(year, lastbatchTime) = 1900
-				)
-
-	update #processes
-		set hostname = b.hostname,
-			login = b.login
-		from #processes a
-		join (
-			select spid, max(hostname) as hostname, max(login) as login
-				from #processes
-				group by spid
-			) b on a.spid = b.spid
-		where isnull(a.hostname, '') = ''
-			or isnull(a.login, '') = ''
-
-	-- insert into hist_monitorBigBrother (stepName) values ('Processes flagged')
-
-	--*********************************************************************************************************************
-	-- begin INPUTBUFFER: for each SPID, figure out what the last command they sent over is
-
-	-- without password, for local boxes that'll accept sqladmin under windows authentication
-	set @cSQLString = 'osql -S' + @cServerName + ' -E -n -h-1 -w300 -dmaster -i"\\' + @cThisServerName + '\shared\all_user_activity.SQL"'
-
-	insert into #userActivity (nastyLine)
-	exec master..xp_cmdShell @cSQLString
-
-	update #userActivity set nastyLine = rtrim(ltrim(replace(replace(replace(nastyLine, char(9), ''), char(13), ''), '  ', ' ')))
-
-	delete from #userActivity where nastyLine = ''or nastyLine = 'null'
-
-	update #userActivity
-		set spid = dbo.fn_returnListItem(nastyLine, 1, '||'),
-			macAddress = dbo.fn_returnListItem(nastyLine, 2, '||'),
-			bufferContents = dbo.fn_returnListItem(nastyLine, 3, '||')
-		where left(nastyLine, 2) = '||'
-
-	update #userActivity
-		set bufferContents = nastyLine
-		where spid is null
-
-	update #userActivity
-		set nastyLine = null
-
-	set @cBuffer = ''
-
-	update #userActivity
-		set @cBuffer = bufferContents = left(case when spid is null then @cBuffer else '' end + isnull(bufferContents, '') + char(13), 3000),
-			@cMacAddress = macAddress = case when macAddress is null then @cMacAddress else macAddress end,
-			@nSPID = spid = case when spid is null then @nSPID else spid end
-
-	update #processes
-		set buffercontents = left(b.bufferContents, 3000)
-		from #processes a
-		join (
-			select a.spid, a.macAddress, a.bufferContents
-				from #userActivity a
-				join (
-					select spid, macAddress, max(ukey) as ukey
-						from #userActivity
-						group by spid, macAddress
-					) b on a.spid = b.spid
-						and a.macAddress = b.macAddress
-						and a.ukey = b.ukey
-			) b on a.spid = b.spid
-			and a.net_address = b.macAddress
-
-	-- if the SPID's last command includes a single quote, incorporating it into the string causes all sorts of problems
-	update #processes
-		set command = replace(command, '''', '"'),
-			buffercontents = replace(replace(replace(replace(buffercontents, '''', '"'), '**', '*'), '**', '*'), '**', '*'),
-			hostname = rtrim(ltrim(replace(hostname, '  ', ' ')))
-
-	-- end INPUTBUFFER
-	--*********************************************************************************************************************
-
-	-- insert into hist_monitorBigBrother (stepName) values ('SPID buffers returned')
-
-	--*********************************************************************************************************************
-	-- BEGIN locks held by SPIDs which are blocked or are blocking
-	set @nSPID = 0
-
-	declare @nDBID int
-	declare @nObjID int
-	declare @nLocks int
-	declare @cMode varchar(10)
-	declare @cLockType varchar(20)
-	declare @cDatabaseName varchar(100)
-	declare @cLocks varchar(4000)
-	declare @cTableName varchar(200)
-
-	while exists (
-		select top 1 spid
-			from #processes
-			where (isBlocked = 1 or isBlocker = 1 or isWild = 1)
-				and spid > @nSPID
-			order by spid
-		)
+	if @bMonitorProcesses = 1
 	begin
-		truncate table #locks
-		truncate table #lockSummary
+		--*********************************************************************************************************************
+		-- Blocked processes
+		--*********************************************************************************************************************
 
-		select top 1 @nSPID = spid
+		set @cSQLString = '
+			SELECT a.spid, a.status, convert(sysname, rtrim(a.loginame)) as login, a.hostname,
+					case when a.blocked = 0 Then space(0) else convert(varchar(5), a.blocked) end as blkBy,
+					b.[name] as DBName, a.cmd as command, a.cpu as cputime, a.physical_io as diskio,
+					substring( convert(varchar,a.last_batch,111) ,6  ,5 ) + space(1) + substring( convert(varchar,a.last_batch,113) ,13 ,8 ) as LastBatch,
+					a.program_name, a.lastWaitType, a.login_time, a.net_address, a.last_batch, a.waitType, a.waitTime, a.waitResource,
+					getDate() as ymd
+					from master.dbo.sysprocesses a
+					left outer join master.dbo.sysdatabases b on a.dbid = b.dbid
+					where a.spid > 50'
+
+		insert into #processes (spid, status, login, hostname, blockedby, dbname, command, cputime, diskio,
+			lastbatch, programName, lastWaitType, login_time, net_address, lastBatchTime, waitType, waitTime,
+			waitResource, ymd)
+		exec sp_executeSQL @cSQLString
+
+		-- insert into hist_monitorBigBrother (stepName) values ('Processes returned')
+
+		update #processes
+			set blockedBy = rtrim(ltrim(replace(blockedBy, '.', '')))
+
+		-- get rid of any system processes that we don't so much care about
+		update #processes
+			set ignoreSPID = 1
+			where rtrim(command) in ('LOG WRITER', 'CHECKPOINT SLEEP', 'TASK MANAGER',
+					'AWAITING COMMAND', 'GHOST CLEANUP', 'DBCC', 'BACKUP', 'SIGNAL HANDLER', 'LOCK MONITOR')
+				or rtrim(ltrim(hostName)) = '.'
+				or rtrim(ltrim(hostname)) = @@servername
+
+		-- blocked
+		update #processes
+			set isBlocked = 1
+			from #processes a
+			join (
+				select a.spid
+					from #processes a
+					left outer join #processes b on a.blockedBy = b.spid
+					where a.blockedBy <> ''
+						-- we don't care if both SPIDs are restoring logs because there isn't really much we can do about it
+						and isnull(a.command, '') not like '%RESTORE LOG%'
+						and isnull(b.command, '') not like '%RESTORE LOG%'
+						and a.spid <> b.spid
+
+						and not (isnull(b.login, '') = '' and isnull(rtrim(b.command), '') = '')
+				) b on a.spid = b.spid
+
+		update #processes
+			set isBlocker = 1
+			where spid in (select distinct blockedBy from #processes where blockedBy <> '')
+
+		-- wild
+		update #processes
+			set isWild = 1
 			from #processes
-			where (isBlocked = 1 or isBlocker = 1 or isWild = 1)
-				and spid > @nSPID
-			order by spid
+			where (cputime > 400000 or diskio > 125000)
 
-		insert into #locks
-		exec master.dbo.sp_lock @nSPID
+				and programName <> 'SQLAgent - Alert Engine'			and rtrim(command) not in ('LOG WRITER', 'CHECKPOINT SLEEP', 'TASK MANAGER',
+					'GHOST CLEANUP', 'DBCC', 'RESTORE LOG', 'KILLED/ROLLBACK')
+				and rtrim(command) not like '%backup%'
+				and rtrim(command) not like '%restore%'
+				-- this is a job, and we'll catch it elsewhere
+				and programName not like '%SQLAGENT%'
+				and (
+					abs(dateDiff(minute, lastBatchTime, getDate())) >= 5 --between 5 and @nMinutesBackToLook*3
+					or datePart(year, lastbatchTime) = 1900
+					)
 
-		insert into #lockSummary
-		select isnull(dbid, 0) as dbid,
-			isnull(objid, 0) as objid,
-			isnull(type, '') as type,
-			isnull(mode, '') as mode,
-			count(*) as locks
-			from #locks
-			where objid <> 0
-				and dbID not in (select dbID from master.dbo.sysdatabases where [name] in ('master', 'model', 'msdb'))
-			group by dbid, objid, type, mode
+		update #processes
+			set hostname = b.hostname,
+				login = b.login
+			from #processes a
+			join (
+				select spid, max(hostname) as hostname, max(login) as login
+					from #processes
+					group by spid
+				) b on a.spid = b.spid
+			where isnull(a.hostname, '') = ''
+				or isnull(a.login, '') = ''
 
-		insert into #lockSummary
-		select isnull(rsc_dbid, 0) as rsc_dbid,
-			isnull(rsc_objid, 0) as rsc_objid,
-			case when isnull(req_status, 0) = 1 then 'Granted'
-				when isnull(req_status, 0) = 2 then 'Converting'
-				when isnull(req_status, 0) = 3 then 'Waiting'
-				else 'Unknown'
-				end as type,
-			'' as mode,
-			count(*)
-			from master.dbo.syslockinfo
-			where req_spid = @nSPID
-				and rsc_objid <> 0
-			group by rsc_dbid, rsc_objid,
+		-- insert into hist_monitorBigBrother (stepName) values ('Processes flagged')
+
+		--*********************************************************************************************************************
+		-- begin INPUTBUFFER: for each SPID, figure out what the last command they sent over is
+
+		-- without password, for local boxes that'll accept sqladmin under windows authentication
+		set @cSQLString = 'osql -S' + @cServerName + ' -E -n -h-1 -w300 -dmaster -i"\\' + @cThisServerName + '\shared\all_user_activity.SQL"'
+
+		insert into #userActivity (nastyLine)
+		exec master..xp_cmdShell @cSQLString
+
+		update #userActivity set nastyLine = rtrim(ltrim(replace(replace(replace(nastyLine, char(9), ''), char(13), ''), '  ', ' ')))
+
+		delete from #userActivity where nastyLine = ''or nastyLine = 'null'
+
+		update #userActivity
+			set spid = dbo.fn_returnListItem(nastyLine, 1, '||'),
+				macAddress = dbo.fn_returnListItem(nastyLine, 2, '||'),
+				bufferContents = dbo.fn_returnListItem(nastyLine, 3, '||')
+			where left(nastyLine, 2) = '||'
+
+		update #userActivity
+			set bufferContents = nastyLine
+			where spid is null
+
+		update #userActivity
+			set nastyLine = null
+
+		set @cBuffer = ''
+
+		update #userActivity
+			set @cBuffer = bufferContents = left(case when spid is null then @cBuffer else '' end + isnull(bufferContents, '') + char(13), 3000),
+				@cMacAddress = macAddress = case when macAddress is null then @cMacAddress else macAddress end,
+				@nSPID = spid = case when spid is null then @nSPID else spid end
+
+		update #processes
+			set buffercontents = left(b.bufferContents, 3000)
+			from #processes a
+			join (
+				select a.spid, a.macAddress, a.bufferContents
+					from #userActivity a
+					join (
+						select spid, macAddress, max(ukey) as ukey
+							from #userActivity
+							group by spid, macAddress
+						) b on a.spid = b.spid
+							and a.macAddress = b.macAddress
+							and a.ukey = b.ukey
+				) b on a.spid = b.spid
+				and a.net_address = b.macAddress
+
+		-- if the SPID's last command includes a single quote, incorporating it into the string causes all sorts of problems
+		update #processes
+			set command = replace(command, '''', '"'),
+				buffercontents = replace(replace(replace(replace(buffercontents, '''', '"'), '**', '*'), '**', '*'), '**', '*'),
+				hostname = rtrim(ltrim(replace(hostname, '  ', ' ')))
+
+		-- end INPUTBUFFER
+		--*********************************************************************************************************************
+
+		-- insert into hist_monitorBigBrother (stepName) values ('SPID buffers returned')
+
+		--*********************************************************************************************************************
+		-- BEGIN locks held by SPIDs which are blocked or are blocking
+		set @nSPID = 0
+
+		declare @nDBID int
+		declare @nObjID int
+		declare @nLocks int
+		declare @cMode varchar(10)
+		declare @cLockType varchar(20)
+		declare @cDatabaseName varchar(100)
+		declare @cLocks varchar(4000)
+		declare @cTableName varchar(200)
+
+		while exists (
+			select top 1 spid
+				from #processes
+				where (isBlocked = 1 or isBlocker = 1 or isWild = 1)
+					and spid > @nSPID
+				order by spid
+			)
+		begin
+			truncate table #locks
+			truncate table #lockSummary
+
+			select top 1 @nSPID = spid
+				from #processes
+				where (isBlocked = 1 or isBlocker = 1 or isWild = 1)
+					and spid > @nSPID
+				order by spid
+
+			insert into #locks
+			exec master.dbo.sp_lock @nSPID
+
+			insert into #lockSummary
+			select isnull(dbid, 0) as dbid,
+				isnull(objid, 0) as objid,
+				isnull(type, '') as type,
+				isnull(mode, '') as mode,
+				count(*) as locks
+				from #locks
+				where objid <> 0
+					and dbID not in (select dbID from master.dbo.sysdatabases where [name] in ('master', 'model', 'msdb'))
+				group by dbid, objid, type, mode
+
+			insert into #lockSummary
+			select isnull(rsc_dbid, 0) as rsc_dbid,
+				isnull(rsc_objid, 0) as rsc_objid,
 				case when isnull(req_status, 0) = 1 then 'Granted'
 					when isnull(req_status, 0) = 2 then 'Converting'
 					when isnull(req_status, 0) = 3 then 'Waiting'
 					else 'Unknown'
-					end
+					end as type,
+				'' as mode,
+				count(*)
+				from master.dbo.syslockinfo
+				where req_spid = @nSPID
+					and rsc_objid <> 0
+				group by rsc_dbid, rsc_objid,
+					case when isnull(req_status, 0) = 1 then 'Granted'
+						when isnull(req_status, 0) = 2 then 'Converting'
+						when isnull(req_status, 0) = 3 then 'Waiting'
+						else 'Unknown'
+						end
 
-		set @cLocks = ''
+			set @cLocks = ''
 
-		while exists (select top 1 * from #lockSummary)
-		begin
-			select top 1 @nDBID = dbid, @nObjID = objid, @cLockType = type, @nLocks = locks, @cMode = mode from #lockSummary
-
-			if @nObjID is null or @nDBID is null
+			while exists (select top 1 * from #lockSummary)
 			begin
-				delete from #lockSummary where isnull(dbid, 0) = isnull(@nDBID, 0) and isnull(objid, 0) = isnull(@nObjID, 0) and type = @cLockType
-				continue
-			end
+				select top 1 @nDBID = dbid, @nObjID = objid, @cLockType = type, @nLocks = locks, @cMode = mode from #lockSummary
 
-			set @cDatabaseName = (
-				select top 1 [name ]
-					from master.dbo.sysdatabases
-					where dbid = @nDBID
-						and (status & 32) <> 32 -- loading
-						and (status & 64) <> 64 -- prerecovery
-						and (status & 128) <> 128 -- recovery
-						and (status & 512) <> 512 -- offline
-						and (status & 4096) <> 4096 -- single user
-				)
-
-			if @cDatabaseName is null
-			begin
-				delete from #lockSummary where isnull(dbid, 0) = isnull(@nDBID, 0) and isnull(objid, 0) = isnull(@nObjID, 0) and type = @cLockType
-				continue
-			end
-
-			set @cSQLString = '
-				create procedure ' + @cProcedureName + '
-				as
+				if @nObjID is null or @nDBID is null
 				begin
-					insert into #lockresults
-					select name
-						from [' + @cDatabaseName + '].dbo.sysobjects
-						where id = ' + convert(varchar(20), @nObjID) + '
-				end'
+					delete from #lockSummary where isnull(dbid, 0) = isnull(@nDBID, 0) and isnull(objid, 0) = isnull(@nObjID, 0) and type = @cLockType
+					continue
+				end
 
-			if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
-				execute('drop procedure ' + @cProcedureName)
+				set @cDatabaseName = (
+					select top 1 [name ]
+						from master.dbo.sysdatabases
+						where dbid = @nDBID
+							and (status & 32) <> 32 -- loading
+							and (status & 64) <> 64 -- prerecovery
+							and (status & 128) <> 128 -- recovery
+							and (status & 512) <> 512 -- offline
+							and (status & 4096) <> 4096 -- single user
+					)
 
-			exec sp_executeSQL @cSQLString
+				if @cDatabaseName is null
+				begin
+					delete from #lockSummary where isnull(dbid, 0) = isnull(@nDBID, 0) and isnull(objid, 0) = isnull(@nObjID, 0) and type = @cLockType
+					continue
+				end
 
-			EXECUTE(@cProcedureName)
+				set @cSQLString = '
+					create procedure ' + @cProcedureName + '
+					as
+					begin
+						insert into #lockresults
+						select name
+							from [' + @cDatabaseName + '].dbo.sysobjects
+							where id = ' + convert(varchar(20), @nObjID) + '
+					end'
 
-			set @cTableName = (select top 1 tableName from #lockResults)
-			truncate table #lockResults
+				if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
+					execute('drop procedure ' + @cProcedureName)
 
-			set @cLocks = left(@cLocks + isnull(rtrim(ltrim(@cDatabaseName)), '') + '.' +
-				isnull(rtrim(ltrim(@cTableName)), '') + ': ' +
-				isnull(@cLocktype, '') + ', ' +
-				isnull(@cMode, '') +
-				isnull('(' + convert(varchar(20), @nLocks) + ')', '') +
-				char(13), 4000)
+				exec sp_executeSQL @cSQLString
 
-			while charindex('__', @cLocks) > 0
-				set @cLocks = replace(@cLocks, '__', '_')
+				EXECUTE(@cProcedureName)
 
-			delete from #lockSummary where dbid = @nDBID and objid = @nObjID and type = @cLockType
+				set @cTableName = (select top 1 tableName from #lockResults)
+				truncate table #lockResults
+
+				set @cLocks = left(@cLocks + isnull(rtrim(ltrim(@cDatabaseName)), '') + '.' +
+					isnull(rtrim(ltrim(@cTableName)), '') + ': ' +
+					isnull(@cLocktype, '') + ', ' +
+					isnull(@cMode, '') +
+					isnull('(' + convert(varchar(20), @nLocks) + ')', '') +
+					char(13), 4000)
+
+				while charindex('__', @cLocks) > 0
+					set @cLocks = replace(@cLocks, '__', '_')
+
+				delete from #lockSummary where dbid = @nDBID and objid = @nObjID and type = @cLockType
+			end
+
+			update #processes
+				set locks = @cLocks
+				where spid = @nSPID
+
 		end
 
-		update #processes
-			set locks = @cLocks
-			where spid = @nSPID
 
+		-- END locks held by blockers or blocked
+		--*********************************************************************************************************************
+
+		-- insert into hist_monitorBigBrother (stepName) values ('Lock status updated')
+
+		insert into processLog(serverName, spid, status, login, hostname, blockedBy, dbName, command, cputime, diskio,
+			lastbatch, programName,	buffercontents, lastBatchTime, locks, isBlocked, isBlocker, isWild, sql_handle,
+			lastWaitType, login_time, net_address, waitType, waitTime, waitResource, ymd)
+		select @@serverName, spid, status, login, hostname, blockedBy, dbName, command, cputime, diskio,
+			lastbatch, programName,	buffercontents, lastBatchTime, locks, isBlocked, isBlocker, isWild, sql_handle,
+			lastWaitType, login_time, net_address, waitType, waitTime, waitResource, ymd
+
+			from #processes
+
+		-- insert into hist_monitorBigBrother (stepName) values ('Records inserted into processLog')
 	end
-
-
-	-- END locks held by blockers or blocked
-	--*********************************************************************************************************************
-
-	-- insert into hist_monitorBigBrother (stepName) values ('Lock status updated')
-
-	insert into processLog(serverName, spid, status, login, hostname, blockedBy, dbName, command, cputime, diskio,
-		lastbatch, programName,	buffercontents, lastBatchTime, locks, isBlocked, isBlocker, isWild, sql_handle,
-		lastWaitType, login_time, net_address, waitType, waitTime, waitResource, ymd)
-	select @@serverName, spid, status, login, hostname, blockedBy, dbName, command, cputime, diskio,
-		lastbatch, programName,	buffercontents, lastBatchTime, locks, isBlocked, isBlocker, isWild, sql_handle,
-		lastWaitType, login_time, net_address, waitType, waitTime, waitResource, ymd
-
-		from #processes
-
-	-- insert into hist_monitorBigBrother (stepName) values ('Records inserted into processLog')
 
 	--*********************************************************************************************************************
 	-- Job average runtimes
@@ -613,12 +618,12 @@ begin
 					and b.[name] not like '%monitor sql statistics%'
 					and b.[name] not like '%monitor table sizes%'
 					and b.[name] > @cThisJob
-					and minutesRunning > 180
+					and minutesRunning > 30
 					and (
 						d.job_id is null
 						or (
 							d.job_id is not null
-							and minutesRunning > d.runtime * 8
+							and minutesRunning > d.runtime * 4
 						)
 					)
 			)
@@ -640,12 +645,12 @@ begin
 					and b.[name] not like '%monitor sql statistics%'
 					and b.[name] not like '%monitor table sizes%'
 					and b.[name] > @cThisJob
-					and minutesRunning > 180
+					and minutesRunning > 30
 					and (
 						d.job_id is null
 						or (
 							d.job_id is not null
-							and minutesRunning > d.runtime * 8
+							and minutesRunning > d.runtime * 4
 						)
 					)
 				order by b.[name]
@@ -717,13 +722,15 @@ begin
 			and d.run_status = 0
 
 	-- jobs that have failed multiple times in the last hour or two, which would be a high priority off hours
-	insert into #results (message, severity, subject, isJobFailure)
-	select left('Job [' + isnull(rtrim(ltrim(b.name)), '') + '] ' +
+	select
+		convert(varchar(8000), 'Job [' + isnull(rtrim(ltrim(b.name)), '') + '] ' +
 			'has failed ' + isnull(convert(varchar(20), c.numFailures), '!!') + ' ' +
-			'times in the last 45 minutes.', 2000) as message,
-			case when numFailures >= 5 then 1 else 2 end as severity,
-			'Job [' + isnull(rtrim(ltrim(b.name)), '') + '] has failed at ' + right(convert(varchar(20), latestFailure, 120), 8) as subject,
-			1 as isJobFailure
+			'times in the last 45 minutes.') as message,
+		case when numFailures >= 5 then 1 else 2 end as severity,
+		'Job [' + isnull(rtrim(ltrim(b.name)), '') + '] has failed at ' + right(convert(varchar(20), latestFailure, 120), 8) as subject,
+		1 as isJobFailure,
+		a.job_id
+		into #jobMultipleFailures
 		from #allJobs a
 		join msdb..sysjobs b (nolock) on a.job_id = b.job_id
 		join (
@@ -772,15 +779,112 @@ begin
 			) c on a.job_id = c.job_id
 				and dateDiff(minute, latestFailure, getDate()) < @nMinutesBackToLook*2
 
+	update #jobMultipleFailures
+		set message = left(a.message + char(13) +
+			'Last failure message: ' + char(13) +
+			isnull(d.message, 'N/A'), 8000)
+		from #jobMultipleFailures a
+		join (
+			select a.job_id, max(c.instance_id) as instance_id
+				from #allJobs a
+				join msdb..sysJobHistory c (nolock) on a.job_id = c.job_id
+					and c.run_status = 0
+					and c.step_id <> 0
+					and dateDiff(minute,
+							dateAdd(minute,
+								left(right(right('000000' + convert(varchar(6), c.run_duration), 6), 4), 2) +
+								left(right('000000' + convert(varchar(6), c.run_duration), 6), 2) * 60,
+								convert(dateTime, left(c.run_date, 4) + '-' +
+									left(right(c.run_date, 4), 2) + '-' +
+									right(c.run_date, 2) + ' ' +
+									left(replicate('0', 6 - len(rtrim(c.Run_Time))) +
+									rtrim(ltrim(c.Run_Time)), 2) + ':' +
+									left(right(replicate('0', 6 - len(rtrim(c.Run_Time))) +
+									rtrim(ltrim(c.Run_Time)), 4), 2) + ':' +
+									right(replicate('0', 6 - len(rtrim(c.Run_Time))) +
+									rtrim(ltrim(c.Run_Time)), 2) + '.000'
+									)
+								),
+							getDate()) < @nMinutesBackToLook
+				group by a.job_id
+			) c on a.job_id = c.job_id
+		join msdb..sysjobhistory d (nolock) on a.job_id = d.job_id
+			and c.instance_id = d.instance_id
+			and d.run_status = 0
+
+	insert into #results (message, severity, subject, isJobFailure)
+	select a.message, a.severity, a.subject, 1
+		from #jobMultipleFailures a
+
+	drop table #jobMultipleFailures
+
+	delete from #results
+		where isJobFailure = 1
+			and subject like '%monitor websites%'
+			and message like '%sql server does not exist%'
+
 	-- insert into hist_monitorBigBrother (stepName) values ('Regular job alerts generated')
 
 	--**************************************************************************************************************************
 	-- if the automation job fails, check which server it conked on
 	--**************************************************************************************************************************
-	declare @notificationFailures table (job_id uniqueIdentifier, jobStartTime dateTime, failureTime dateTime, isSuccess bit,
-		nextJobStartTime dateTime, serverGroup varchar(200), errorMessage varchar(2000), ukey_group int)
-	insert into @notificationFailures (job_id, jobStartTime, failureTime, isSuccess, serverGroup, errorMessage)
-	select 	a.job_id,
+
+	create table #detailedCheckJobs (job_id uniqueIdentifier, jobStartTime dateTime, jobEndTime dateTime, isSuccess bit, serverGroup varchar(200),
+		ukey_group int, errorMessage varchar(8000))
+
+	--declare @cBuffer varchar(8000)
+	--declare @nUkey int
+	--declare @dStartTime dateTime
+
+	select
+		identity(int) as ukey,
+		ukey_group, serverName, runGUID,
+		min(ukey) as ukey_start,
+		max(ukey) as ukey_end,
+		min(ymd) as startTime,
+		max(ymd) as endTime,
+		max(case when stepName = 'END' then 1 else 0 end) as isSuccess,
+		dateDiff(second, min(ymd), max(ymd)) as runningSeconds,
+		convert(varchar(8000), null) as runHistory
+		into #detailedChecks
+		from notificationLog_history (nolock)
+		where runGUID is not null
+			and ukey_group is not null
+		group by ukey_group, serverName, runGUID
+
+	delete from #detailedChecks where startTime < dateAdd(minute, -15, getDate())
+
+	set @cBuffer = ''
+	set @nUkey = 0
+
+	while exists (select top 1 ukey from #detailedChecks where ukey > @nUkey)
+	begin
+		select top 1
+			@nUkey = ukey,
+			@dStartTime = startTime
+			from #detailedChecks
+			where ukey > @nukey
+			order by ukey
+
+		set @cBuffer = ''
+
+		select
+			@cBuffer = left(@cBuffer +
+				stepName + ' (' + convert(varchar(20), b.ymd, 120) + ')' +
+				case when b.ukey = ukey_end and isSuccess = 0 then char(13) + replicate('=', 20) + char(13) + stepData else '' end + char(13), 8000)
+			from #detailedChecks a
+			join notificationLog_history b (nolock) on a.ukey_group = b.ukey_group
+				and a.serverName = b.serverName
+				and a.runGUID = b.runGUID
+			where a.ukey = @nUkey
+			order by b.ukey
+
+		update #detailedChecks set runHistory = @cBuffer where ukey = @nUkey
+	end
+
+	insert into #detailedCheckJobs (job_id, jobStartTime, jobEndTime, isSuccess, serverGroup, errorMessage)
+	select
+		a.job_id,
 		convert(dateTime, left(c.run_date, 4) + '-' +
 			left(right(c.run_date, 4), 2) + '-' +
 			right(c.run_date, 2) + ' ' +
@@ -805,11 +909,11 @@ begin
 				right(replicate('0', 6 - len(rtrim(c.Run_Time))) +
 				rtrim(ltrim(c.Run_Time)), 2) + '.000'
 				)
-			) as failureTime,
+			) as jobEndTime,
 		case when c.run_status = 0 then 0 else 1 end as isSuccess,
 		rtrim(ltrim(substring(a.[name], charindex('-', a.[name]) + 1, 99))) as serverGroup,
 		left(c.message, 2000) as errorMessage
-		from msdb..sysjobs a
+		from msdb..sysjobs a (nolock)
 		join msdb..sysJobHistory c (nolock) on a.job_id = c.job_id
 			and c.step_id <> 0
 			and dateDiff(minute,
@@ -827,109 +931,68 @@ begin
 							rtrim(ltrim(c.Run_Time)), 2) + '.000'
 							)
 						),
-					getDate()) < @nMinutesBackToLook*2
+					getDate()) < 30
 
 			-- ignore errors that result from attempting to touch a db that slipped into a RESTORE mid-statement
 			and c.message not like '%middle of a restore%'
 			and c.message not like '%definition of object%'
---			and (
---				(
---					c.message not like '%resource limit was reached%'
---					and c.message not like '%0x80004005%'
---					and c.message not like '%SQL Server does not exist or access denied%'
---					)
---				or a.[name] like '%priority 1%'
---				)
-
 		where a.[name] like '%sql detailed check -%'
 
-	update @notificationFailures
+	update #detailedCheckJobs
 		set ukey_group = b.ukey
-		from @notificationFailures a
+		from #detailedCheckJobs a
 		join dm_serverGroups b on a.serverGroup = b.groupName
 
-	if (select count(*) from @notificationFailures where isSuccess = 0) > 0
-	begin
-
-		update @notificationFailures
-			set nextJobStartTime = b.nextJobStartTime
-			from @notificationFailures a
-			join (
-				select a.job_id, a.jobStartTime, min(b.jobStartTime) as nextJobStartTime
-					from @notificationFailures a
-					join @notificationFailures b on a.jobStartTime < b.jobStartTime
-						and a.job_id = b.job_id
-					group by a.jobStartTime, a.job_id
-				) b on a.jobStartTime = b.jobStartTime
-					and a.job_id = b.job_id
-
-		update @notificationFailures
-			set nextJobStartTime = getDate()
-			where nextJobStartTime is null
-
-		insert into #results (message, severity, subject, isJobFailure, serverName)
-		select left(
-			'The notification system failed on the ''' + isnull(b.stepName, 'N/A') + ''' step ' +
-			'after ' + isnull(convert(varchar(20), dateDiff(second, b.ymd, a.failureTime)), 'N/A') + ' seconds ' +
-			'while communicating with ' + isnull(isnull(c.friendlyName, c.serverName), 'N/A') + '. ' +
-			'The job as a whole started at ' + convert(varchar(30), a.jobStartTime, 120) + ', ' +
-			'ran for ' + convert(varchar(20), dateDiff(second, a.jobStartTime, a.failureTime)) + ' seconds ' +
-			'and was able to process ' + convert(varchar(20), a.numServers) + ' other servers without error.' + char(13) +
-			'Error Message: ' + char(13) + a.errorMessage, 2000) as message,
-			c.offHoursPriority as severity,
-			'Lost communication with ' + isnull(b.serverName, 'N/A') + ' at ' + right(convert(varchar(30), a.failureTime, 120), 8) + '.' as subject,
-			1 as isJobFailure, c.serverName
-
-			from (
-				select a.jobStartTime, a.failureTime, a.nextJobStartTime, a.errorMessage, a.ukey_group,
-					max(b.ymd) as ymd,
-					count(distinct b.serverName) as numServers
-					from @notificationFailures a
-					left outer join notificationLog_history b on b.ymd >= a.jobStartTime
-						and b.ymd < a.nextJobStartTime
-						and a.ukey_group = b.ukey_group
-					where a.isSuccess = 0
-					group by a.jobStartTime, a.failureTime, a.nextJobStartTime, a.errorMessage, a.ukey_group
-				) a
-			join notificationLog_history b on a.ymd = b.ymd
-			join dm_servers c on b.serverName = c.serverName
-				and (
-					(
-						c.ignoreTimeouts = 1
-						and (
-							a.errorMessage not like '%resource limit was reached%'
-							and a.errorMessage not like '%0x80004005%'
-							and a.errorMessage not like '%SQL Server does not exist or access denied%'
-							and a.errorMessage not like '%timeout%'
-							)
-						)
-					or isnull(c.ignoreTimeouts, 0) = 0
+	-- these should be failures or timeouts
+	insert into #results (serverName, subject, message, severity)
+	select
+		a.serverName,
+		'Detailed check ' +
+			'of ' + a.serverName + ' ' +
+			'@ ' + right(convert(varchar(20), a.startTime, 120), 8) + ' ' +
+			case when c.job_id is not null
+				then 'FAILED.'
+				else 'running ' + convert(varchar(20), dateDiff(second, a.startTime, getDate())) + 's.'
+				end
+			as subject,
+		left(
+			'Detailed check ' +
+				'of ' + a.serverName + ' ' +
+				'@ ' + right(convert(varchar(20), a.startTime, 120), 8) + ' ' +
+				case when c.job_id is not null
+					then 'FAILED.'
+					else 'running ' + convert(varchar(20), dateDiff(second, a.startTime, getDate())) + 's.'
+					end +
+				char(13) + char(13) +
+				'Run History: ' + char(13) +
+				isnull(a.runHistory, 'N/A') + char(13) + char(13) +
+				'Job Status: ' + char(13) +
+				isnull(c.errorMessage, 'N/A'),
+			8000) as message,
+		1 as severity
+		from #detailedChecks a
+		left outer join (
+			select ukey_group, serverName, avg(convert(decimal(10,2), runningSeconds)) as avgRuntime
+				from #detailedChecks
+				where isSuccess = 1
+				group by ukey_group, serverName
+				having count(*) >= 3
+			) b on a.ukey_group = b.ukey_group
+				and a.serverName = b.serverName
+		left outer join #detailedCheckJobs c on a.ukey_group = c.ukey_group
+			and a.startTime >= c.jobStartTime
+			and a.endTime <= c.jobEndTime
+			and c.isSuccess = 0
+		where a.isSuccess = 0
+			and (
+				(b.avgRuntime is not null and a.runningSeconds > b.avgRuntime * 2)
+					or (b.avgRuntime is null and a.runningSeconds > 60*3)
 				)
 
-			where dateDiff(second, left(convert(varchar(20), b.ymd, 120), 19), a.failureTime) >= 0
 
-		update dm_servers
-			set skipNextRun = 1
-			from dm_servers a
-			join (
-				select b.serverName
-					from (
-						select a.jobStartTime, a.failureTime, a.nextJobStartTime, a.errorMessage, a.ukey_group,
-							max(b.ymd) as ymd,
-							count(distinct b.serverName) as numServers
-							from @notificationFailures a
-							left outer join notificationLog_history b on b.ymd >= a.jobStartTime
-								and b.ymd < a.nextJobStartTime
-								and a.ukey_group = b.ukey_group
-							where a.isSuccess = 0
-							group by a.jobStartTime, a.failureTime, a.nextJobStartTime, a.errorMessage, a.ukey_group
-						) a
-					join notificationLog_history b on a.ymd = b.ymd
-					where dateDiff(second, left(convert(varchar(20), b.ymd, 120), 19), a.failureTime) >= 0
-						and dateDiff(minute, a.failureTime, getDate()) < 10
-				) b on a.serverName = b.serverName
+	drop table #detailedChecks
+	drop table #detailedCheckJobs
 
-	end
 
 	-- insert into hist_monitorBigBrother (stepName) values ('Automation job alerts created')
 
@@ -951,7 +1014,7 @@ begin
 		'Drive ' + driveLetter + ' is down to ' + convert(varchar(100), freeSpace) + 'mb free.' as subject,
 		1 as isDriveSpace
 		from #drives
-		where freeSpace < case when @@servername like '%stby%' or @@servername like '%test%' then 1000 else 1000 end
+		where freeSpace < 500
 
 	DROP TABLE #drives
 
@@ -1197,14 +1260,10 @@ begin
 	-- Send output to the notification system
 	--*********************************************************************************************************************
 
-	declare @nUkey int
-
-	set @nUkey = (select max(ukey) from notificationLog)
-
 	-- automatically deprioritize all issues
 	insert into notificationLog_stage (message, severity, subject,
 		isJobFailure, isLogShippingJobFailure, isLongRunningJob, isBlocking, isLongRunningProcess,
-		isDriveSpace, isLogSize, isEventLog, serverName)
+		isDriveSpace, isLogSize, isEventLog, serverName, ymd)
 	select message,
 		case
 			when message like '%test%'
@@ -1215,7 +1274,7 @@ begin
 			else severity end as severity,
 		subject,
 		isJobFailure, isLogShippingJobFailure, isLongRunningJob, isBlocking, isLongRunningProcess,
-		isDriveSpace, isLogSize, isEventLog, isnull(serverName, @@serverName)
+		isDriveSpace, isLogSize, isEventLog, isnull(serverName, @@serverName), ymd
 		from #results
 
 	drop table #results
@@ -1233,4 +1292,3 @@ begin
 	-- insert into hist_monitorBigBrother (stepName) values ('Alerts sent')
 
 end
-GO

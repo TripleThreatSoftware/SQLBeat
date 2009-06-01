@@ -1,9 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[pr_monitorDatabaseBackups]    Script Date: 05/19/2009 13:59:45 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-CREATE procedure [dbo].[pr_monitorDatabaseBackups]
+ALTER procedure [dbo].[pr_monitorDatabaseBackups]
 as
 begin
 
@@ -23,6 +18,7 @@ begin
 			where detailedCheck = 1
 				and isenabled = 1
 				and serverName > @cServerName
+				and checkDatabaseBackups = 1
 		)
 	begin
 		select top 1 @cServerName = serverName
@@ -32,6 +28,7 @@ begin
 			where detailedCheck = 1
 				and isenabled = 1
 				and serverName > @cServerName
+				and checkDatabaseBackups = 1
 			order by serverName
 
 		set @cSQLString = '

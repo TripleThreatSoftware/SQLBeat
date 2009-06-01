@@ -1,8 +1,10 @@
-/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 05/19/2009 13:59:45 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
+--alter table notificationLog_history add runGUID uniqueIdentifier
+--go
+--create clustered index ix_notificationLogHistory_ukey_group_serverName_runGUID on notificationLog_history (ukey, serverName, ukey_group, runGUID) with fillfactor = 50
+--go
+--create index ix_notificationLogHistory_group_serverName_runGUID_ymd_stepName_ukey on notificationLog_history (ukey_group, serverName, runGUID, stepName, ukey) with fillfactor = 50
+--go
+
 --select @@servername
 --'doe-cgetzer-2k3\2K3DEVSEED3'
 -- EXEC sp_configure 'xp_cmdshell', '1'
@@ -13,7 +15,7 @@ GO
 -- select top 100 * from processLog order by ukey desc
 -- exec pr_examineServer 'sqlcluster01', 600
 -- exec pr_examineServer '10.3.10.197', 600
-CREATE procedure [dbo].[pr_examineServer] (@cServerName varchar(100), @nMinutesBackToLook int)
+ALTER procedure [dbo].[pr_examineServer] (@cServerName varchar(100), @nMinutesBackToLook int)
 as
 begin
 -- 	declare @cServerName varchar(100)
@@ -27,6 +29,9 @@ begin
 	declare @bTesting bit
 	set @bTesting = 0
 	--***************************************
+
+	declare @cRunGUID uniqueIdentifier
+	set @cRunGUID = NEWID()
 
 	declare @cFriendlyName varchar(200)
 	declare @cUserName varchar(100)
@@ -55,6 +60,8 @@ begin
 	declare @nBlockingSecondsThreshold bigint
 
 	declare @bIsOffHours bit
+
+	insert into notificationLog_history (runGUID, serverName, stepName, ukey_group) values (@cRunGUID, @cServerName, 'START', @nUkeyGroup)
 
 	set @cThisServerName = (select settingValue from dm_settings where settingName = 'Current machine name')
 
@@ -98,7 +105,11 @@ begin
 	exec @nReturnStatus = pr_pingServer @cServerName
 
 	if isnull(@nReturnStatus, 0) = 0
+	begin
+		insert into notificationLog_history (runGUID, serverName, stepName, ukey_group) values (@cRunGUID, @cServerName, 'FAIL: Server not pingable', @nUkeyGroup)
+
 		return
+	end
 
 	--*******************************************************************************************************************
 	-- END: Decide if the server is online
@@ -112,6 +123,8 @@ begin
 
 	if (select count(*) from #linkedServers where srv_dataSource = @cServerName) = 0
 	begin
+		insert into notificationLog_history (runGUID, serverName, stepName, ukey_group) values (@cRunGUID, @cServerName, 'Creating linked server', @nUkeyGroup)
+
 		exec sp_addlinkedserver @server=@cServerName, @srvproduct='', @provider='SQLOLEDB', @datasrc=@cServerName
 		exec sp_serveroption @cServerName, 'rpc', TRUE
 		exec sp_serveroption @cServerName, 'rpc out', TRUE
@@ -192,7 +205,7 @@ begin
 	if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
 		execute('drop procedure ' + @cProcedureName)
 
-	insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'SQL Version', @cSQLString, @nUkeyGroup)
+	insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'SQL Version', @cSQLString, @nUkeyGroup)
 
 	exec sp_executeSQL @cSQLString
 
@@ -238,7 +251,7 @@ begin
 	if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
 		execute('drop procedure ' + @cProcedureName)
 
-	insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Performance counters', @cSQLString, @nUkeyGroup)
+	insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Performance counters', @cSQLString, @nUkeyGroup)
 	exec sp_executeSQL @cSQLString
 
 	if @bTesting = 1
@@ -252,7 +265,7 @@ begin
 	--*********************************************************************************************************************
 	--*********************************************************************************************************************
 	if (select top 1 isnull(isSQLAgentServiceRunning, 0) from dm_servers where serverName = @cServerName) = 0
-		insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Job checks skipped. Agent is not running.', @cSQLString, @nUkeyGroup)
+		insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Job checks skipped. Agent is not running.', @cSQLString, @nUkeyGroup)
 	else
 	begin
 		--*********************************************************************************************************************
@@ -344,7 +357,7 @@ begin
 		if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
 			execute('drop procedure ' + @cProcedureName)
 
-		insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Job average runtimes', @cSQLString, @nUkeyGroup)
+		insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Job average runtimes', @cSQLString, @nUkeyGroup)
 		exec sp_executeSQL @cSQLString
 
 		if @bTesting = 1
@@ -401,7 +414,7 @@ begin
 		if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
 			execute('drop procedure ' + @cProcedureName)
 
-		insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Snapshot of all jobs', @cSQLString, @nUkeyGroup)
+		insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Snapshot of all jobs', @cSQLString, @nUkeyGroup)
 		exec sp_executeSQL @cSQLString
 
 		if @bTesting = 1
@@ -445,7 +458,7 @@ begin
 		if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
 			execute('drop procedure ' + @cProcedureName)
 
-		insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Job start times', @cSQLString, @nUkeyGroup)
+		insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Job start times', @cSQLString, @nUkeyGroup)
 		exec sp_executeSQL @cSQLString
 
 		if @bTesting = 1
@@ -833,7 +846,7 @@ begin
 		if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
 			execute('drop procedure ' + @cProcedureName)
 
-		insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Failed jobs', @cSQLString, @nUkeyGroup)
+		insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Failed jobs', @cSQLString, @nUkeyGroup)
 
 		exec sp_executeSQL @cSQLString
 
@@ -888,7 +901,7 @@ begin
 	if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
 		execute('drop procedure ' + @cProcedureName)
 
-	insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Orphaned Users', @cSQLString, @nUkeyGroup)
+	insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Orphaned Users', @cSQLString, @nUkeyGroup)
 
 	exec sp_executeSQL @cSQLString
 
@@ -909,20 +922,16 @@ begin
 
 	if @cVersion like '%2005%'
 	begin
-		create table #sqlErrors (ymd dateTime, processInfo varchar(100), logMessage varchar(8000), nastyLine varchar(max))
+		create table #sqlErrors (ymd dateTime, processInfo varchar(100), logMessage varchar(8000), nastyLine varchar(max), ukey int identity)
 
+		--***********************************************************
+		-- current error log
 		if @cUserName is not null
-		begin
-			-- with password, for stores
 			set @cSQLString = 'osql -S' + @cServerName + ' -U' + @cUserName + ' -P' + @cPassword + ' -n -h-1 -w8000 -s"|" -dmaster -Q "exec master.dbo.sp_readerrorlog"'
-		end
 		else
-		begin
-			-- without password, for local boxes that'll accept sqladmin under windows authentication
 			set @cSQLString = 'osql -S' + @cServerName + ' -E -n -h-1 -w8000 -s"|" -dmaster -Q "exec master.dbo.sp_readerrorlog"'
-		end
 
-		insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Reading error log', @cSQLString, @nUkeyGroup)
+		insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Reading current error log', @cSQLString, @nUkeyGroup)
 
 		insert into #sqlErrors (nastyLine)
 		exec master..xp_cmdShell @cSQLString
@@ -937,10 +946,45 @@ begin
 
 		delete from #sqlErrors where ymd is null
 
+		--***********************************************************
+		-- previous error log, if it's just cycled and if we have previous data we need to complete
+		if exists (
+			select top 1 ukey
+				from #sqlErrors
+				where ymd > (select isnull(max(ymd), dateAdd(week, -2, getDate())) from sqlErrorLog (nolock) where serverName = @cServerName)
+					and processInfo like '%server%'
+					and logMessage like '%microsoft sql server%'
+			)
+			and (select count(*) from sqlErrorLog (nolock) where serverName = @cServerName) > 0
+		begin
+
+			if @cUserName is not null
+				set @cSQLString = 'osql -S' + @cServerName + ' -U' + @cUserName + ' -P' + @cPassword + ' -n -h-1 -w8000 -s"|" -dmaster -Q "exec master.dbo.sp_readerrorlog 1"'
+			else
+				set @cSQLString = 'osql -S' + @cServerName + ' -E -n -h-1 -w8000 -s"|" -dmaster -Q "exec master.dbo.sp_readerrorlog 1"'
+
+			insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Reading previous error log', @cSQLString, @nUkeyGroup)
+
+			insert into #sqlErrors (nastyLine)
+			exec master..xp_cmdShell @cSQLString
+
+			delete from #sqlErrors where nastyLine = ''or nastyLine = 'null'
+
+			update #sqlErrors
+				set ymd = dbo.fn_returnListItem(nastyLine, 1, '|'),
+					processInfo = dbo.fn_returnListItem(nastyLine, 2, '|'),
+					logMessage = dbo.fn_returnListItem(nastyLine, 3, '|')
+				where charindex('|', nastyLine) > 0
+					and ymd is null
+
+			delete from #sqlErrors where ymd is null
+
+		end
+
 		insert into sqlErrorLog (ymd, processInfo, logMessage, serverName)
 		select ymd, processInfo, logMessage, @cServerName
 			from #sqlErrors
-			where ymd > (select isnull(max(ymd), dateAdd(week, -2, getDate())) from sqlErrorLog where serverName = @cServerName)
+			where ymd > (select isnull(max(ymd), dateAdd(week, -2, getDate())) from sqlErrorLog (nolock) where serverName = @cServerName)
 			order by ymd
 
 		drop table #sqlErrors
@@ -971,7 +1015,7 @@ begin
 					left outer join master.dbo.sysdatabases b on a.dbid = b.dbid
 					where a.spid > 50'')'
 
-		insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Running processes', @cSQLString, @nUkeyGroup)
+		insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Running processes', @cSQLString, @nUkeyGroup)
 
 		insert into #processes (spid, status, login, hostname, blockedby, dbname, command, cputime, diskio,
 			lastbatch, programName, lastWaitType, login_time, net_address, lastBatchTime, waitType, waitTime,
@@ -1035,7 +1079,7 @@ begin
 --		if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
 --			execute('drop procedure ' + @cProcedureName)
 --
---		insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Running processes', @cSQLString, @nUkeyGroup)
+--		insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Running processes', @cSQLString, @nUkeyGroup)
 --		exec sp_executeSQL @cSQLString
 
 		update #processes
@@ -1188,7 +1232,7 @@ begin
 				or bufferContents like '%repl%'
 				or dbName = 'distribution'
 
-		insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Input buffer for running SPIDs', @cSQLString, @nUkeyGroup)
+		insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Input buffer for running SPIDs', @cSQLString, @nUkeyGroup)
 
 		-- end INPUTBUFFER
 		--*********************************************************************************************************************
@@ -1266,7 +1310,7 @@ begin
 			if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
 				execute('drop procedure ' + @cProcedureName)
 
-			insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Locks held', @cSQLString, @nUkeyGroup)
+			insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Locks held', @cSQLString, @nUkeyGroup)
 			exec sp_executeSQL @cSQLString
 
 			if @bTesting = 1
@@ -1281,7 +1325,7 @@ begin
 
 				if @nObjID is null or @nDBID is null
 				begin
-					insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Locks: Database names', 'Database or Object ID was null!', @nUkeyGroup)
+					insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Locks: Database names', 'Database or Object ID was null!', @nUkeyGroup)
 					delete from #lockSummary where isnull(dbid, 0) = isnull(@nDBID, 0) and isnull(objid, 0) = isnull(@nObjID, 0) and type = @cLockType
 					continue
 				end
@@ -1304,7 +1348,7 @@ begin
 				if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
 					execute('drop procedure ' + @cProcedureName)
 
-				insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Locks: Database names', @cSQLString, @nUkeyGroup)
+				insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Locks: Database names', @cSQLString, @nUkeyGroup)
 				exec sp_executeSQL @cSQLString
 
 				if @bTesting = 1
@@ -1316,7 +1360,7 @@ begin
 
 				if @cDatabaseName is null
 				begin
-					insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Locks: Database names', 'Database name was null!', @nUkeyGroup)
+					insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Locks: Database names', 'Database name was null!', @nUkeyGroup)
 					delete from #lockSummary where isnull(dbid, 0) = isnull(@nDBID, 0) and isnull(objid, 0) = isnull(@nObjID, 0) and type = @cLockType
 					continue
 				end
@@ -1334,7 +1378,7 @@ begin
 				if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
 					execute('drop procedure ' + @cProcedureName)
 
-				insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Locks: Object names', @cSQLString, @nUkeyGroup)
+				insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Locks: Object names', @cSQLString, @nUkeyGroup)
 				exec sp_executeSQL @cSQLString
 
 				if @bTesting = 1
@@ -1577,7 +1621,7 @@ begin
 	if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
 		execute('drop procedure ' + @cProcedureName)
 
-	insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Drive space', @cSQLString, @nUkeyGroup)
+	insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Drive space', @cSQLString, @nUkeyGroup)
 	exec sp_executeSQL @cSQLString
 
 	if @bTesting = 1
@@ -1658,7 +1702,7 @@ begin
 				end
 			end'
 
-		insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Replication errors', @cSQLString, @nUkeyGroup)
+		insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Replication errors', @cSQLString, @nUkeyGroup)
 
 		if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
 			execute('drop procedure ' + @cProcedureName)
@@ -1672,7 +1716,7 @@ begin
 		EXECUTE(@cProcedureName)
 	end
 	else
-		insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'No replication found', @cSQLString, @nUkeyGroup)
+		insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'No replication found', @cSQLString, @nUkeyGroup)
 
 	--*********************************************************************************************************************
 	-- Log file size
@@ -1708,7 +1752,7 @@ begin
 		if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
 			execute('drop procedure ' + @cProcedureName)
 
-		insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Log size: Database names', @cSQLString, @nUkeyGroup)
+		insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Log size: Database names', @cSQLString, @nUkeyGroup)
 		exec sp_executeSQL @cSQLString
 
 		if @bTesting = 1
@@ -1753,7 +1797,7 @@ union'
 				if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
 					execute('drop procedure ' + @cProcedureName)
 
-				insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Log size: File sizes', @cSQLString, @nUkeyGroup)
+				insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Log size: File sizes', @cSQLString, @nUkeyGroup)
 
 				exec sp_executeSQL @cSQLString
 				if @bTesting = 1
@@ -1775,7 +1819,7 @@ union'
 			if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
 				execute('drop procedure ' + @cProcedureName)
 
-			insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Log size: File sizes', @cSQLString, @nUkeyGroup)
+			insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Log size: File sizes', @cSQLString, @nUkeyGroup)
 
 			exec sp_executeSQL @cSQLString
 			if @bTesting = 1
@@ -1832,7 +1876,7 @@ union'
 	-- Send output to the notification system
 	--*********************************************************************************************************************
 
-	insert into notificationLog_history (serverName, stepName, stepData, ukey_group) values (@cServerName, 'Calculating results', '', @nUkeyGroup)
+	insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Calculating results', '', @nUkeyGroup)
 
 	-- automatically deprioritize all issues from test boxen
 	insert into notificationLog_stage (message, severity, subject,
@@ -1869,8 +1913,9 @@ union'
 
 	if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
 		execute('drop procedure ' + @cProcedureName)
+
+	insert into notificationLog_history (runGUID, serverName, stepName, ukey_group) values (@cRunGUID, @cServerName, 'END', @nUkeyGroup)
 end
 -- select top 100 * from notificationLog order by ukey desc
 -- select top 100 * from notificationLog_history order by ukey desc
 -- delete from notificationLog where ukey >= 50239
-GO

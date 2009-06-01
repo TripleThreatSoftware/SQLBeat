@@ -1,13 +1,6 @@
-/****** Object:  StoredProcedure [dbo].[pr_monitorSQLErrorLogs]    Script Date: 05/19/2009 13:59:45 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-create procedure [dbo].[pr_monitorSQLErrorLogs]
+ALTER procedure [dbo].[pr_monitorSQLErrorLogs]
 as
 begin
-	declare @dMinDate dateTime
-	set @dMinDate = dateAdd(minute, 15 * datePart(minute, getDate()) / 15, convert(varchar(14), getDate(), 120) + '00.000')
 
 	create table #errorsFound (ymd dateTime, serverName varchar(200), processInfo varchar(500), logMessage varchar(8000),
 		ukey int, isLoginFailure bit default 0, isDeadlock bit default 0)
@@ -16,16 +9,18 @@ begin
 	select
 		ymd, serverName, processInfo, convert(varchar(8000), logMessage) as logMessage, ukey
 		from sqlErrorLog
-		where ymd >= dateAdd(day, -2, getDate())
+		where ymd >= dateAdd(hour, -2, getDate())
 			and (
 				logMessage like '%deadlock%'
 				or logMessage like '%login failed%'
+				or logMessage like '%transactions rolled%'
+				or logMessage like '%recovery is writing%'
 				or (logMessage like '%error%' and logMessage not like '%0 errors%' and logMessage not like '%without errors%')
 				)
 
 	insert into #errorsFound (ymd, serverName, processInfo, logMessage, ukey)
 	select a.ymd, a.serverName, a.processInfo, a.logMessage, a.ukey
-		from sqlErrorLog a
+		from sqlErrorLog a (nolock)
 		join #errorsFound b on a.ymd = b.ymd
 			and a.processInfo = b.processInfo
 			and a.serverName = b.serverName
@@ -53,6 +48,7 @@ begin
 		from #errorsFound
 		where isDeadlock = 1
 
+	-- login failures
 	select
 		serverName,
 		ymd,
@@ -65,35 +61,53 @@ begin
 			and charindex('client:', logMessage) > 0
 			and logMessage not like '%sspi%'
 
-	select
-		serverName,
-		min(ymd) as ymd_min,
-		max(ymd) as ymd_max,
-		clientAddress,
-		'Login failure alert for host "' + clientAddress + '" at ' + convert(varchar(20), max(ymd), 120) + '.' as subject,
-		'Between ' + convert(varchar(20), min(ymd), 120) + ' and ' + convert(varchar(20), max(ymd), 120) + ' there have been ' + convert(varchar(20), count(*)) + ' failed login attempts from host "' + clientAddress + '".' as message,
-		identity(int) as ukey
-		into #loginAddressFailures
-		from #loginFailures
-		where ymd < @dMinDate
-			and clientAddress <> ''
-		group by serverName, clientAddress, convert(varchar(10), ymd, 120), datePart(hour, ymd), datePart(minute, ymd) / 15
+	-- if there are a whole bunch, roll the message up
+	if @@rowcount > 50
+	begin
+		select
+			serverName,
+			min(ymd) as ymd_min,
+			max(ymd) as ymd_max,
+			clientAddress,
+			'Login failure alert for host "' + clientAddress + '" at ' + convert(varchar(20), max(ymd), 120) + '.' as subject,
+			'Between ' + convert(varchar(20), min(ymd), 120) + ' and ' + convert(varchar(20), max(ymd), 120) + ' there have been ' + convert(varchar(20), count(*)) + ' failed login attempts from host "' + clientAddress + '".' as message,
+			identity(int) as ukey
+			into #loginAddressFailures
+			from #loginFailures
+			where clientAddress <> ''
+			group by serverName, clientAddress, convert(varchar(10), ymd, 120), datePart(hour, ymd), datePart(minute, ymd) / 5
 
-	select
-		serverName,
-		min(ymd) as ymd_min,
-		max(ymd) as ymd_max,
-		loginName,
-		'Login failure alert for user "' + loginName + '" at ' + convert(varchar(20), max(ymd), 120) + '.' as subject,
-		'Between ' + convert(varchar(20), min(ymd), 120) + ' and ' + convert(varchar(20), max(ymd), 120) + ' there have been ' + convert(varchar(20), count(*)) + ' failed login attempts for login "' + loginName + '".' as message,
-		identity(int) as ukey
-		into #loginNameFailures
-		from #loginFailures
-		where ymd < @dMinDate
-			and loginName <> ''
-		group by serverName, loginName, convert(varchar(10), ymd, 120), datePart(hour, ymd), datePart(minute, ymd) / 15
+		select
+			serverName,
+			min(ymd) as ymd_min,
+			max(ymd) as ymd_max,
+			loginName,
+			'Login failure alert for user "' + loginName + '" at ' + convert(varchar(20), max(ymd), 120) + '.' as subject,
+			'Between ' + convert(varchar(20), min(ymd), 120) + ' and ' + convert(varchar(20), max(ymd), 120) + ' there have been ' + convert(varchar(20), count(*)) + ' failed login attempts for login "' + loginName + '".' as message,
+			identity(int) as ukey
+			into #loginNameFailures
+			from #loginFailures
+			where loginName <> ''
+			group by serverName, loginName, convert(varchar(10), ymd, 120), datePart(hour, ymd), datePart(minute, ymd) / 5
+	end
+	else
+	begin
+
+		insert into notificationLog_stage (ymd, serverName, severity, subject, message)
+		select
+			ymd,
+			serverName,
+			1,
+			'Login failure alert for host "' + isnull(clientAddress, 'N/A') + '" as "' + isnull(loginName, 'N/A') + '" at ' + convert(varchar(20), ymd, 120) + '.' as subject,
+			logMessage as message
+			from #loginFailures
+			where clientAddress <> ''
+
+	end
 
 
+
+	-- send error message output
 	declare @nThisUkey int
 	declare @cServerName varchar(100)
 	declare @dYMDBegin dateTime
@@ -216,4 +230,3 @@ begin
 	drop table #loginNameFailures
 	drop table #deadlocks
 end
-GO

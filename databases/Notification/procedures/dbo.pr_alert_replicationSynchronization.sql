@@ -1,12 +1,7 @@
-/****** Object:  StoredProcedure [dbo].[pr_alert_replicationSynchronization]    Script Date: 05/19/2009 13:59:45 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
 -- exec pr_alert_replicationSynchronization 'mssql-ny', 'mssql_slv-ny', 'transactions_ap'
 -- exec pr_alert_replicationSynchronization 'mssql-ny', 'mssql_slv-ny', 'transactions_hk'
 
-CREATE procedure [dbo].[pr_alert_replicationSynchronization] (@cServerName_Publisher varchar(100), @cServerName_Subscriber varchar(100), @cDatabaseName varchar(100))
+ALTER procedure [dbo].[pr_alert_replicationSynchronization] (@cServerName_Publisher varchar(100), @cServerName_Subscriber varchar(100), @cDatabaseName varchar(100))
 as
 begin
 
@@ -92,8 +87,9 @@ begin
 	insert into notification..notificationLog_stage (serverName, subject, message, severity)
 	select @cServerName_Subscriber as serverName,
 		'Subscription [' + @cDatabaseName + '] is out of synch ' +
-			'for ' + convert(varchar(10), a.ymd, 120) +
-			isnull(' (' + convert(varchar(20), dateDiff(hour, b.latestData, a.latestData)) + ' hrs)', '') + '.' as subject,
+			'as of ' + isnull(convert(varchar(10), b.latestData, 120), 'NO DATA') + ' ' +
+			'(' + convert(varchar(20), dateDiff(hour, b.latestData, getDate())) + 'hrs).'
+			as subject,
 		'Publisher [' + @cServerName_Publisher + '].[' + @cDatabaseName + '] ' +
 			'shows ' + convert(varchar(20), a.numTransactions) + ' rows ' +
 			'as of ' + convert(varchar(20), a.latestData, 120) + ', ' +
@@ -103,8 +99,31 @@ begin
 		1 as severity
 		from ( select ymd, numTransactions, latestData from #results where location = 'publisher' ) a
 		left outer join ( select ymd, numTransactions, latestData from #results where location = 'subscriber' ) b on a.ymd = b.ymd
-		where isnull(a.numTransactions, 0) <> isnull(b.numTransactions, 0)
+		where abs(isnull(a.numTransactions, 0) - isnull(b.numTransactions, 0)) >= 15
 		order by a.ymd
+
+	if exists (select [name] from mart.dbo.sysobjects where [name] = 'mart_replicationStatus')
+	begin
+		insert into mart.dbo.mart_replicationStatus (serverName, databaseName, tableName, numRecords, maxDate)
+		select
+			@cServerName_Publisher as serverName,
+			@cDatabaseName as databaseName,
+			'transactions' as tableName,
+			numTransactions as numRows,
+			latestData as maxDate
+			from #results
+			where location = 'publisher'
+
+		insert into mart.dbo.mart_replicationStatus (serverName, databaseName, tableName, numRecords, maxDate)
+		select
+			@cServerName_Subscriber as serverName,
+			@cDatabaseName as databaseName,
+			'transactions' as tableName,
+			numTransactions as numRows,
+			latestData as maxDate
+			from #results
+			where location = 'subscriber'
+	end
 
 	drop table #results
 end

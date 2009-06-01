@@ -1,8 +1,3 @@
-/****** Object:  StoredProcedure [dbo].[pr_monitorPerformanceLog]    Script Date: 05/19/2009 13:59:45 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
 --exec pr_monitorSQLPerformance 'sqlcluster01', '2009-04-01 11:00:00.000'
 --exec pr_monitorSQLPerformance 'sqlcluster01', '2009-04-01 11:05:00.000'
 --exec pr_monitorSQLPerformance 'sqlcluster01', '2009-04-01 11:10:00.000'
@@ -25,7 +20,7 @@ GO
 --
 --go
 
-CREATE procedure [dbo].[pr_monitorPerformanceLog] (@dRightNow dateTime = null)
+ALTER procedure [dbo].[pr_monitorPerformanceLog] (@dRightNow dateTime = null)
 as
 begin
 	set nocount on
@@ -207,6 +202,22 @@ begin
 	-- we don't care if the hit ratio is getting better
 	delete from #results where counterName = 'Buffer cache hit ratio' and time10 > time1
 
+	-- lose junk with just plan cache errors
+	delete #results
+		from #results a
+		join (
+			select
+				ukey_server,
+				sum(case when rtrim(ltrim(objectName)) = 'SQLServer:Plan Cache' then 1 else 0 end) as numBad,
+				sum(case when rtrim(ltrim(objectName)) <> 'SQLServer:Plan Cache' then 1 else 0 end) as numGood
+				from #results
+				group by ukey_server
+			) b on a.ukey_server = b.ukey_server
+				and b.numBad > 0
+				and b.numGood = 0
+
+	print 'Deleted ' + convert(varchar(20), @@rowcount) + ' junk sets'
+
 	delete from #results where delta10 = 0
 
 	set @nUkeyServer = 0
@@ -219,7 +230,8 @@ begin
 			where ukey_server > @nUkeyServer
 			order by ukey_server
 
-		if (select count(*) from #results where ukey_server = @nUkeyServer) > 0
+		-- there must be at least two counters
+		if (select count(*) from #results where ukey_server = @nUkeyServer) > 1
 		begin
 			set @cSubject = convert(varchar(20), (select count(*) from #results where ukey_server = @nUkeyServer)) + ' counters out of tolerance at ' + (select top 1 dbo.fn_runstampToString(runStamp) from #runstamps where ukey = 10) + '.'
 			set @cMessage = ''
@@ -261,5 +273,5 @@ begin
 	drop table #results
 	drop table #runstamps
 	drop table #servers
+	drop table #allRuns
 end
-GO

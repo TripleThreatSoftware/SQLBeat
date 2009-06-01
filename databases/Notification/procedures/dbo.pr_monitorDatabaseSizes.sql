@@ -1,9 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[pr_monitorDatabaseSizes]    Script Date: 05/19/2009 13:59:45 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-CREATE procedure [dbo].[pr_monitorDatabaseSizes]
+ALTER procedure [dbo].[pr_monitorDatabaseSizes]
 as
 begin
 
@@ -53,6 +48,7 @@ begin
 		where delta > 5
 			and (sizeNow - sizeBefore) > 500
 			and sizeNow > 5000
+			and sizeBefore <> 0
 		order by a.serverName, a.databaseName
 
 	drop table #sizeHistory
@@ -60,4 +56,3 @@ begin
 
 
 end
-GO

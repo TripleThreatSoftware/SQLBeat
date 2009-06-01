@@ -1,9 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[pr_monitorFulfillment]    Script Date: 05/19/2009 13:59:45 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-CREATE procedure [dbo].[pr_monitorFulfillment]
+ALTER procedure [dbo].[pr_monitorFulfillment]
 as
 begin
 	declare @cThisMessage varchar(8000)
@@ -36,31 +31,31 @@ begin
 	select serverName,
 			case
 				when (eventLogCheck = 1 and convert(decimal(10,2), dateDiff(minute, isnull(lastEventLogCheck, dateAdd(day, -1, getDate())), getDate())) > convert(decimal(10,2), eventLogCheckMinuteInterval) * 1.50)
-					then 'Event Log check ' + convert(varchar(20), dateDiff(minute, isnull(lastEventLogCheck, dateAdd(day, -1, getDate())), getDate()) - eventLogCheckMinuteInterval) + ' minutes overdue. '
+					then 'Event Log check ' + convert(varchar(20), dateDiff(minute, isnull(lastEventLogCheck, dateAdd(day, -1, getDate())), getDate()) - eventLogCheckMinuteInterval) + ' minutes overdue. Last run was at ' + convert(varchar(20), lastEventLogCheck, 120) + '. '
 					else '' end +
 			case
 				when (detailedCheck = 1 and convert(decimal(10,2), dateDiff(minute, isnull(lastDetailedCheck, dateAdd(day, -1, getDate())), getDate())) > convert(decimal(10,2), detailedCheckMinuteInterval) * 1.50)
-					then 'Detailed SQL check ' + convert(varchar(20), dateDiff(minute, isnull(lastDetailedCheck, dateAdd(day, -1, getDate())), getDate()) - detailedCheckMinuteInterval) + ' minutes overdue. '
+					then 'Detailed SQL check ' + convert(varchar(20), dateDiff(minute, isnull(lastDetailedCheck, dateAdd(day, -1, getDate())), getDate()) - detailedCheckMinuteInterval) + ' minutes overdue. Last run was at ' + convert(varchar(20), lastDetailedCheck, 120) + '. '
 					else '' end +
 			case
 				when (serviceCheck = 1 and convert(decimal(10,2), dateDiff(minute, isnull(lastServiceCheck, dateAdd(day, -1, getDate())), getDate())) > convert(decimal(10,2), serviceCheckMinuteInterval) * 1.50)
-					then 'Services check ' + convert(varchar(20), dateDiff(minute, isnull(lastServiceCheck, dateAdd(day, -1, getDate())), getDate()) - serviceCheckMinuteInterval) + ' minutes overdue. '
+					then 'Services check ' + convert(varchar(20), dateDiff(minute, isnull(lastServiceCheck, dateAdd(day, -1, getDate())), getDate()) - serviceCheckMinuteInterval) + ' minutes overdue. Last run was at ' + convert(varchar(20), lastServiceCheck, 120) + '. '
 					else '' end +
 			case
 				when (pingCheck = 1 and convert(decimal(10,2), dateDiff(minute, isnull(lastPingCheck, dateAdd(day, -1, getDate())), getDate())) > convert(decimal(10,2), pingCheckMinuteInterval) * 1.50 and dateDiff(minute, lastPingCheck, getDate()) > 5)
-					then 'PING check ' + convert(varchar(20), dateDiff(minute, isnull(lastPingCheck, dateAdd(day, -1, getDate())), getDate()) - pingCheckMinuteInterval) + ' minutes overdue. '
+					then 'PING check ' + convert(varchar(20), dateDiff(minute, isnull(lastPingCheck, dateAdd(day, -1, getDate())), getDate()) - pingCheckMinuteInterval) + ' minutes overdue. Last run was at ' + convert(varchar(20), lastPingCheck, 120) + '. '
 					else '' end +
 			case
 				when (integrityCheck = 1 and convert(decimal(10,2), dateDiff(minute, isnull(lastIntegrityCheck, dateAdd(day, -1, getDate())), getDate())) > convert(decimal(10,2), integrityCheckMinuteInterval) * 1.50)
-					then 'Integrity check ' + convert(varchar(20), dateDiff(minute, isnull(lastIntegrityCheck, dateAdd(day, -1, getDate())), getDate()) - integrityCheckMinuteInterval) + ' minutes overdue. '
+					then 'Integrity check ' + convert(varchar(20), dateDiff(minute, isnull(lastIntegrityCheck, dateAdd(day, -1, getDate())), getDate()) - integrityCheckMinuteInterval) + ' minutes overdue. Last run was at ' + convert(varchar(20), lastIntegrityCheck, 120) + '. '
 					else '' end +
 			case
 				when (configurationCheck = 1 and convert(decimal(10,2), dateDiff(minute, isnull(lastConfigurationCheck, dateAdd(day, -1, getDate())), getDate())) > convert(decimal(10,2), configurationCheckMinuteInterval) * 1.50)
-					then 'Configuration check ' + convert(varchar(20), dateDiff(minute, isnull(lastConfigurationCheck, dateAdd(day, -1, getDate())), getDate()) - configurationCheckMinuteInterval) + ' minutes overdue. '
+					then 'Configuration check ' + convert(varchar(20), dateDiff(minute, isnull(lastConfigurationCheck, dateAdd(day, -1, getDate())), getDate()) - configurationCheckMinuteInterval) + ' minutes overdue. Last run was at ' + convert(varchar(20), lastConfigurationCheck, 120) + '. '
 					else '' end +
 			case
 				when (fragmentationCheck = 1 and convert(decimal(10,2), dateDiff(minute, isnull(lastFragmentationCheck, dateAdd(day, -1, getDate())), getDate())) > convert(decimal(10,2), fragmentationCheckMinuteInterval) * 1.50)
-					then 'Fragmentation check ' + convert(varchar(20), dateDiff(minute, isnull(lastFragmentationCheck, dateAdd(day, -1, getDate())), getDate()) - fragmentationCheckMinuteInterval) + ' minutes overdue. '
+					then 'Fragmentation check ' + convert(varchar(20), dateDiff(minute, isnull(lastFragmentationCheck, dateAdd(day, -1, getDate())), getDate()) - fragmentationCheckMinuteInterval) + ' minutes overdue. Last run was at ' + convert(varchar(20), lastFragmentationCheck, 120) + '. '
 				else ''
 				end
 
@@ -159,4 +154,3 @@ begin
 
 	drop table #results
 end
-GO
