@@ -12,13 +12,13 @@
 -- exec pr_generateTrialEmail 'Rusty', 'Johnson', 'TTS', 'rjohnson@sqlbeat.com', 'street', 'city', 'state', 'postalcode', 'phone number'
 alter procedure [dbo].[pr_generateTrialEmail] (
 	@cFirstName varchar(200), @cLastName varchar(200), @cCompanyName varchar(500), @cEmailAddress varchar(200),
-	@cStreetAddress varchar(2000), @cCity varchar(500), @cState varchar(500), @cPostalCode varchar(500),
+	@cStreetAddress varchar(2000), @cCity varchar(500), @cState varchar(500), @cCountry varchar(200), @cPostalCode varchar(500),
 	@cPhoneNumber varchar(200)
 )
 as
 begin
-	insert into trialRequests (firstName, lastName, companyName, emailAddress, streetAddress, city, state, postalCode, phoneNumber) values (
-		@cFirstName, @cLastName, @cCompanyName, @cEmailAddress, @cStreetAddress, @cCity, @cState, @cPostalCode, @cPhoneNumber)
+	insert into trialRequests (firstName, lastName, companyName, emailAddress, streetAddress, city, state, postalCode, phoneNumber, country) values (
+		@cFirstName, @cLastName, @cCompanyName, @cEmailAddress, @cStreetAddress, @cCity, @cState, @cPostalCode, @cPhoneNumber, @cCountry)
 
 	declare @cSubject varchar(2000)
 	declare @cBody varchar(8000)
@@ -31,7 +31,7 @@ begin
 	set @cSubject = 'SQLBeat free 30 day trial'
 
 	set @cBody = 'Thank you for your interest in SQLBeat.<br><br>' +
-		'You can begin your free 30 day trial by downloading and running the following: <br><a href="http://www.sqlbeat.com/setup.exe">www.sqlbeat.com/setup.exe</a><br><br>' +
+		'You can begin your free 30 day trial by downloading and running the following: <br><a href="http://www.sqlbeat.com/sqlbeat_install.exe">www.sqlbeat.com/sqlbeat_install.exe</a><br><br>' +
 		'We will be in touch with you over the next 48 hours to help answer any questions you may have about SQLBeat, and to offer assistance getting monitoring configured. If you have any questions, please email us at <a href="mailto:support@sqlbeat.com">support@sqlbeat.com</a> or call us directly at (404) 423-8040.<br><br>' +
 		'Thanks,<br>' +
 		'The SQLBeat Team'
@@ -61,6 +61,7 @@ begin
 		'Street Address : ' + isnull(@cStreetAddress, '') + '<br>' +
 		'City           : ' + isnull(@cCity, '') + '<br>' +
 		'State          : ' + isnull(@cState, '') + '<br>' +
+		'Country        : ' + isnull(@cCountry, '') + '<br>' +
 		'Postal Code    : ' + isnull(@cPostalCode, '') + '<br>' +
 		'Phone          : ' + isnull(@cPhoneNumber, '')
 
