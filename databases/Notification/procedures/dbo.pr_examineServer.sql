@@ -1,3 +1,9 @@
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
 --alter table notificationLog_history add runGUID uniqueIdentifier
 --go
 --create clustered index ix_notificationLogHistory_ukey_group_serverName_runGUID on notificationLog_history (ukey, serverName, ukey_group, runGUID) with fillfactor = 50
@@ -12,7 +18,7 @@
 -- reconfigure
 -- select * from dm_servers where serverName = 'sqlcluster01'
 -- select top 100 * from notificationLog_history order by ymd desc
--- select top 100 * from processLog order by ukey desc
+-- select top 100 * from processLog (nolock) where serverName = 'sqlcluster01' and command <> 'awaiting command' order by ymd desc
 -- exec pr_examineServer 'sqlcluster01', 600
 -- exec pr_examineServer '10.3.10.197', 600
 ALTER procedure [dbo].[pr_examineServer] (@cServerName varchar(100), @nMinutesBackToLook int)
@@ -173,7 +179,7 @@ begin
 
 	create table #locks (spid int, dbid int, objid int, indid int, type varchar(100), resource varchar(100), mode varchar(100), status varchar(100))
 
-	create table #lockSummary (dbid int, objid int, type varchar(100), mode varchar(100), locks int)
+	create table #lockSummary (spid int, dbid int, objid int, type varchar(100), mode varchar(100), locks int)
 
 	create table #lockresults (tablename varchar(200))
 
@@ -1032,7 +1038,7 @@ begin
 					lastDisk = b.diskIO,
 					lastData = b.ymd
 				from #processes a
-				join processLog b on a.spid = b.spid
+				join processLog b (nolock) on a.spid = b.spid
 					and b.serverName = @cServerName
 					and b.ymd = @dLastProcessCheck
 					and isnull(a.programName, '') = isnull(b.programName, '')
@@ -1226,11 +1232,11 @@ begin
 				buffercontents = replace(replace(replace(replace(buffercontents, '''', '"'), '**', '*'), '**', '*'), '**', '*'),
 				hostname = rtrim(ltrim(replace(hostname, '  ', ' ')))
 
-		update #processes
-			set ignoreSPID = 1
-			where bufferContents like '%sp_repl%'
-				or bufferContents like '%repl%'
-				or dbName = 'distribution'
+--		update #processes
+--			set ignoreSPID = 1
+--			where bufferContents like '%sp_repl%'
+--				or bufferContents like '%repl%'
+--				or dbName = 'distribution'
 
 		insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Input buffer for running SPIDs', @cSQLString, @nUkeyGroup)
 
@@ -1251,43 +1257,33 @@ begin
 		declare @cLocks varchar(4000)
 		declare @cTableName varchar(200)
 
-		while exists (
-			select top 1 spid
-				from #processes
-				where (isBlocked = 1 or isBlocker = 1 or isWild = 1)
-					and spid > @nSPID
-				order by spid
-			)
+		-- identify all locks held
+		if exists (select top 1 * from #processes where command <> 'awaiting command')
 		begin
-			truncate table #locks
-			truncate table #lockSummary
-
-			select top 1 @nSPID = spid
-				from #processes
-				where (isBlocked = 1 or isBlocker = 1 or isWild = 1)
-					and spid > @nSPID
-				order by spid
-
 			set @cSQLString = '
 				create procedure ' + @cProcedureName + '
 				as
 				begin
 					insert into #locks
 					select *
-						from openquery([' + @cServerName + '],''set fmtonly off; exec master.dbo.sp_lock ' + convert(varchar(20), @nSPID) + ''')
+						from openquery([' + @cServerName + '],''set fmtonly off; exec master.dbo.sp_lock'')
 
 					insert into #lockSummary
-					select isnull(dbid, 0) as dbid,
+					select
+						isnull(spid, 0),
+						isnull(dbid, 0) as dbid,
 						isnull(objid, 0) as objid,
 						isnull(type, '''') as type,
 						isnull(mode, '''') as mode,
 						count(*) as locks
 						from #locks
 						where objid <> 0
-						group by dbid, objid, type, mode
+						group by spid, dbid, objid, type, mode
 
 					insert into #lockSummary
-					select isnull(rsc_dbid, 0) as rsc_dbid,
+					select
+						isnull(req_spid, 0) as spid,
+						isnull(rsc_dbid, 0) as rsc_dbid,
 						isnull(rsc_objid, 0) as rsc_objid,
 						case when isnull(req_status, 0) = 1 then ''Granted''
 							when isnull(req_status, 0) = 2 then ''Converting''
@@ -1297,9 +1293,8 @@ begin
 						'''' as mode,
 						count(*)
 						from [' + @cServerName + '].master.dbo.syslockinfo
-						where req_spid = ' + convert(varchar(20), @nSPID) + '
-							and rsc_objid <> 0
-						group by rsc_dbid, rsc_objid,
+						where rsc_objid <> 0
+						group by req_spid, rsc_dbid, rsc_objid,
 							case when isnull(req_status, 0) = 1 then ''Granted''
 								when isnull(req_status, 0) = 2 then ''Converting''
 								when isnull(req_status, 0) = 3 then ''Waiting''
@@ -1310,105 +1305,124 @@ begin
 			if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
 				execute('drop procedure ' + @cProcedureName)
 
-			insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Locks held', @cSQLString, @nUkeyGroup)
+			insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Identify all locks held', @cSQLString, @nUkeyGroup)
 			exec sp_executeSQL @cSQLString
 
 			if @bTesting = 1
 				print @cSQLString
 			EXECUTE(@cProcedureName)
 
-			set @cLocks = ''
-
-			while exists (select top 1 * from #lockSummary)
+			-- now, identify the resources being locked for each running SPID
+			while exists (
+				select top 1 spid
+					from #processes
+					where command <> 'awaiting command'
+						and spid > @nSPID
+					order by spid
+				)
 			begin
-				select top 1 @nDBID = dbid, @nObjID = objid, @cLockType = type, @nLocks = locks, @cMode = mode from #lockSummary
 
-				if @nObjID is null or @nDBID is null
+				select top 1 @nSPID = spid
+					from #processes
+					where command <> 'awaiting command'
+						and spid > @nSPID
+					order by spid
+
+
+				set @cLocks = ''
+
+				while exists (select top 1 * from #lockSummary where spid = @nSPID)
 				begin
-					insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Locks: Database names', 'Database or Object ID was null!', @nUkeyGroup)
-					delete from #lockSummary where isnull(dbid, 0) = isnull(@nDBID, 0) and isnull(objid, 0) = isnull(@nObjID, 0) and type = @cLockType
-					continue
+					select top 1 @nDBID = dbid, @nObjID = objid, @cLockType = type, @nLocks = locks, @cMode = mode from #lockSummary where spid = @nSPID
+
+					if @nObjID is null or @nDBID is null
+					begin
+						insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Locks: Database names', 'Database or Object ID was null!', @nUkeyGroup)
+						delete from #lockSummary where isnull(dbid, 0) = isnull(@nDBID, 0) and isnull(objid, 0) = isnull(@nObjID, 0) and type = @cLockType and spid = @nSPID
+						continue
+					end
+
+					set @cSQLString = '
+						create procedure ' + @cProcedureName + '
+						as
+						begin
+							insert into #junkString
+							select name
+								from [' + @cServerName + '].master.dbo.sysdatabases
+								where dbid = ' + convert(varchar(20), @nDBID) + '
+									and (status & 32) <> 32 -- loading
+									and (status & 64) <> 64 -- prerecovery
+									and (status & 128) <> 128 -- recovery
+									and (status & 512) <> 512 -- offline
+									and (status & 4096) <> 4096 -- single user
+						end'
+
+					if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
+						execute('drop procedure ' + @cProcedureName)
+
+					insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Locks: Database names', @cSQLString, @nUkeyGroup)
+					exec sp_executeSQL @cSQLString
+
+					if @bTesting = 1
+						print @cSQLString
+					EXECUTE(@cProcedureName)
+
+					set @cDatabaseName = (select top 1 results from #junkString)
+					truncate table #junkString
+
+					if @cDatabaseName is null
+					begin
+						insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Locks: Database names', 'Database name was null!', @nUkeyGroup)
+						delete from #lockSummary where isnull(dbid, 0) = isnull(@nDBID, 0) and isnull(objid, 0) = isnull(@nObjID, 0) and type = @cLockType and spid = @nSPID
+						continue
+					end
+
+					set @cSQLString = '
+						create procedure ' + @cProcedureName + '
+						as
+						begin
+							insert into #lockresults
+							select name
+								from [' + @cServerName + '].[' + @cDatabaseName + '].dbo.sysobjects
+								where id = ' + convert(varchar(20), @nObjID) + '
+						end'
+
+					if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
+						execute('drop procedure ' + @cProcedureName)
+
+					insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Locks: Object names', @cSQLString, @nUkeyGroup)
+					exec sp_executeSQL @cSQLString
+
+					if @bTesting = 1
+						print @cSQLString
+					EXECUTE(@cProcedureName)
+
+					set @cTableName = (select top 1 tableName from #lockResults)
+					truncate table #lockResults
+
+					set @cLocks = left(@cLocks + isnull(rtrim(ltrim(@cDatabaseName)), '') + '.' +
+						isnull(rtrim(ltrim(@cTableName)), '') + ': ' +
+						isnull(@cLocktype, '') + ', ' +
+						isnull(@cMode, '') +
+						isnull('(' + convert(varchar(20), @nLocks) + ')', '') +
+						char(13), 4000)
+
+					while charindex('__', @cLocks) > 0
+						set @cLocks = replace(@cLocks, '__', '_')
+
+					delete from #lockSummary where dbid = @nDBID and objid = @nObjID and type = @cLockType and spid = @nSPID
 				end
 
-				set @cSQLString = '
-					create procedure ' + @cProcedureName + '
-					as
-					begin
-						insert into #junkString
-						select name
-							from [' + @cServerName + '].master.dbo.sysdatabases
-							where dbid = ' + convert(varchar(20), @nDBID) + '
-								and (status & 32) <> 32 -- loading
-								and (status & 64) <> 64 -- prerecovery
-								and (status & 128) <> 128 -- recovery
-								and (status & 512) <> 512 -- offline
-								and (status & 4096) <> 4096 -- single user
-					end'
+				update #processes
+					set locks = @cLocks
+					where spid = @nSPID
 
-				if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
-					execute('drop procedure ' + @cProcedureName)
-
-				insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Locks: Database names', @cSQLString, @nUkeyGroup)
-				exec sp_executeSQL @cSQLString
-
-				if @bTesting = 1
-					print @cSQLString
-				EXECUTE(@cProcedureName)
-
-				set @cDatabaseName = (select top 1 results from #junkString)
-				truncate table #junkString
-
-				if @cDatabaseName is null
-				begin
-					insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Locks: Database names', 'Database name was null!', @nUkeyGroup)
-					delete from #lockSummary where isnull(dbid, 0) = isnull(@nDBID, 0) and isnull(objid, 0) = isnull(@nObjID, 0) and type = @cLockType
-					continue
-				end
-
-				set @cSQLString = '
-					create procedure ' + @cProcedureName + '
-					as
-					begin
-						insert into #lockresults
-						select name
-							from [' + @cServerName + '].[' + @cDatabaseName + '].dbo.sysobjects
-							where id = ' + convert(varchar(20), @nObjID) + '
-					end'
-
-				if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
-					execute('drop procedure ' + @cProcedureName)
-
-				insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Locks: Object names', @cSQLString, @nUkeyGroup)
-				exec sp_executeSQL @cSQLString
-
-				if @bTesting = 1
-					print @cSQLString
-				EXECUTE(@cProcedureName)
-
-				set @cTableName = (select top 1 tableName from #lockResults)
-				truncate table #lockResults
-
-				set @cLocks = left(@cLocks + isnull(rtrim(ltrim(@cDatabaseName)), '') + '.' +
-					isnull(rtrim(ltrim(@cTableName)), '') + ': ' +
-					isnull(@cLocktype, '') + ', ' +
-					isnull(@cMode, '') +
-					isnull('(' + convert(varchar(20), @nLocks) + ')', '') +
-					char(13), 4000)
-
-				while charindex('__', @cLocks) > 0
-					set @cLocks = replace(@cLocks, '__', '_')
-
-				delete from #lockSummary where dbid = @nDBID and objid = @nObjID and type = @cLockType
 			end
-
-			update #processes
-				set locks = @cLocks
-				where spid = @nSPID
 
 		end
 
 
-		-- END locks held by blockers or blocked
+		-- END locks held by running processes
 		--*********************************************************************************************************************
 
 		insert into processLog(serverName, spid, status, login, hostname, blockedBy, dbName, command, cputime, diskio,
@@ -1420,60 +1434,111 @@ begin
 
 			from #processes
 
---		-- lots of blocking
---		insert into #results (message, severity, subject, isBlocking)
---		select
---			convert(varchar(20), count(distinct spid)) + ' SPIDs ' +
---				'and ' + convert(varchar(20), count(*)) + ' threads ' +
---				'blocked in ' + isnull(dbName, '') + ' ' +
---				'at ' + convert(varchar(20), getDate(), 120) + '.' as message,
---			1 as severity,
---			convert(varchar(20), count(distinct spid)) + ' SPIDs ' +
---				'blocked in ' + isnull(dbName, '') + '.' as subject,
---			1 as isBlocking
---			from #processes
---			where isBlocked = 1
---				and isnull(dbName, '') not in ('distribution')
---			group by dbName
---			having count(*) >= @nMultipleBlockAlert
-
-		-- blocked
+		-- lots of blocking in Replication
 		insert into #results (message, severity, subject, isBlocking)
-		select distinct left('A process which belongs to SPID ' + isnull(convert(varchar(20), a.spid), 'A') + '(' + isnull(a.hostname, '') + ':' + isnull(a.login, '') + ') ' +
-			'is being blocked in the ' + isnull(a.dbName, '') + ' database ' +
-			'by SPID ' + isnull(convert(varchar(20), b.spid), 'B') + '(' + isnull(b.hostname, '') + ':' + isnull(b.login, '') + '). ' + char(13) + char(13) +
-			'********************************************' + char(13) +
-			'Blockee Code (' + isnull(rtrim(a.command), '') + '): ' + char(13) +
-			'Batch Start: ' + convert(varchar(20), a.lastBatchTime, 120) + char(13) +
-			'********************************************' + char(13) +
-				left(isnull(a.buffercontents, ''), 500) + char(13) + char(13) +
-			'********************************************' + char(13) +
-			'Blocker Code (' + isnull(rtrim(b.command), '') + '): ' + char(13) +
-			'Batch Start: ' + convert(varchar(20), b.lastBatchTime, 120) + char(13) +
-			'********************************************' + char(13) +
-				left(isnull(b.bufferContents, ''), 500) + char(13) + char(13) +
-			'********************************************' + char(13) +
-			'Blockee locks: ' + char(13) +
-			'********************************************' + char(13) +
-				isnull(a.locks, '') + char(13) +
-			'********************************************' + char(13) +
-			'Blocker locks: ' + char(13) +
-			'********************************************' + char(13) +
-				isnull(b.locks, '')
-			, 2000),
-			2 as severity,
-			'User ' + isnull(b.login, '') + ' (' + isnull(convert(varchar(20), b.spid), 'B') + ') ' +
-				'began blocking in ' + isnull(a.dbName, '') + ' ' +
-				'at ' + right(convert(varchar(20), isnull(b.lastBatchTime, ''), 120), 8) + '. ' as subject,
+		select
+			convert(varchar(20), count(distinct spid)) + ' Replication SPIDs ' +
+				'and ' + convert(varchar(20), count(*)) + ' threads ' +
+				'blocked ' +
+				'at ' + convert(varchar(20), getDate(), 120) + '.' as message,
+			1 as severity,
+			convert(varchar(20), count(distinct spid)) + ' Replication SPIDs ' +
+				'blocked.' as subject,
 			1 as isBlocking
-			from #processes a
-			left outer join #processes b on a.blockedBy = b.spid
-			where a.isBlocked = 1
---				and not (isnull(a.locks, '') = '' and isnull(b.locks, '') = '')
---				and not (isnull(a.locks, '') not like '%waiting%' and isnull(b.locks, '') not like '%waiting%')
-				and a.blockedBy <> ''
-				and a.ignoreSPID = 0
-				and abs(dateDiff(second, b.lastBatchTime, a.lastBatchTime)) >= @nBlockingSecondsThreshold
+			from #processes
+			where (isBlocked = 1 or isBlocker = 1)
+				and (
+					bufferContents like '%sp_repl%'
+					or bufferContents like '%repl%'
+					or dbName = 'distribution'
+					)
+			having count(*) >= 4
+
+		-- if there's just a little bit of blocking, go easy
+		if (
+			select count(*)
+				from #processes a
+				left outer join #processes b on a.blockedBy = b.spid
+				where a.isBlocked = 1
+					and a.ignoreSpid = 0
+					and abs(dateDiff(second, b.lastBatchTime, a.lastBatchTime)) >= @nBlockingSecondsThreshold
+			) <= 2
+		begin
+			-- here we have blocking, but it's no more than two SPIDs so we consider how long blocking has been running
+			insert into #results (message, severity, subject, isBlocking)
+			select distinct left('A process which belongs to SPID ' + isnull(convert(varchar(20), a.spid), 'A') + '(' + isnull(a.hostname, '') + ':' + isnull(a.login, '') + ') ' +
+				'is being blocked in the ' + isnull(a.dbName, '') + ' database ' +
+				'by SPID ' + isnull(convert(varchar(20), b.spid), 'B') + '(' + isnull(b.hostname, '') + ':' + isnull(b.login, '') + '). ' + char(13) + char(13) +
+				'********************************************' + char(13) +
+				'Blockee Code (' + isnull(rtrim(a.command), '') + '): ' + char(13) +
+				'Batch Start: ' + convert(varchar(20), a.lastBatchTime, 120) + char(13) +
+				'********************************************' + char(13) +
+					left(isnull(a.buffercontents, ''), 500) + char(13) + char(13) +
+				'********************************************' + char(13) +
+				'Blocker Code (' + isnull(rtrim(b.command), '') + '): ' + char(13) +
+				'Batch Start: ' + convert(varchar(20), b.lastBatchTime, 120) + char(13) +
+				'********************************************' + char(13) +
+					left(isnull(b.bufferContents, ''), 500) + char(13) + char(13) +
+				'********************************************' + char(13) +
+				'Blockee locks: ' + char(13) +
+				'********************************************' + char(13) +
+					isnull(a.locks, '') + char(13) +
+				'********************************************' + char(13) +
+				'Blocker locks: ' + char(13) +
+				'********************************************' + char(13) +
+					isnull(b.locks, '')
+				, 2000),
+				2 as severity,
+				'User ' + isnull(b.login, '') + ' (' + isnull(convert(varchar(20), b.spid), 'B') + ') ' +
+					'began blocking in ' + isnull(a.dbName, '') + ' ' +
+					'at ' + right(convert(varchar(20), isnull(b.lastBatchTime, ''), 120), 8) + '. ' as subject,
+				1 as isBlocking
+				from #processes a
+				left outer join #processes b on a.blockedBy = b.spid
+				where a.isBlocked = 1
+	--				and not (isnull(a.locks, '') = '' and isnull(b.locks, '') = '')
+	--				and not (isnull(a.locks, '') not like '%waiting%' and isnull(b.locks, '') not like '%waiting%')
+					and a.blockedBy <> ''
+					and a.ignoreSPID = 0
+					and abs(dateDiff(second, b.lastBatchTime, a.lastBatchTime)) >= @nBlockingSecondsThreshold
+		end
+		else
+		begin
+			-- here, we have a lot of blocking and we're very concerned
+			insert into #results (message, severity, subject, isBlocking)
+			select distinct left('A process which belongs to SPID ' + isnull(convert(varchar(20), a.spid), 'A') + '(' + isnull(a.hostname, '') + ':' + isnull(a.login, '') + ') ' +
+				'is being blocked in the ' + isnull(a.dbName, '') + ' database ' +
+				'by SPID ' + isnull(convert(varchar(20), b.spid), 'B') + '(' + isnull(b.hostname, '') + ':' + isnull(b.login, '') + '). ' + char(13) + char(13) +
+				'********************************************' + char(13) +
+				'Blockee Code (' + isnull(rtrim(a.command), '') + '): ' + char(13) +
+				'Batch Start: ' + convert(varchar(20), a.lastBatchTime, 120) + char(13) +
+				'********************************************' + char(13) +
+					left(isnull(a.buffercontents, ''), 500) + char(13) + char(13) +
+				'********************************************' + char(13) +
+				'Blocker Code (' + isnull(rtrim(b.command), '') + '): ' + char(13) +
+				'Batch Start: ' + convert(varchar(20), b.lastBatchTime, 120) + char(13) +
+				'********************************************' + char(13) +
+					left(isnull(b.bufferContents, ''), 500) + char(13) + char(13) +
+				'********************************************' + char(13) +
+				'Blockee locks: ' + char(13) +
+				'********************************************' + char(13) +
+					isnull(a.locks, '') + char(13) +
+				'********************************************' + char(13) +
+				'Blocker locks: ' + char(13) +
+				'********************************************' + char(13) +
+					isnull(b.locks, '')
+				, 2000),
+				2 as severity,
+				'User ' + isnull(b.login, '') + ' (' + isnull(convert(varchar(20), b.spid), 'B') + ') ' +
+					'began blocking in ' + isnull(a.dbName, '') + ' ' +
+					'at ' + right(convert(varchar(20), isnull(b.lastBatchTime, ''), 120), 8) + '. ' as subject,
+				1 as isBlocking
+				from #processes a
+				left outer join #processes b on a.blockedBy = b.spid
+				where a.isBlocked = 1
+					and a.blockedBy <> ''
+					and a.ignoreSPID = 0
+		end
 
 		-- wild
 		insert into #results (message, severity, subject, isLongRunningProcess)
