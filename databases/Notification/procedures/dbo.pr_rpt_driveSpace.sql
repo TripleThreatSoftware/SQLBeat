@@ -1,16 +1,52 @@
-/****** Object:  StoredProcedure [dbo].[pr_rpt_driveSpace]    Script Date: 05/19/2009 13:59:45 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
 -- select top 100 * from notificationLog order by ymd desc
-CREATE       procedure [dbo].[pr_rpt_driveSpace]
+ALTER procedure [dbo].[pr_rpt_driveSpace]
 as
 begin
 	declare @dToday dateTime
 	declare @nThisUkey int
 	declare @cThisMessage varchar(8000)
 	declare @cThisSubject varchar(500)
+
+	if not exists (select top 1 [name] from sysobjects where [name] = 'dm_drivespaceThresholds')
+	begin
+		create table dm_drivespaceThresholds (ukey int identity, ymd dateTime default getDate(), ukey_server int, driveLetter varchar(1), lowSpaceThreshold int)
+
+		create clustered index ix_driveSpaceThresholds_server_driveLetter on dm_drivespaceThresholds (ukey_server, driveLetter) with fillfactor = 70
+	end
+
+	declare @latestReadings table (ukey_server int, serverName varchar(200), driveLetter varchar(1), latestReading dateTime)
+
+	insert into @latestReadings
+	select a.ukey, a.serverName, b.driveLetter, max(b.ymd) as latestReading
+		from dm_servers a (nolock)
+		join drivespaceLog b (nolock) on a.serverName = b.serverName
+			and b.ymd >= dateAdd(hour, -6, getDate())
+		where a.isEnabled = 1
+			and a.detailedCheck = 1
+		group by a.ukey, a.serverName, b.driveLetter
+
+	-- for any drive letter not yet included, add a record
+	insert into dm_drivespaceThresholds (ukey_server, driveLetter, lowSpaceThreshold)
+	select a.ukey_server, a.driveLetter, c.lowSpaceThreshold
+		from @latestReadings a
+		left outer join dm_drivespaceThresholds b (nolock) on a.ukey_server = b.ukey_server
+			and a.driveLetter = b.driveLetter
+		join dm_servers c (nolock) on a.ukey_server = c.ukey
+			and c.enabled = 1
+		where b.ukey is null
+
+	insert into notificationLog_stage (serverName, severity, subject, message)
+	select
+		a.serverName, 1,
+		'Drive ' + isnull(a.driveLetter, 'N/A') + ' is down to ' + convert(varchar(100), a.driveSpace) + 'mb free.' as subject,
+		'Drive ' + isnull(a.driveLetter, 'N/A') + ' is down to ' + convert(varchar(100), a.driveSpace) + 'mb free at ' + convert(varchar(20), a.latestReading, 120) + '. Threshold is defined as ' + convert(varchar(100), d.lowSpaceThreshold) + 'mb.' as message
+		from @latestReadings a
+		join drivespaceLog b (nolock) on a.serverName = b.serverName
+			and a.driveLetter = b.driveLetter
+			and a.latestReading = b.ymd
+		join dm_servers c (nolock) on a.ukey_server = c.ukey
+		join dm_drivespaceThresholds d (nolock) on c.ukey = d.ukey_server
+			and b.driveSpace <= d.lowSpaceThreshold
 
 	set @dToday = convert(varchar(10), getDate(), 120)
 
@@ -119,7 +155,7 @@ begin
 			'03 Days: ' + isnull(convert(varchar(20), driveSpace_3), 'N/A') + 'mb' + char(13) +
 			'00 Days: ' + isnull(convert(varchar(20), driveSpace_today), 'N/A') + 'mb' + char(13)
 		from @results
-		where weeksLeft_14 > 0
+		where weeksLeft_14 >= 0
 			and weeksLeft_14 < 10
 			and driveSpace_3 > driveSpace_today
 			and percentDrop_3 > 5

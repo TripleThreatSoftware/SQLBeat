@@ -141,12 +141,15 @@ begin
 					)
 			and isServerPingable = 1
 
-	insert into #results (serverName, messageBody)
-	select isnull(friendlyName, websiteURL) as serverName,
-		'URL ' + isnull(friendlyName, websiteURL) + ' has not been checked for ' + convert(varchar(20), dateDiff(minute, isnull(lastCheck, '1980-08-28'), getDate())) + ' minutes.'
-		from websiteMonitor..monitoredURLs
-		where dateDiff(minute, isnull(lastCheck, dateAdd(week, -1, getDate())), getDate()) > 15
-			and isEnabled = 1
+	if exists (select top 1 [name] from master..sysdatabases where [name] = 'websiteMonitor')
+	begin
+		insert into #results (serverName, messageBody)
+		select isnull(friendlyName, websiteURL) as serverName,
+			'URL ' + isnull(friendlyName, websiteURL) + ' has not been checked for ' + convert(varchar(20), dateDiff(minute, isnull(lastCheck, '1980-08-28'), getDate())) + ' minutes.'
+			from websiteMonitor..monitoredURLs
+			where dateDiff(minute, isnull(lastCheck, dateAdd(week, -1, getDate())), getDate()) > 15
+				and isEnabled = 1
+	end
 
 	insert into notificationLog_stage (serverName, subject, message, severity)
 	select serverName, 'Fulfillment failure at ' + convert(varchar(20), getDate(), 120), messageBody, 1 as severity

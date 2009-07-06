@@ -1,0 +1,2 @@
+USE [Notification]
+GO

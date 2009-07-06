@@ -852,7 +852,7 @@ begin
 			and ukey_group is not null
 		group by ukey_group, serverName, runGUID
 
-	delete from #detailedChecks where startTime < dateAdd(minute, -15, getDate())
+	delete from #detailedChecks where startTime < dateAdd(minute, -30, getDate())
 
 	set @cBuffer = ''
 	set @nUkey = 0
@@ -964,6 +964,7 @@ begin
 					else 'running ' + convert(varchar(20), dateDiff(second, a.startTime, getDate())) + 's.'
 					end +
 				char(13) + char(13) +
+				'Average Server Runtime: ' + isnull(convert(varchar(20), convert(decimal(10,2), b.avgRuntime)), 'N/A') + char(13) +
 				'Run History: ' + char(13) +
 				isnull(a.runHistory, 'N/A') + char(13) + char(13) +
 				'Job Status: ' + char(13) +
@@ -985,9 +986,10 @@ begin
 			and c.isSuccess = 0
 		where a.isSuccess = 0
 			and (
-				(b.avgRuntime is not null and a.runningSeconds > b.avgRuntime * 2)
+				(b.avgRuntime is not null and a.runningSeconds > b.avgRuntime * 4)
 					or (b.avgRuntime is null and a.runningSeconds > 60*3)
 				)
+			and a.runningSeconds > 60*5
 
 
 	drop table #detailedChecks
@@ -1121,69 +1123,72 @@ begin
 	-- Check on the configuration monitor
 	--*********************************************************************************************************************
 
-	select g.ukey as ukey_server, a.serverName, c.groupName, isnull(a.message, 'N/A') as notes, a.ymd,
-		isnull(g.lastConfigurationCheck, dateAdd(week, -3, getDate())) as lastConfigurationCheck,
-		convert(int, dateDiff(minute, a.ymd, getDate()) / 5) * 5 as minutesStuck,
-		e.[name] as jobName,
-		f.startTime
-		into #stuckConfigCheck
-		from configuration..runs_log a (nolock)
-		join (
-			select ukey_group, max(ukey) as maxUkey
-				from configuration..runs_log (nolock)
-				group by ukey_group
-			) b on a.ukey_group = b.ukey_group
-				and a.ukey = b.maxUkey
-		join dm_serverGroups c on a.ukey_group = c.ukey
+	if exists (select top 1 [name] from master..sysdatabases where [name] = 'Configuration')
+	begin
+		select g.ukey as ukey_server, a.serverName, c.groupName, isnull(a.message, 'N/A') as notes, a.ymd,
+			isnull(g.lastConfigurationCheck, dateAdd(week, -3, getDate())) as lastConfigurationCheck,
+			convert(int, dateDiff(minute, a.ymd, getDate()) / 5) * 5 as minutesStuck,
+			e.[name] as jobName,
+			f.startTime
+			into #stuckConfigCheck
+			from configuration..runs_log a (nolock)
+			join (
+				select ukey_group, max(ukey) as maxUkey
+					from configuration..runs_log (nolock)
+					group by ukey_group
+				) b on a.ukey_group = b.ukey_group
+					and a.ukey = b.maxUkey
+			join dm_serverGroups c on a.ukey_group = c.ukey
 
-		join msdb..sysjobs e on e.[name] = 'Configuration Check - ' + c.groupName
-		join #allJobs f on e.job_id = f.job_id
-			and f.running = 1
+			join msdb..sysjobs e on e.[name] = 'Configuration Check - ' + c.groupName
+			join #allJobs f on e.job_id = f.job_id
+				and f.running = 1
 
-		join dm_servers g on a.serverName = g.serverName
+			join dm_servers g on a.serverName = g.serverName
 
-		where a.serverName is not null
-			and isnull(a.message, '') <> 'END'
-			and dateDiff(minute, a.ymd, getDate()) > 60
-			and e.[name] is not null
+			where a.serverName is not null
+				and isnull(a.message, '') <> 'END'
+				and dateDiff(minute, a.ymd, getDate()) > 60
+				and e.[name] is not null
 
-	insert into #results (subject, message, severity, serverName)
-	select
-		'Job "' + jobName + '" has been stuck on ' + serverName + ' for ' + convert(varchar(20), minutesStuck) + ' minutes (since ' + convert(varchar(19), ymd, 120) + ').' as subject,
-		'Job "' + jobName + '" has been stuck on ' + serverName + ' for ' + convert(varchar(20), minutesStuck) + ' minutes (since ' + convert(varchar(19), ymd, 120) + ').' + char(13) + char(13) +
-			'Step       : ' + notes + char(13) +
-			'Last Check : ' + convert(varchar(19), lastConfigurationCheck, 120)-- + char(13) +
-			as message,
-		2 as severity, serverName
-		from #stuckConfigCheck
+		insert into #results (subject, message, severity, serverName)
+		select
+			'Job "' + jobName + '" has been stuck on ' + serverName + ' for ' + convert(varchar(20), minutesStuck) + ' minutes (since ' + convert(varchar(19), ymd, 120) + ').' as subject,
+			'Job "' + jobName + '" has been stuck on ' + serverName + ' for ' + convert(varchar(20), minutesStuck) + ' minutes (since ' + convert(varchar(19), ymd, 120) + ').' + char(13) + char(13) +
+				'Step       : ' + notes + char(13) +
+				'Last Check : ' + convert(varchar(19), lastConfigurationCheck, 120)-- + char(13) +
+				as message,
+			2 as severity, serverName
+			from #stuckConfigCheck
 
-	-- set the server to sleep that stuck us
-	update dm_servers
-		set configurationCheckSleepUntil = dateAdd(hour, 2, getDate())
-		from dm_servers a
-		join #stuckConfigCheck b on a.serverName = b.serverName
+		-- set the server to sleep that stuck us
+		update dm_servers
+			set configurationCheckSleepUntil = dateAdd(hour, 2, getDate())
+			from dm_servers a
+			join #stuckConfigCheck b on a.serverName = b.serverName
 
-	set @cThisJob = ''
+		set @cThisJob = ''
 
---	while exists (select top 1 jobName from #stuckConfigCheck where jobName > @cThisJob and minutesStuck > case when dateDiff(day, lastConfigurationCheck, getDate()) > 1 then 90 else 60 end)
---	begin
---		select top 1 @cThisJob = jobName ,
---			@dStartTime = startTime
---			from #stuckConfigCheck
---			where jobName > @cThisJob
---				and minutesStuck > case when dateDiff(day, lastConfigurationCheck, getDate()) > 1 then 90 else 60 end
---			order by jobName
---
---		exec msdb..sp_stop_job @job_name = @cThisJob
---
---		insert into #results (message, severity, subject) values
---			(
---				'Job ' + @cThisJob + ', started at ' + convert(varchar(20), @dStartTime) + ', sent a STOP command at ' + convert(varchar(20), getDate(), 120) + '.',
---				2,
---				'Job ' + @cThisJob + ', started at ' + convert(varchar(20), @dStartTime) + ', sent a STOP command.')
---	end
+	--	while exists (select top 1 jobName from #stuckConfigCheck where jobName > @cThisJob and minutesStuck > case when dateDiff(day, lastConfigurationCheck, getDate()) > 1 then 90 else 60 end)
+	--	begin
+	--		select top 1 @cThisJob = jobName ,
+	--			@dStartTime = startTime
+	--			from #stuckConfigCheck
+	--			where jobName > @cThisJob
+	--				and minutesStuck > case when dateDiff(day, lastConfigurationCheck, getDate()) > 1 then 90 else 60 end
+	--			order by jobName
+	--
+	--		exec msdb..sp_stop_job @job_name = @cThisJob
+	--
+	--		insert into #results (message, severity, subject) values
+	--			(
+	--				'Job ' + @cThisJob + ', started at ' + convert(varchar(20), @dStartTime) + ', sent a STOP command at ' + convert(varchar(20), getDate(), 120) + '.',
+	--				2,
+	--				'Job ' + @cThisJob + ', started at ' + convert(varchar(20), @dStartTime) + ', sent a STOP command.')
+	--	end
 
-	drop table #stuckConfigCheck
+		drop table #stuckConfigCheck
+	end
 
 	-- insert into hist_monitorBigBrother (stepName) values ('Configuration monitor checked')
 

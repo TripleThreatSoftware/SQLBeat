@@ -1,24 +1,4 @@
---exec pr_monitorSQLPerformance 'sqlcluster01', '2009-04-01 11:00:00.000'
---exec pr_monitorSQLPerformance 'sqlcluster01', '2009-04-01 11:05:00.000'
---exec pr_monitorSQLPerformance 'sqlcluster01', '2009-04-01 11:10:00.000'
---exec pr_monitorSQLPerformance 'sqlcluster01', '2009-04-01 11:15:00.000'
---exec pr_monitorSQLPerformance 'sqlcluster01', '2009-04-01 11:20:00.000'
---exec pr_monitorSQLPerformance 'sqlcluster01', '2009-04-01 11:25:00.000'
---exec pr_monitorSQLPerformance 'sqlcluster01', '2009-04-01 11:35:00.000'
---exec pr_monitorSQLPerformance 'sqlcluster01', '2009-04-01 11:40:00.000'
---exec pr_monitorSQLPerformance 'sqlcluster01', '2009-04-01 11:45:00.000'
---exec pr_monitorSQLPerformance 'sqlcluster01', '2009-04-01 11:50:00.000'
-
--- exec pr_monitorSQLPerformance '2009-03-25 09:00:00.000'
--- exec pr_monitorSQLPerformance '2009-03-25 08:55:00.000'
--- exec pr_monitorSQLPerformance '2009-03-25 08:50:00.000'
--- exec pr_monitorSQLPerformance '2009-03-25 08:45:00.000'
--- exec pr_monitorSQLPerformance '2009-03-25 08:40:00.000'
--- exec pr_monitorSQLPerformance '2009-03-25 08:35:00.000'
--- exec pr_monitorSQLPerformance '2009-03-25 08:30:00.000'
--- exec pr_monitorSQLPerformance '2009-03-25 08:25:00.000'
---
---go
+-- exec pr_monitorPerformanceLog '2009-07-05 20:18:00.000'
 
 ALTER procedure [dbo].[pr_monitorPerformanceLog] (@dRightNow dateTime = null)
 as
@@ -107,7 +87,8 @@ begin
 	create table #results (ukey int identity, ukey_server int, objectName varchar(200), counterName varchar(200), instanceName varchar(200),
 		time1 bigint, time2 bigint, time3 bigint, time4 bigint, time5 bigint, time6 bigint, time7 bigint, time8 bigint, time9 bigint, time10 bigint,
 		delta9 decimal(30,4), delta10 decimal(30,4),
-		averageValue decimal(30,4), minValue decimal(30,4), maxValue decimal(30,4))
+		averageValue decimal(30,4), minValue decimal(30,4), maxValue decimal(30,4),
+		historicalAverage decimal(30,4), historicalMinValue decimal(30,4), historicalMaxValue decimal(30,4))
 
 	insert into #results (ukey_server, objectName, counterName, instanceName, time1, time2, time3, time4, time5, time6, time7, time8, time9, time10)
 	exec sp_executeSQL @cSQLString
@@ -168,6 +149,32 @@ begin
 				group by a.ukey
 			) b on a.ukey = b.ukey
 
+	-- now, roll in the highlights from the last 24 hours
+	update #results
+		set historicalAverage = b.avgValue,
+			historicalMinValue = b.minValue,
+			historicalMaxValue = b.maxValue
+		from #results a
+		join (
+			select a.ukey_server, b.objectName, c.counterName, a.instanceName,
+				max(a.counterValue) as maxValue,
+				min(a.counterValue) as minValue,
+				avg(a.counterValue) as avgValue
+				from performanceLog a (nolock)
+				join dm_performanceObjects b (nolock) on a.ukey_object = b.ukey
+				join dm_performanceCounters c (nolock) on a.ukey_counter = c.ukey
+				where a.ymd >= dateAdd(hour, -24, @dStartDate)
+					and a.ymd <= dateAdd(hour, -3, @dEndDate)
+					and a.runStamp >= dbo.fn_returnRunstamp(dateAdd(hour, -24, @dStartDate))
+					and a.runStamp <= dbo.fn_returnRunstamp(dateAdd(hour, -3, @dEndDate))
+					and counterName not in ('Cache Objects in use', 'Transactions', 'Log Cache Hit Ratio', 'Log Cache Hit Ratio Base', 'Cache Hit Ratio', 'Cache Hit Ratio Base', 'Page life expectancy')
+					and objectName not in ('SQLServer:Buffer Partition', 'SQLServer:Buffer Node')
+				group by a.ukey_server, b.objectName, c.counterName, a.instanceName
+			) b on a.ukey_server = b.ukey_server
+				and a.objectName = b.objectName
+				and a.counterName = b.counterName
+				and a.instanceName = b.instanceName
+
 	drop table #readings
 
 	delete from #results where time1 = 0 and time5 = 0
@@ -175,6 +182,8 @@ begin
 	delete from #results where time1 < 0 or time5 < 0
 
 	delete from #results where delta9+delta10 = 0 or delta9+delta10 = 2
+
+	delete from #results where averageValue is null
 
 	-- the last two polls need to be heading abruptly in a particular direction
 	delete from #results
@@ -189,6 +198,13 @@ begin
 		where (delta9 < 1 and delta10 < 1 and not (time9 < minValue * 0.75 and time10 < minValue * 0.75))
 			or (delta9 > 1 and delta10 > 1 and not (time9 > maxValue * 1.25 and time10 > maxValue * 1.25))
 
+	-- if it's climbing, get rid of anything that isn't at least 90% of the highest value we've seen in the last 24 hours
+	delete from #results
+		where (delta9 > 1 and delta10 > 1)
+			and time10 < historicalMaxvalue * 0.9
+
+	print 'Removed ' + convert(varchar(20), @@rowcount) + ' values that were less than 90% of historical max'
+
 	-- it needs to not be returning to normal
 	delete from #results
 		where not
@@ -202,7 +218,10 @@ begin
 	-- we don't care if the hit ratio is getting better
 	delete from #results where counterName = 'Buffer cache hit ratio' and time10 > time1
 
-	-- lose junk with just plan cache errors
+	-- we don't care if something is waiting for less than 250ms or if the waiting time is going down
+	delete from #results where counterName like '%time (ms)%' and (time10 < time1 or time10 < 250)
+
+	-- lose junk with just plan cache errors, or plan cache errors and less than two other errors
 	delete #results
 		from #results a
 		join (
@@ -214,7 +233,7 @@ begin
 				group by ukey_server
 			) b on a.ukey_server = b.ukey_server
 				and b.numBad > 0
-				and b.numGood = 0
+				and b.numGood < 2
 
 	print 'Deleted ' + convert(varchar(20), @@rowcount) + ' junk sets'
 
@@ -230,38 +249,43 @@ begin
 			where ukey_server > @nUkeyServer
 			order by ukey_server
 
-		-- there must be at least two counters
-		if (select count(*) from #results where ukey_server = @nUkeyServer) > 1
+		-- there must be at least three counters
+		if (select count(*) from #results where ukey_server = @nUkeyServer) > 2
 		begin
 			set @cSubject = convert(varchar(20), (select count(*) from #results where ukey_server = @nUkeyServer)) + ' counters out of tolerance at ' + (select top 1 dbo.fn_runstampToString(runStamp) from #runstamps where ukey = 10) + '.'
 			set @cMessage = ''
 
-			select @cMessage = @cMessage +
-				rtrim(ltrim(objectName)) + ' / ' + rtrim(ltrim(counterName)) + ' / ' + rtrim(ltrim(instanceName)) + char(13) +
-				replicate('=', 50) + char(13) +
-				'Time01: ' + right(replicate(' ', 15) + dbo.fn_returnFormattedInt(time1), 10) + char(13) +
-				'Time02: ' + right(replicate(' ', 15) + dbo.fn_returnFormattedInt(time2), 10) + char(13) +
-				'Time03: ' + right(replicate(' ', 15) + dbo.fn_returnFormattedInt(time3), 10) + char(13) +
-				'Time04: ' + right(replicate(' ', 15) + dbo.fn_returnFormattedInt(time4), 10) + char(13) +
-				'Time05: ' + right(replicate(' ', 15) + dbo.fn_returnFormattedInt(time5), 10) + char(13) +
-				'Time06: ' + right(replicate(' ', 15) + dbo.fn_returnFormattedInt(time6), 10) + char(13) +
-				'Time07: ' + right(replicate(' ', 15) + dbo.fn_returnFormattedInt(time7), 10) + char(13) +
-				'Time08: ' + right(replicate(' ', 15) + dbo.fn_returnFormattedInt(time8), 10) + char(13) +
-				'Time09: ' + right(replicate(' ', 15) + dbo.fn_returnFormattedInt(time9), 10) + char(9) + convert(varchar(20), convert(decimal(10,2), 100 * convert(decimal(20,4), time9) / averageValue)) + '% of average' + char(13) +
-				'Time10: ' + right(replicate(' ', 15) + dbo.fn_returnFormattedInt(time10), 10) + char(9) + convert(varchar(20), convert(decimal(10,2), 100 * convert(decimal(20,4), time10) / averageValue)) + '% of average' + char(13) + char(13)
+			select @cMessage = left(@cMessage +
+				'<table cellspacing="0" cellpadding="3" style="font-family:Verdana; font-size: x-small;">' +
+				'<tr><th colspan="3" align="left" style="border: 0px; border-bottom:1px; border-style:solid; border-color:black;">' + rtrim(ltrim(isnull(objectName, ''))) + ' / ' + rtrim(ltrim(isnull(counterName, ''))) + case when isnull(instanceName, '') <> '' then ' / ' + rtrim(ltrim(isnull(instanceName, ''))) else '' end + '</th></tr>' +
+				'<tr><td width="120px"><b>24 hour Average</b></td><td align="right" width="120px">' + dbo.fn_returnFormattedInt(historicalAverage) + '</td><td></td></tr>' +
+				'<tr><td><b>24 hour Min</b></td><td align="right">' + dbo.fn_returnFormattedInt(historicalMinValue) + '</td><td></td></tr>' +
+				'<tr><td><b>24 hour Max</b></td><td align="right">' + dbo.fn_returnFormattedInt(historicalMaxValue) + '</td><td></td></tr>' +
+				'<tr><td><b>' + 'Time01' + '</b></td><td align="right">' + dbo.fn_returnFormattedInt(time1) + '</td><td></td></tr>' +
+				'<tr><td><b>' + 'Time02' + '</b></td><td align="right">' + dbo.fn_returnFormattedInt(time2) + '</td><td></td></tr>' +
+				'<tr><td><b>' + 'Time03' + '</b></td><td align="right">' + dbo.fn_returnFormattedInt(time3) + '</td><td></td></tr>' +
+				'<tr><td><b>' + 'Time04' + '</b></td><td align="right">' + dbo.fn_returnFormattedInt(time4) + '</td><td></td></tr>' +
+				'<tr><td><b>' + 'Time05' + '</b></td><td align="right">' + dbo.fn_returnFormattedInt(time5) + '</td><td></td></tr>' +
+				'<tr><td><b>' + 'Time06' + '</b></td><td align="right">' + dbo.fn_returnFormattedInt(time6) + '</td><td></td></tr>' +
+				'<tr><td><b>' + 'Time07' + '</b></td><td align="right">' + dbo.fn_returnFormattedInt(time7) + '</td><td></td></tr>' +
+				'<tr><td><b>' + 'Time08' + '</b></td><td align="right">' + dbo.fn_returnFormattedInt(time8) + '</td><td></td></tr>' +
+				'<tr><td><b>' + 'Time09' + '</b></td><td align="right">' + dbo.fn_returnFormattedInt(time9) + '</td><td>' + convert(varchar(20), convert(decimal(10,0), 100 * convert(decimal(20,4), time9) / averageValue)) + '% of average' + '</td></tr>' +
+				'<tr><td><b>' + 'Time10' + '</b></td><td align="right">' + dbo.fn_returnFormattedInt(time10) + '</td><td>' + convert(varchar(20), convert(decimal(10,0), 100 * convert(decimal(20,4), time10) / averageValue)) + '% of average' + '</td></tr>' +
+				'</table><hr>'
+				, 7900)
 				from #results a
 				where ukey_server = @nUkeyServer
 
-			set @cMessage = replace(@cMessage, 'Time01', (select top 1 dbo.fn_runstampToString(runStamp) from #runstamps where ukey = 1))
-			set @cMessage = replace(@cMessage, 'Time02', (select top 1 dbo.fn_runstampToString(runStamp) from #runstamps where ukey = 2))
-			set @cMessage = replace(@cMessage, 'Time03', (select top 1 dbo.fn_runstampToString(runStamp) from #runstamps where ukey = 3))
-			set @cMessage = replace(@cMessage, 'Time04', (select top 1 dbo.fn_runstampToString(runStamp) from #runstamps where ukey = 4))
-			set @cMessage = replace(@cMessage, 'Time05', (select top 1 dbo.fn_runstampToString(runStamp) from #runstamps where ukey = 5))
-			set @cMessage = replace(@cMessage, 'Time06', (select top 1 dbo.fn_runstampToString(runStamp) from #runstamps where ukey = 6))
-			set @cMessage = replace(@cMessage, 'Time07', (select top 1 dbo.fn_runstampToString(runStamp) from #runstamps where ukey = 7))
-			set @cMessage = replace(@cMessage, 'Time08', (select top 1 dbo.fn_runstampToString(runStamp) from #runstamps where ukey = 8))
-			set @cMessage = replace(@cMessage, 'Time09', (select top 1 dbo.fn_runstampToString(runStamp) from #runstamps where ukey = 9))
-			set @cMessage = replace(@cMessage, 'Time10', (select top 1 dbo.fn_runstampToString(runStamp) from #runstamps where ukey = 10))
+			set @cMessage = replace(@cMessage, 'Time01', (select top 1 right(dbo.fn_runstampToString(runStamp), 11) from #runstamps where ukey = 1))
+			set @cMessage = replace(@cMessage, 'Time02', (select top 1 right(dbo.fn_runstampToString(runStamp), 11) from #runstamps where ukey = 2))
+			set @cMessage = replace(@cMessage, 'Time03', (select top 1 right(dbo.fn_runstampToString(runStamp), 11) from #runstamps where ukey = 3))
+			set @cMessage = replace(@cMessage, 'Time04', (select top 1 right(dbo.fn_runstampToString(runStamp), 11) from #runstamps where ukey = 4))
+			set @cMessage = replace(@cMessage, 'Time05', (select top 1 right(dbo.fn_runstampToString(runStamp), 11) from #runstamps where ukey = 5))
+			set @cMessage = replace(@cMessage, 'Time06', (select top 1 right(dbo.fn_runstampToString(runStamp), 11) from #runstamps where ukey = 6))
+			set @cMessage = replace(@cMessage, 'Time07', (select top 1 right(dbo.fn_runstampToString(runStamp), 11) from #runstamps where ukey = 7))
+			set @cMessage = replace(@cMessage, 'Time08', (select top 1 right(dbo.fn_runstampToString(runStamp), 11) from #runstamps where ukey = 8))
+			set @cMessage = replace(@cMessage, 'Time09', (select top 1 right(dbo.fn_runstampToString(runStamp), 11) from #runstamps where ukey = 9))
+			set @cMessage = replace(@cMessage, 'Time10', (select top 1 right(dbo.fn_runstampToString(runStamp), 11) from #runstamps where ukey = 10))
 
 			print @cSubject
 			print @cMessage
