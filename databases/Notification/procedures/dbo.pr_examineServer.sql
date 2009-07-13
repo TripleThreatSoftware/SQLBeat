@@ -1,9 +1,3 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-
-
 --alter table notificationLog_history add runGUID uniqueIdentifier
 --go
 --create clustered index ix_notificationLogHistory_ukey_group_serverName_runGUID on notificationLog_history (ukey, serverName, ukey_group, runGUID) with fillfactor = 50
@@ -26,6 +20,8 @@ as
 begin
 -- 	declare @cServerName varchar(100)
 -- 	set @cServerName = 'sqlserver\instance1'
+--if @nMinutesBackToLook <> 999
+--return
 
 	set nocount on
 
@@ -187,7 +183,7 @@ begin
 
 	CREATE TABLE #drives (ukey int identity, driveLetter varchar(1), freeSpace int NULL)
 
-	create table #databaseNames (dbname varchar(100))
+	create table #databaseNames (dbname varchar(100), dbID int)
 
 	create table #fileSizes (dbname varchar(100), objectname varchar(100), fileName varchar(100), size bigint, isLog bit default 0)
 
@@ -195,6 +191,8 @@ begin
 
 	create table #maintenancePlanFailures (job_id uniqueIdentifier, activity varchar(150), message varchar(512),
 		start_time dateTime, end_time dateTime, succeeded bit)
+
+	create table #lockedObjects (dbID int, objID int, [name] varchar(200))
 
 	--*********************************************************************************************************************
 	-- Trap the SQLServer version
@@ -223,6 +221,36 @@ begin
 	set @cVersion = (select top 1 results from #junkString)
 
 	truncate table #junkString
+
+	--*********************************************************************************************************************
+	-- Create a list of all remote databases
+	--*********************************************************************************************************************
+
+	set @cSQLString = '
+		create procedure ' + @cProcedureName + '
+		as
+		begin
+			insert into #databaseNames
+			select [name], [dbID]
+				from [' + @cServerName + '].master.dbo.sysdatabases
+				where (
+						(status & 32) <> 32 -- loading
+						and (status & 64) <> 64 -- prerecovery
+						and (status & 128) <> 128 -- recovery
+						and (status & 512) <> 512 -- offline
+						and (status & 4096) <> 4096 -- single user
+						)
+		end'
+
+	if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
+		execute('drop procedure ' + @cProcedureName)
+
+	insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Log size: Database names', @cSQLString, @nUkeyGroup)
+	exec sp_executeSQL @cSQLString
+
+	if @bTesting = 1
+		print @cSQLString
+	EXECUTE(@cProcedureName)
 
 	--*********************************************************************************************************************
 	-- Performance counters
@@ -274,9 +302,160 @@ begin
 		insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Job checks skipped. Agent is not running.', @cSQLString, @nUkeyGroup)
 	else
 	begin
+		if not exists (select top 1 [name] from sysobjects where [name] = 'dm_serverjobs')
+		begin
+			create table dm_serverJobs (ukey int identity, ymd dateTime default getDate(), ukey_server int, jobName varchar(1000), job_id uniqueIdentifier, isEnabled bit)
+			create clustered index ix_serverJobs_ukey_server_jobID_jobName on dm_serverJobs (ukey, ukey_server, job_id, jobName) with fillfactor = 80
+		end
+
+		if not exists (select top 1 [name] from sysobjects where [name] = 'dm_serverJobSteps')
+		begin
+			create table dm_serverJobSteps (ukey int identity, ymd dateTime default getDate(), ukey_server int, ukey_job int, stepName varchar(1000))
+			create clustered index ix_serverJobSteps_ukey_server_job_stepName on dm_serverJobSteps (ukey, ukey_server, ukey_job, stepName) with fillfactor = 80
+		end
+
+		if not exists (select top 1 [name] from sysobjects where [name] = 'jobHistory')
+		begin
+			create table jobHistory (ukey int identity, ymd dateTime default getDate(), ukey_job int, ukey_server int, jobOutcome varchar(8000), runningSeconds int, isSuccess bit default 1)
+			create clustered index ix_jobHistory_ukey_server_job_ymd_outcome on jobHistory (ukey, ukey_server, ukey_job, ymd, jobOutcome) with fillfactor = 80
+		end
+
+		if not exists (select top 1 [name] from sysobjects where [name] = 'jobStepHistory')
+		begin
+			create table jobStepHistory (ukey int identity, ymd dateTime default getDate(), ukey_job int, ukey_server int, ukey_jobHistory int, ukey_jobStep int, stepOutcome varchar(8000), runningSeconds int, isSuccess bit default 1)
+			create clustered index ix_jobStepHistory_ukey_server_job_jobHistory_step_ymd_outcome on jobStepHistory (ukey, ukey_server, ukey_job, ukey_jobHistory, ukey_jobStep, ymd, stepOutcome) with fillfactor = 80
+		end
+
+		declare @dLastJobData dateTime
+		create table #jobHistory (job_id uniqueIdentifier, jobName varchar(1000), jobOutcome varchar(8000), runningSeconds int, ymd dateTime, isSuccess bit, isEnabled bit)
+		create table #jobStepHistory (job_id uniqueIdentifier, stepName varchar(1000), stepOutcome varchar(8000), runningSeconds int, ymd dateTime, isSuccess bit)
+
+		set @dLastJobData = (select max(ymd) from jobHistory (nolock) where ukey_server = @nUkeyServer)
+
+		-- if we have no job data, just look at today
+		if isnull(@dLastJobData, '') = ''
+			set @dLastJobData = convert(varchar(10), getDate(), 120)
+
+		set @cSQLString = '
+			create procedure ' + @cProcedureName + '
+			as
+			begin
+				-- jobs
+				insert into #jobHistory
+				select
+					a.job_id,
+					a.[name] as jobName,
+					case when message not like ''%the job succeeded%'' then b.message else '' end as jobOutcome,
+
+					right(convert(varchar(10), run_duration), 2) +
+						left(right(''000000'' + convert(varchar(10), run_duration), 4), 2) * 60 +
+						left(right(''000000'' + convert(varchar(10), run_duration), 6), 2) * 60 * 60 as runningSeconds,
+
+					left(run_date, 4) + '-' +
+						left(right(run_date, 4), 2) + '-' +
+						right(run_date, 2) + ' ' +
+						left(right(''000000'' + convert(varchar(20), run_time), 6), 2) + '':'' +
+						left(right(right(''000000'' + convert(varchar(20), run_time), 6), 4), 2) + '':'' +
+						right(right(''000000'' + convert(varchar(20), run_time), 6), 2) + ''.000'' as ymd,
+
+					b.run_status as isSuccess,
+					a.enabled as isEnabled
+
+					from [' + @cServerName + '].msdb.dbo.sysjobs a
+					join [' + @cServerName + '].msdb.dbo.sysjobhistory b on a.job_id = b.job_id
+						and b.step_id = 0
+					where ymd >= ''' + convert(varchar(20), @dLastJobData, 120) + '''
+					order by a.job_id, b.run_date, right(''000000'' + convert(varchar(20), b.run_time), 6)
+
+				-- steps
+				insert into #jobStepHistory
+				select
+					a.job_id, a.[name] as jobName, b.step_name as stepName,
+					case when message not like ''%the step succeeded%'' then b.message else '' end as stepOutcome,
+
+					right(convert(varchar(10), run_duration), 2) +
+						left(right(''000000'' + convert(varchar(10), run_duration), 4), 2) * 60 +
+						left(right(''000000'' + convert(varchar(10), run_duration), 6), 2) * 60 * 60 as runningSeconds,
+
+					left(run_date, 4) + ''-'' +
+						left(right(run_date, 4), 2) + ''-'' +
+						right(run_date, 2) + ' ' +
+						left(right(''000000'' + convert(varchar(20), run_time), 6), 2) + '':'' +
+						left(right(right(''000000'' + convert(varchar(20), run_time), 6), 4), 2) + '':'' +
+						right(right(''000000'' + convert(varchar(20), run_time), 6), 2) + ''.000'' as ymd,
+
+					b.run_status as isSuccess
+
+					from [' + @cServerName + '].msdb.dbo.sysjobs a
+					join [' + @cServerName + '].msdb.dbo.sysjobhistory b on a.job_id = b.job_id
+						and b.step_id <> 0
+					where ymd >= ''' + convert(varchar(20), @dLastJobData, 120) + '''
+					order by a.job_id, b.run_date, b.run_time, b.step_id
+			end'
+
+		--*********************************************************************************************************************
+		-- Add job data to local mart tables
+		--*********************************************************************************************************************
+
+		insert into dm_serverJobs (ukey_server, jobName, job_id, isEnabled)
+		select distinct @nUkeyServer, a.jobName, a.job_id, a.isEnabled
+			from #jobHistory a
+			left outer join dm_serverJobs b (nolock) on b.ukey_server = @nUkeyServer
+				and b.jobName = a.jobName
+				and a.job_id = b.job_id
+			where b.ukey is null
+
+		insert into dm_serverJobSteps (ukey_server, ukey_job, stepName)
+		select distinct @nUkeyServer, a.ukey, b.stepName
+			from dm_serverJobs a
+			join #jobStepHistory b on a.job_id = b.job_id
+			left outer join dm_serverJobSteps c (nolock) on c.ukey_server = @nUkeyServer
+				and a.ukey = c.ukey_job
+				and b.stepName = c.stepName
+			where a.ukey_server = @nUkeyServer
+				and c.ukey is null
+
+		insert into jobHistory (ymd, ukey_job, ukey_server, jobOutcome, runningSeconds, isSuccess)
+		select distinct a.ymd, b.ukey, @nUkeyServer, a.jobOutcome, a.runningSeconds, a.isSuccess
+			from #jobHistory a
+			join dm_serverJobs b on a.job_id = b.job_id
+				and a.jobName = b.jobName
+				and b.ukey_server = @nUkeyServer
+			left outer join jobHistory c (nolock) on b.ukey = c.ukey_job
+				and c.ukey_server = @nUkeyServer
+				and a.ymd = c.ymd
+			where c.ukey is null
+
+		insert into jobStepHistory (ymd, ukey_job, ukey_server, ukey_jobHistory, ukey_jobStep, stepOutcome, isSuccess, runningSeconds)
+		select a.ymd, c.ukey, @nUkeyServer, e.ukey, d.ukey, a.stepOutcome, a.isSuccess, a.runningSeconds
+			from #jobStepHistory a
+			join #jobHistory b on a.job_id = b.job_id
+			join dm_serverJobs c (nolock) on c.ukey_server = @nUkeyServer
+				and a.job_id = c.job_id
+				and b.jobName = c.jobName
+			join dm_serverJobSteps d (nolock) on d.ukey_server = @nUkeyServer
+				and d.ukey_job = c.ukey
+				and d.stepName = a.stepName
+			join jobHistory e (nolock) on b.ymd = e.ymd
+				and e.ukey_server = @nUkeyServer
+				and e.ukey_job = c.ukey
+			left outer join jobStepHistory f (nolock) on a.ymd = f.ymd
+				and f.ukey_server = @nUkeyServer
+				and f.ukey_job = c.ukey
+				and f.ukey_jobHistory = e.ukey
+				and f.ukey_jobStep = d.ukey
+			where f.ukey is null
+
+
+
 		--*********************************************************************************************************************
 		-- Job average runtimes
 		--*********************************************************************************************************************
+
+		insert into #jobAverageRuntimes (job_id, runtime_average, runtime_median, runtime_max, isTimeOfDaySpecific)
+		select
+			from
+
 
 		-- first, look through the history for runs at about this time of day
 		-- must be at least two past runs for a half-decent average
@@ -1133,6 +1312,8 @@ begin
 				and rtrim(command) not like '%backup%'
 				and rtrim(command) not like '%restore%'
 				and rtrim(command) not like '%sp%ms%repl%'
+				and dbName not in ('msdb', 'distribution', 'master')
+				and programName not like '%repl%'
 
 				-- this is a job, and we'll catch it elsewhere
 				and programName not like '%SQLAGENT%'
@@ -1153,9 +1334,11 @@ begin
 				and rtrim(command) not like '%backup%'
 				and rtrim(command) not like '%restore%'
 				and rtrim(command) not like '%sp%ms%repl%'
+				and dbName not in ('msdb', 'distribution', 'master')
 
 				-- this is a job, and we'll catch it elsewhere
 				and programName not like '%SQLAGENT%'
+				and programName not like '%repl%'
 
 		update #processes
 			set hostname = b.hostname,
@@ -1312,6 +1495,54 @@ begin
 				print @cSQLString
 			EXECUTE(@cProcedureName)
 
+			-- now, scan through each database and get a list of locked objects
+
+			truncate table #lockedObjects
+			set @nDBID = 0
+			while exists (select top 1 [dbID] from #locks where [dbID] > @nDBID)
+			begin
+				select top 1
+					@nDBID = [dbID]
+					from #locks
+					where [dbID] > @nDBID
+					order by [dbID]
+
+				set @cDatabaseName = (select top 1 [dbname] from #databaseNames where [dbID] = @nDBID)
+				if isnull(@cDatabaseName, '') = ''
+					continue
+
+				set @cSQLString = '
+					create procedure ' + @cProcedureName + '
+					as
+					begin
+						insert into #lockedObjects ([dbID], [name], [objid])
+						select distinct ' + convert(varchar(20), @nDBID) + ' as dbID, [name], id from [' + @cServerName + '].[' + @cDatabaseName + '].dbo.sysobjects where id in ('
+
+				select @cSQLString = @cSQLString + convert(varchar(20), [objid]) + ', '
+					from (
+						select distinct [objid] from #locks	where [dbID] = @nDBID
+						) a
+
+				if right(@cSQLString, 2) = ', '
+					set @cSQLString = left(@cSQLString, len(@cSQLString) - 1)
+
+				set @cSQLString = @cSQLString + ')
+					end'
+
+				if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
+					execute('drop procedure ' + @cProcedureName)
+
+				insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Retrieving names of locked objects', @cSQLString, @nUkeyGroup)
+				exec sp_executeSQL @cSQLString
+
+				if @bTesting = 1
+					print @cSQLString
+				EXECUTE(@cProcedureName)
+
+			end
+
+
+
 			-- now, identify the resources being locked for each running SPID
 			while exists (
 				select top 1 spid
@@ -1331,87 +1562,22 @@ begin
 
 				set @cLocks = ''
 
-				while exists (select top 1 * from #lockSummary where spid = @nSPID)
-				begin
-					select top 1 @nDBID = dbid, @nObjID = objid, @cLockType = type, @nLocks = locks, @cMode = mode from #lockSummary where spid = @nSPID
+				select @cLocks = left(@cLocks +
+						isnull(rtrim(ltrim(c.dbname)), '') + '.' +
+						isnull(rtrim(ltrim(b.[name])), '') + ': ' +
+						isnull(a.type, '') + ', ' +
+						isnull(a.mode, '') +
+						isnull('(' + convert(varchar(20), a.locks) + ')', '') +
+						char(13)
+					, 4000)
+					from #lockSummary a
+					left outer join #lockedObjects b on a.dbID = b.dbID
+						and a.objID = b.objID
+					left outer join #databaseNames c on a.dbID = c.dbID
+					where a.spid = @nSPID
 
-					if @nObjID is null or @nDBID is null
-					begin
-						insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Locks: Database names', 'Database or Object ID was null!', @nUkeyGroup)
-						delete from #lockSummary where isnull(dbid, 0) = isnull(@nDBID, 0) and isnull(objid, 0) = isnull(@nObjID, 0) and type = @cLockType and spid = @nSPID
-						continue
-					end
-
-					set @cSQLString = '
-						create procedure ' + @cProcedureName + '
-						as
-						begin
-							insert into #junkString
-							select name
-								from [' + @cServerName + '].master.dbo.sysdatabases
-								where dbid = ' + convert(varchar(20), @nDBID) + '
-									and (status & 32) <> 32 -- loading
-									and (status & 64) <> 64 -- prerecovery
-									and (status & 128) <> 128 -- recovery
-									and (status & 512) <> 512 -- offline
-									and (status & 4096) <> 4096 -- single user
-						end'
-
-					if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
-						execute('drop procedure ' + @cProcedureName)
-
-					insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Locks: Database names', @cSQLString, @nUkeyGroup)
-					exec sp_executeSQL @cSQLString
-
-					if @bTesting = 1
-						print @cSQLString
-					EXECUTE(@cProcedureName)
-
-					set @cDatabaseName = (select top 1 results from #junkString)
-					truncate table #junkString
-
-					if @cDatabaseName is null
-					begin
-						insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Locks: Database names', 'Database name was null!', @nUkeyGroup)
-						delete from #lockSummary where isnull(dbid, 0) = isnull(@nDBID, 0) and isnull(objid, 0) = isnull(@nObjID, 0) and type = @cLockType and spid = @nSPID
-						continue
-					end
-
-					set @cSQLString = '
-						create procedure ' + @cProcedureName + '
-						as
-						begin
-							insert into #lockresults
-							select name
-								from [' + @cServerName + '].[' + @cDatabaseName + '].dbo.sysobjects
-								where id = ' + convert(varchar(20), @nObjID) + '
-						end'
-
-					if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
-						execute('drop procedure ' + @cProcedureName)
-
-					insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Locks: Object names', @cSQLString, @nUkeyGroup)
-					exec sp_executeSQL @cSQLString
-
-					if @bTesting = 1
-						print @cSQLString
-					EXECUTE(@cProcedureName)
-
-					set @cTableName = (select top 1 tableName from #lockResults)
-					truncate table #lockResults
-
-					set @cLocks = left(@cLocks + isnull(rtrim(ltrim(@cDatabaseName)), '') + '.' +
-						isnull(rtrim(ltrim(@cTableName)), '') + ': ' +
-						isnull(@cLocktype, '') + ', ' +
-						isnull(@cMode, '') +
-						isnull('(' + convert(varchar(20), @nLocks) + ')', '') +
-						char(13), 4000)
-
-					while charindex('__', @cLocks) > 0
-						set @cLocks = replace(@cLocks, '__', '_')
-
-					delete from #lockSummary where dbid = @nDBID and objid = @nObjID and type = @cLockType and spid = @nSPID
-				end
+				while charindex('__', @cLocks) > 0
+					set @cLocks = replace(@cLocks, '__', '_')
 
 				update #processes
 					set locks = @cLocks
@@ -1696,14 +1862,6 @@ begin
 	update #drives
 		set freeSpace = (freeSpace / 10) * 10
 
-	insert into #results (message, severity, subject, isDriveSpace)
-	select 'Drive ' + driveLetter + ' is down to ' + convert(varchar(100), freeSpace) + 'mb free.',
-		1 as severity,
-		'Drive ' + driveLetter + ' is down to ' + convert(varchar(100), freeSpace) + 'mb free.' as subject,
-		1 as isDriveSpace
-		from #drives
-		where freeSpace < @nLowSpaceThreshold
-
 	insert into drivespaceLog (serverName, driveLetter, driveSpace)
 	select @cServerName, driveLetter, freeSpace
 		from #drives
@@ -1788,92 +1946,40 @@ begin
 	--*********************************************************************************************************************
 
 	declare @cStringToAdd varchar(2000)
+	declare @cThisDatabase varchar(100)
 
-	-- on the standby server we don't have any control over the log size, so don't bother telling me about it
-	-- and, let's be honest, we don't really care about this in off-hours
-	if charindex('stby', @cServerName) = 0
-	begin
-
-		declare @cThisDatabase varchar(100)
-		truncate table #databaseNames
-
-		set @cSQLString = '
+	set @cSQLString = '
 			create procedure ' + @cProcedureName + '
 			as
 			begin
-				insert into #databaseNames
-				select [name]
-					from [' + @cServerName + '].master.dbo.sysdatabases
-					where [name] not in (''master'', ''model'', ''msdb'', ''northwind'')
-						and (
-							(status & 32) <> 32 -- loading
-							and (status & 64) <> 64 -- prerecovery
-							and (status & 128) <> 128 -- recovery
-							and (status & 512) <> 512 -- offline
-							and (status & 4096) <> 4096 -- single user
-							)
-			end'
+					insert into #fileSizes (dbname, objectName, fileName, size)
+			'
 
-		if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
-			execute('drop procedure ' + @cProcedureName)
+	-- at times, especially on LS destination servers we hit a "in the middle of a restore" error, but there doesn't
+	-- seem to be a way to non-destructively lock a DB
+	set @cThisDatabase = ''
+	while exists (select top 1 * from #databaseNames where dbName > @cThisDatabase and dbName not in ('master', 'model', 'msdb', 'northwind') )
+	begin
+		select top 1 @cThisDatabase = dbName
+			from #databaseNames
+			where dbName > @cThisDatabase
+				and dbName not in ('master', 'model', 'msdb', 'northwind')
+			order by dbName
 
-		insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Log size: Database names', @cSQLString, @nUkeyGroup)
-		exec sp_executeSQL @cSQLString
+		if @cSQLString = ''
+			set @cSQLString = '
+					create procedure ' + @cProcedureName + '
+					as
+					begin
+							insert into #fileSizes (dbname, objectName, fileName, size)
+					'
 
-		if @bTesting = 1
-			print @cSQLString
-		EXECUTE(@cProcedureName)
-
-		set @cSQLString = '
-				create procedure ' + @cProcedureName + '
-				as
-				begin
-						insert into #fileSizes (dbname, objectName, fileName, size)
-				'
-
-		-- at times, especially on LS destination servers we hit a "in the middle of a restore" error, but there doesn't
-		-- seem to be a way to non-destructively lock a DB
-		set @cThisDatabase = ''
-		while exists (select top 1 * from #databaseNames where dbName > @cThisDatabase)
-		begin
-			select top 1 @cThisDatabase = dbName from #databaseNames where dbName > @cThisDatabase order by dbName
-
-			if @cSQLString = ''
-				set @cSQLString = '
-						create procedure ' + @cProcedureName + '
-						as
-						begin
-								insert into #fileSizes (dbname, objectName, fileName, size)
-						'
-
-			set @cSQLString = @cSQLString + '
+		set @cSQLString = @cSQLString + '
 SELECT ''' + @cThisDatabase + ''', left(name, 100) collate SQL_Latin1_General_CP1_CI_AS , left(fileName, 100) collate SQL_Latin1_General_CP1_CI_AS , ([size]*8)/1024
-	FROM [' + @cServerName + '].[' + @cThisDatabase + '].dbo.sysfiles
+FROM [' + @cServerName + '].[' + @cThisDatabase + '].dbo.sysfiles
 union'
 
-			if len(@cSQLString) > 3500
-			begin
-				if right(@cSQLString, 5) = 'union'
-					set @cSQLString = left(@cSQLString, len(@cSQLString) - 5)
-
-				set @cSQLString = @cSQLString + '
-		end'
-
-				if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
-					execute('drop procedure ' + @cProcedureName)
-
-				insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Log size: File sizes', @cSQLString, @nUkeyGroup)
-
-				exec sp_executeSQL @cSQLString
-				if @bTesting = 1
-					print @cSQLString
-				EXECUTE(@cProcedureName)
-
-				set @cSQLString = ''
-			end
-		end
-
-		if @cSQLString <> ''
+		if len(@cSQLString) > 3500
 		begin
 			if right(@cSQLString, 5) = 'union'
 				set @cSQLString = left(@cSQLString, len(@cSQLString) - 5)
@@ -1890,52 +1996,73 @@ union'
 			if @bTesting = 1
 				print @cSQLString
 			EXECUTE(@cProcedureName)
+
+			set @cSQLString = ''
 		end
-
-		update #fileSizes
-			set isLog = 1
-			where objectName like '%.ldf%' or fileName like '%.ldf%'
-
-		insert into databaseFileSizeLog (serverName, dbname, objectname, [fileName], [size], isLog)
-		select @cServername, dbName, objectName, [fileName], [size], isLog
-			from #fileSizes
-
-		insert into #results (message, severity, subject, isLogSize)
-		select 'Database ' + isnull(rtrim(dbName), '' ) + ' ' +
-				'log file size (' + convert(varchar(20), logSize) + 'mb) ' +
-				'has grown beyond the data file size (' + convert(varchar(20), dataSize) + 'mb)',
-			2 as severity,
-			'Log file size in ' + isnull(rtrim(dbName), '' ) + '.',
-			1 as isLogSize
-			from (
-				select isnull(dbName, 'N/A') as dbName,
-					convert(decimal(10,2), sum(case when isLog = 0 then size else 0 end)) as dataSize,
-					convert(decimal(10,2), sum(case when isLog = 1 then size else 0 end)) as logSize
-					from #fileSizes
-					group by dbName
-				) a
-			where logSize > (dataSize * 0.5)
-				and logSize > 5000
-
-		-- for MSDE, watch the 2gb file size limit
-		insert into #results (message, severity, subject, isLogSize)
-		select 'Database ' + isnull(rtrim(dbName), '' ) + ' ' +
-				'size (' + convert(varchar(20), totalSize) + 'mb) ' +
-				'is about to reach the MSDE cap of 2000mb.',
-			1 as severity,
-			'Database ' + isnull(rtrim(dbName), '' ) + ' is about to reach MSDE limits.',
-			1 as isLogSize
-			from (
-				select dbName,
-					sum([size]) as totalSize
-					from #fileSizes
-					where isLog = 0
-					group by dbname
-				) a
-			where totalSize >= 1800
-				and @cVersion like '%desktop engine%'
-
 	end
+
+	if @cSQLString <> ''
+	begin
+		if right(@cSQLString, 5) = 'union'
+			set @cSQLString = left(@cSQLString, len(@cSQLString) - 5)
+
+		set @cSQLString = @cSQLString + '
+end'
+
+		if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
+			execute('drop procedure ' + @cProcedureName)
+
+		insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Log size: File sizes', @cSQLString, @nUkeyGroup)
+
+		exec sp_executeSQL @cSQLString
+		if @bTesting = 1
+			print @cSQLString
+		EXECUTE(@cProcedureName)
+	end
+
+	update #fileSizes
+		set isLog = 1
+		where objectName like '%.ldf%' or fileName like '%.ldf%'
+
+	insert into databaseFileSizeLog (serverName, dbname, objectname, [fileName], [size], isLog)
+	select @cServername, dbName, objectName, [fileName], [size], isLog
+		from #fileSizes
+
+	insert into #results (message, severity, subject, isLogSize)
+	select 'Database ' + isnull(rtrim(dbName), '' ) + ' ' +
+			'log file size (' + convert(varchar(20), logSize) + 'mb) ' +
+			'has grown beyond the data file size (' + convert(varchar(20), dataSize) + 'mb)',
+		2 as severity,
+		'Log file size in ' + isnull(rtrim(dbName), '' ) + '.',
+		1 as isLogSize
+		from (
+			select isnull(dbName, 'N/A') as dbName,
+				convert(decimal(10,2), sum(case when isLog = 0 then size else 0 end)) as dataSize,
+				convert(decimal(10,2), sum(case when isLog = 1 then size else 0 end)) as logSize
+				from #fileSizes
+				group by dbName
+			) a
+		where logSize > (dataSize * 0.5)
+			and logSize > 5000
+
+	-- for MSDE, watch the 2gb file size limit
+	insert into #results (message, severity, subject, isLogSize)
+	select 'Database ' + isnull(rtrim(dbName), '' ) + ' ' +
+			'size (' + convert(varchar(20), totalSize) + 'mb) ' +
+			'is about to reach the MSDE cap of 2000mb.',
+		1 as severity,
+		'Database ' + isnull(rtrim(dbName), '' ) + ' is about to reach MSDE limits.',
+		1 as isLogSize
+		from (
+			select dbName,
+				sum([size]) as totalSize
+				from #fileSizes
+				where isLog = 0
+				group by dbname
+			) a
+		where totalSize >= 1800
+			and @cVersion like '%desktop engine%'
+
 
 	--*********************************************************************************************************************
 	-- Send output to the notification system
@@ -1975,6 +2102,7 @@ union'
 	drop table #userActivity
 	drop table #maintenancePlanFailures
 	drop table #orphanedUsers
+	drop table #lockedObjects
 
 	if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
 		execute('drop procedure ' + @cProcedureName)
@@ -1984,3 +2112,4 @@ end
 -- select top 100 * from notificationLog order by ukey desc
 -- select top 100 * from notificationLog_history order by ukey desc
 -- delete from notificationLog where ukey >= 50239
+GO
