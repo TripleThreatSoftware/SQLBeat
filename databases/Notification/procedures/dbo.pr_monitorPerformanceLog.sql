@@ -57,7 +57,7 @@ begin
 
 	create clustered index ix_tmp_runstamps on #runstamps (runstamp, ukey_server, runNumber) with fillfactor = 100
 
-	set @cSQLString = 'select a.ukey_server, b.objectName, c.counterName, a.instanceName, '
+	set @cSQLString = 'select a.ukey_server, left(b.objectName, 200),left(c.counterName, 200), left(a.instanceName, 200), '
 
 	select @cSQLString = @cSQLString + char(13) +
 		'max(case when d.runNumber = 1 then a.counterValue else null end) as time1,' + CHAR(13) +
@@ -163,12 +163,14 @@ begin
 				from performanceLog a (nolock)
 				join dm_performanceObjects b (nolock) on a.ukey_object = b.ukey
 				join dm_performanceCounters c (nolock) on a.ukey_counter = c.ukey
+				join #servers d on a.ukey_server = d.ukey_server
 				where a.ymd >= dateAdd(hour, -24, @dStartDate)
 					and a.ymd <= dateAdd(hour, -3, @dEndDate)
 					and a.runStamp >= dbo.fn_returnRunstamp(dateAdd(hour, -24, @dStartDate))
 					and a.runStamp <= dbo.fn_returnRunstamp(dateAdd(hour, -3, @dEndDate))
 					and counterName not in ('Cache Objects in use', 'Transactions', 'Log Cache Hit Ratio', 'Log Cache Hit Ratio Base', 'Cache Hit Ratio', 'Cache Hit Ratio Base', 'Page life expectancy')
 					and objectName not in ('SQLServer:Buffer Partition', 'SQLServer:Buffer Node')
+					and len(a.counterValue) <= 15
 				group by a.ukey_server, b.objectName, c.counterName, a.instanceName
 			) b on a.ukey_server = b.ukey_server
 				and a.objectName = b.objectName
@@ -287,8 +289,8 @@ begin
 			set @cMessage = replace(@cMessage, 'Time09', (select top 1 right(dbo.fn_runstampToString(runStamp), 11) from #runstamps where ukey = 9))
 			set @cMessage = replace(@cMessage, 'Time10', (select top 1 right(dbo.fn_runstampToString(runStamp), 11) from #runstamps where ukey = 10))
 
-			print @cSubject
-			print @cMessage
+--			print @cSubject
+--			print @cMessage
 
 			insert into notificationLog_stage (serverName, subject, message, severity) values (@cServerName, @cSubject, @cMessage, 1)
 		end

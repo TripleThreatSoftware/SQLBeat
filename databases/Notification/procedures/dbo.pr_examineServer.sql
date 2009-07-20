@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 07/16/2009 10:21:46 ******/
+/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 07/20/2009 09:49:52 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -342,7 +342,7 @@ begin
 		if not exists (select top 1 [name] from sysobjects where [name] = 'jobStepHistory')
 		begin
 			create table jobStepHistory (ukey int identity, ymd dateTime default getDate(), ukey_job int, ukey_server int, ukey_jobHistory int, ukey_jobStep int, stepOutcome varchar(8000), runningSeconds int, isSuccess bit default 1)
-			create clustered index ix_jobStepHistory_ukey_server_job_jobHistory_step_ymd_outcome on jobStepHistory (ukey, ukey_server, ukey_job, ukey_jobHistory, ukey_jobStep, ymd, stepOutcome) with fillfactor = 80
+			create clustered index ix_jobStepHistory_ukey_server_job_jobHistory_step_ymd on jobStepHistory (ukey, ukey_server, ukey_job, ukey_jobHistory, ukey_jobStep, ymd) with fillfactor = 80
 		end
 
 		declare @dLastJobData dateTime
