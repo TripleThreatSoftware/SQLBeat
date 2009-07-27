@@ -1,4 +1,5 @@
 -- select top 100 * from notificationLog order by ymd desc
+-- select * from dm_drivespaceThresholds
 ALTER procedure [dbo].[pr_rpt_driveSpace]
 as
 begin
@@ -6,6 +7,8 @@ begin
 	declare @nThisUkey int
 	declare @cThisMessage varchar(8000)
 	declare @cThisSubject varchar(500)
+	declare @cServerName varchar(200)
+	declare @cDriveLetter varchar(1)
 
 	if not exists (select top 1 [name] from sysobjects where [name] = 'dm_drivespaceThresholds')
 	begin
@@ -22,7 +25,7 @@ begin
 		join drivespaceLog b (nolock) on a.serverName = b.serverName
 			and b.ymd >= dateAdd(hour, -6, getDate())
 		where a.isEnabled = 1
-			and a.detailedCheck = 1
+--			and a.detailedCheck = 1
 		group by a.ukey, a.serverName, b.driveLetter
 
 	-- for any drive letter not yet included, add a record
@@ -32,14 +35,11 @@ begin
 		left outer join dm_drivespaceThresholds b (nolock) on a.ukey_server = b.ukey_server
 			and a.driveLetter = b.driveLetter
 		join dm_servers c (nolock) on a.ukey_server = c.ukey
-			and c.enabled = 1
+			and c.isEnabled = 1
 		where b.ukey is null
 
-	insert into notificationLog_stage (serverName, severity, subject, message)
-	select
-		a.serverName, 1,
-		'Drive ' + isnull(a.driveLetter, 'N/A') + ' is down to ' + convert(varchar(100), a.driveSpace) + 'mb free.' as subject,
-		'Drive ' + isnull(a.driveLetter, 'N/A') + ' is down to ' + convert(varchar(100), a.driveSpace) + 'mb free at ' + convert(varchar(20), a.latestReading, 120) + '. Threshold is defined as ' + convert(varchar(100), d.lowSpaceThreshold) + 'mb.' as message
+	select identity(int) as ukey, a.serverName, a.driveLetter, b.driveSpace, a.latestReading, d.lowSpaceThreshold, c.ukey as ukey_server
+		into #drivespaceAlerts
 		from @latestReadings a
 		join drivespaceLog b (nolock) on a.serverName = b.serverName
 			and a.driveLetter = b.driveLetter
@@ -47,6 +47,63 @@ begin
 		join dm_servers c (nolock) on a.ukey_server = c.ukey
 		join dm_drivespaceThresholds d (nolock) on c.ukey = d.ukey_server
 			and b.driveSpace <= d.lowSpaceThreshold
+			and b.driveLetter = d.driveLetter
+
+	insert into notificationLog_stage (serverName, severity, subject, message)
+	select
+		serverName, 1,
+		'Drive ' + isnull(driveLetter, 'N/A') + ' is down to ' + convert(varchar(100), driveSpace) + 'mb free.' as subject,
+		'Drive ' + isnull(driveLetter, 'N/A') + ' is down to ' + convert(varchar(100), driveSpace) + 'mb free at ' + convert(varchar(20), latestReading, 120) + '. Threshold is defined as ' + convert(varchar(100), lowSpaceThreshold) + 'mb.' as message
+		from #drivespaceAlerts
+
+	set @nThisUkey = 0
+
+	while exists (select top 1 ukey from #drivespaceAlerts where ukey > @nThisUkey)
+	begin
+		select top 1
+			@nThisUkey = ukey,
+			@cServerName = serverName,
+			@cDriveLetter = driveLetter,
+			@dToday = latestReading
+			from #drivespaceAlerts
+			where ukey > @nThisUkey
+			order by ukey
+
+		set @cThisSubject = @cServerName + ' (' + @cDriveLetter + ')'
+
+		exec notification..pr_updateState @cKeyName = @cThisSubject, @cState = 'Low space', @dYMD = @dToday, @cCategory = 'Drive Space'
+	end
+
+	set @nThisUkey = 0
+
+	while exists (
+		select top 1 a.ukey
+			from dm_drivespaceThresholds a (nolock)
+			left outer join #drivespaceAlerts b on a.ukey_server = b.ukey_server
+				and a.driveLetter = b.driveLetter
+			where a.ukey > @nThisUkey
+				and b.ukey is null
+		)
+	begin
+		select top 1
+			@nThisUkey = a.ukey,
+			@cServerName = c.serverName,
+			@cDriveLetter = a.driveLetter,
+			@dToday = getDate()
+			from dm_drivespaceThresholds a (nolock)
+			left outer join #drivespaceAlerts b on a.ukey_server = b.ukey_server
+				and a.driveLetter = b.driveLetter
+			join dm_servers c (nolock) on a.ukey_server = c.ukey
+			where a.ukey > @nThisUkey
+				and b.ukey is null
+			order by a.ukey
+
+		set @cThisSubject = @cServerName + ' (' + @cDriveLetter + ')'
+
+		exec notification..pr_updateState @cKeyName = @cThisSubject, @cState = 'Normal', @dYMD = @dToday, @cCategory = 'Drive Space'
+	end
+
+	drop table #drivespaceAlerts
 
 	set @dToday = convert(varchar(10), getDate(), 120)
 
@@ -159,6 +216,7 @@ begin
 			and weeksLeft_14 < 10
 			and driveSpace_3 > driveSpace_today
 			and percentDrop_3 > 5
+			and percentDrop_14 > 0
 
 	insert into notificationLog_stage (serverName, subject, message, severity)
 	select serverName, subject, message, 2

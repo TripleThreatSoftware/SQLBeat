@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 07/20/2009 09:49:52 ******/
+/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 07/27/2009 12:11:48 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -684,7 +684,7 @@ begin
 							)
 					group by b.job_id
 				) b on a.job_id = b.job_id
-			where a.expectedRunningSeconds = 0
+			where isnull(a.expectedRunningSeconds, 0) = 0
 
 		-- and if there's nothing else, look at the last little while
 		update #runningJobs
@@ -702,7 +702,7 @@ begin
 						and a.ymd >= dateAdd(hour, -2, getDate())
 					group by b.job_id
 				) b on a.job_id = b.job_id
-			where a.expectedRunningSeconds = 0
+			where isnull(a.expectedRunningSeconds, 0) = 0
 
 		--********************************************************************************************************
 		--********************************************************************************************************
