@@ -1,3 +1,9 @@
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- update dm_servers set serviceCheck = 1 where isSQLBox = 1 and detailedCheck = 1
+
 -- select top 100 * from messagesSent order by ymd desc
 
 ALTER       procedure [dbo].[pr_monitorBigBrother]
@@ -18,6 +24,20 @@ begin
 	declare @dStartTime dateTime
 	declare @bMonitorProcesses bit
 	declare @nUkey int
+	declare @nUkeyServer int
+	declare @nThisUkey int
+
+	declare @cThisSubject varchar(8000)
+	declare @cThisMessage varchar(8000)
+	declare @cJobName varchar(1000)
+
+	declare @nNumSuccess int
+	declare @nNumFailure int
+
+	declare @dLastSuccess dateTime
+	declare @dLastFailure dateTime
+
+	set @nUkeyServer = -1
 
 	-- if we need to watch this server, flip this bit on
 	set @bMonitorProcesses = 0
@@ -44,6 +64,18 @@ begin
 	--*********************************************************************************************************************
 	-- Tables
 	--*********************************************************************************************************************
+
+
+	create table #jobHistory (ukey int identity, job_id uniqueIdentifier, jobName varchar(1000), jobOutcome varchar(8000), runningSeconds int, ymd dateTime, isSuccess bit, isEnabled bit)
+	create table #jobStepHistory (ukey int identity, job_id uniqueIdentifier, jobName varchar(1000), stepName varchar(1000), stepOutcome varchar(8000), runningSeconds int, ymd dateTime, isSuccess bit, ymd_jobRun dateTime, stepCommand varchar(8000), stepNumber int)
+
+	create table #runningJobs (Job_ID uniqueidentifier, Last_Run_Date int, Last_Run_Time varchar(6), Next_Run_Date int, Next_Run_Time varchar(6),
+		Next_Run_Schedule_ID int, Requested_To_Run int, Request_Source int, Request_Source_ID varchar(100), Running int,
+		Current_Step int, Current_Retry_Attempt int, State int, ymd dateTime, last_run_outcome int, job_id_char varchar(100),
+		nextRun dateTime, minutesRunning decimal(10,2), secondsRunning int, startTime dateTime, jobName varchar(200), spidStartTime dateTime,
+		currentStepName varchar(200), currentStepText varchar(1000),
+		expectedRunningSeconds int default 0, maxRunningSeconds int default 0, isSystemJob bit default 0, spid int)
+
 
 	create table #results (ukey int identity, subject varchar(300), message varchar(8000), severity int default 1,
 			isJobFailure bit default 0, isLogShippingJobFailure bit default 0, isLongRunningJob bit default 0,
@@ -374,224 +406,388 @@ begin
 	-- Job average runtimes
 	--*********************************************************************************************************************
 
-	-- drop table #jobAverageRuntimes
-	create table #jobAverageRuntimes (ukey int identity, job_id uniqueIdentifier, job_name varchar(500), runtime decimal(10,2),
-		runtime_average decimal(10,2), runtime_median decimal(10,2), runtime_max decimal(10,2), isTimeOfDaySpecific bit default 0)
+	declare @dLastJobData dateTime
 
-	-- first, look through the history for runs at about this time of day
-	insert into #jobAverageRuntimes (job_id, job_name, runtime_average, runtime_median, runtime_max, isTimeOfDaySpecific)
-	SELECT
+	set @dLastJobData = (select max(ymd) from jobHistory (nolock) where ukey_server = @nUkeyServer)
+
+	-- if we have no job data, just look at today
+	if isnull(@dLastJobData, '') = ''
+		set @dLastJobData = convert(varchar(10), getDate(), 120)
+
+	-- jobs
+	insert into #jobHistory (job_id, jobName, jobOutcome, runningSeconds, ymd, isSuccess, isEnabled)
+	select
 		a.job_id,
-		a.name,
-		convert(decimal(10,2), avg(
-			convert(decimal(10,4), SUBSTRING(RIGHT('000000' + CAST(run_duration AS VARCHAR(10)),6),3,2)) + 1 +
-			convert(decimal(10,4), left(RIGHT('000000' + CAST(run_duration AS VARCHAR(10)),6),2)) * 60
-			)) as runtime_average,
-		convert(decimal(10,2),
-			(
-				max(
-					convert(decimal(10,4), SUBSTRING(RIGHT('000000' + CAST(run_duration AS VARCHAR(10)),6),3,2)) + 1 +
-					convert(decimal(10,4), left(RIGHT('000000' + CAST(run_duration AS VARCHAR(10)),6),2)) * 60
-					) +
-				min(
-					convert(decimal(10,4), SUBSTRING(RIGHT('000000' + CAST(run_duration AS VARCHAR(10)),6),3,2)) + 1 +
-					convert(decimal(10,4), left(RIGHT('000000' + CAST(run_duration AS VARCHAR(10)),6),2)) * 60
-					)
-				) / 2
-			) as runtime_median,
-		convert(decimal(10,2), max(
-			convert(decimal(10,4), SUBSTRING(RIGHT('000000' + CAST(run_duration AS VARCHAR(10)),6),3,2)) + 1 +
-			convert(decimal(10,4), left(RIGHT('000000' + CAST(run_duration AS VARCHAR(10)),6),2)) * 60
-			)) as runtime_max,
-		1 as isTimeOfDaySpecific
+		left(a.[name], 1000) as jobName,
+		case when message not like '%the job succeeded%' then left(b.message, 8000) else '' end as jobOutcome,
 
-		FROM msdb.dbo.sysjobs a (nolock)
-		JOIN msdb.dbo.sysjobhistory b (nolock) ON a.job_id = b.job_id
-			AND b.step_id = 0
-			AND b.run_status  = 1
-			and abs(dateDiff(minute, getDate(),
-				convert(dateTime, convert(varchar(10), getDate(), 120) + ' ' +
-					left(replicate('0', 6 - len(rtrim(run_time))) + rtrim(ltrim(run_time)), 2) + ':' +
-						left(right(replicate('0', 6 - len(rtrim(run_time))) +
-						rtrim(ltrim(run_time)), 4), 2) + ':' +
-						right(replicate('0', 6 - len(rtrim(run_time))) + rtrim(ltrim(run_time)), 2) + '.000')
-				)) < 90
+		right(convert(varchar(10), run_duration), 2) +
+			left(right('000000' + convert(varchar(10), run_duration), 4), 2) * 60 +
+			left(right('000000' + convert(varchar(10), run_duration), 6), 2) * 60 * 60 as runningSeconds,
 
-		WHERE a.enabled = 1
-		group by a.job_id, a.name
-		-- must be at least two past runs for a half-decent average
-		having count(*) >= 2
+		left(run_date, 4) + '-' +
+			left(right(run_date, 4), 2) + '-' +
+			right(run_date, 2) + ' ' +
+			left(right('000000' + convert(varchar(20), run_time), 6), 2) + ':' +
+			left(right(right('000000' + convert(varchar(20), run_time), 6), 4), 2) + ':' +
+			right(right('000000' + convert(varchar(20), run_time), 6), 2) + '.000' as ymd,
 
-	insert into #jobAverageRuntimes (job_id, job_name, runtime_average, runtime_median, runtime_max)
-	SELECT
-		a.job_id,
-		a.name,
-		convert(decimal(10,2), avg(
-			convert(decimal(10,4), SUBSTRING(RIGHT('000000' + CAST(run_duration AS VARCHAR(10)),6),3,2)) + 1 +
-			convert(decimal(10,4), left(RIGHT('000000' + CAST(run_duration AS VARCHAR(10)),6),2)) * 60
-			)) as runtime_average,
-		convert(decimal(10,2),
-			(
-				max(
-					convert(decimal(10,4), SUBSTRING(RIGHT('000000' + CAST(run_duration AS VARCHAR(10)),6),3,2)) + 1 +
-					convert(decimal(10,4), left(RIGHT('000000' + CAST(run_duration AS VARCHAR(10)),6),2)) * 60
-					) +
-				min(
-					convert(decimal(10,4), SUBSTRING(RIGHT('000000' + CAST(run_duration AS VARCHAR(10)),6),3,2)) + 1 +
-					convert(decimal(10,4), left(RIGHT('000000' + CAST(run_duration AS VARCHAR(10)),6),2)) * 60
-					)
-				) / 2
-			) as runtime_median,
-		convert(decimal(10,2), max(
-			convert(decimal(10,4), SUBSTRING(RIGHT('000000' + CAST(run_duration AS VARCHAR(10)),6),3,2)) + 1 +
-			convert(decimal(10,4), left(RIGHT('000000' + CAST(run_duration AS VARCHAR(10)),6),2)) * 60
-			)) as runtime_max
+		b.run_status as isSuccess,
+		a.enabled as isEnabled
 
-		FROM msdb.dbo.sysjobs a (nolock)
-		JOIN msdb.dbo.sysjobhistory b (nolock) ON a.job_id = b.job_id
-			AND b.step_id = 0
-			AND b.run_status  = 1
-			and convert(dateTime, SUBSTRING(CAST(b.run_date AS CHAR(8)),5,2)
-				+ '/' + RIGHT(CAST(b.run_date AS CHAR(8)),2)
-				+ '/' + LEFT(CAST(b.run_date AS CHAR(8)),4)) >= dateAdd(month, -2, getDate())
+		from msdb.dbo.sysjobs a
+		join msdb.dbo.sysjobhistory b on a.job_id = b.job_id
+			and b.step_id = 0
+		where left(run_date, 4) + '-' +
+			left(right(run_date, 4), 2) + '-' +
+			right(run_date, 2) + ' ' +
+			left(right('000000' + convert(varchar(20), run_time), 6), 2) + ':' +
+			left(right(right('000000' + convert(varchar(20), run_time), 6), 4), 2) + ':' +
+			right(right('000000' + convert(varchar(20), run_time), 6), 2) + '.000' >= '' + convert(varchar(20), @dLastJobData, 120) + ''
+		order by a.job_id, b.run_date, right('000000' + convert(varchar(20), b.run_time), 6)
 
-		WHERE a.enabled = 1
-			and a.job_id not in (select distinct job_id from #jobAverageRuntimes)
-		group by a.job_id, a.name
+	-- steps
+	insert into #jobStepHistory (job_id, jobName, stepName, stepOutcome, runningSeconds, ymd, isSuccess, stepCommand, stepNumber)
+	select
+		a.job_id, left(a.[name], 1000) as jobName, left(b.step_name, 1000) as stepName,
+		case when message not like '%the step succeeded%' then left(b.message, 8000) else '' end as stepOutcome,
 
-	-- I want to avoid job runtimes creeping upwards, but at the same time there are jobs that
-	-- run for every five minutes but only have work to do during a narrow window of the day
-	update #jobAverageRuntimes
-		set runtime = case
-			when (runtime_max * 0.9) > runtime_average * 1.25 then runtime_max * 0.9
-			else case
-				when runtime_median > runtime_average * 1.25 then runtime_median
-				else runtime_average
-				end
-			end
+		right(convert(varchar(10), run_duration), 2) +
+			left(right('000000' + convert(varchar(10), run_duration), 4), 2) * 60 +
+			left(right('000000' + convert(varchar(10), run_duration), 6), 2) * 60 * 60 as runningSeconds,
 
-	-- insert into hist_monitorBigBrother (stepName) values ('Job runtimes retrieved')
+		left(run_date, 4) + '-' +
+			left(right(run_date, 4), 2) + '-' +
+			right(run_date, 2) + ' ' +
+			left(right('000000' + convert(varchar(20), run_time), 6), 2) + ':' +
+			left(right(right('000000' + convert(varchar(20), run_time), 6), 4), 2) + ':' +
+			right(right('000000' + convert(varchar(20), run_time), 6), 2) + '.000' as ymd,
+
+		b.run_status as isSuccess,
+		left(c.command, 8000),
+		b.step_id
+
+		from msdb.dbo.sysjobs a
+		join msdb.dbo.sysjobhistory b on a.job_id = b.job_id
+			and b.step_id <> 0
+		join msdb.dbo.sysjobsteps c on a.job_id = c.job_id
+			and b.step_id = c.step_id
+		where left(run_date, 4) + '-' +
+			left(right(run_date, 4), 2) + '-' +
+			right(run_date, 2) + ' ' +
+			left(right('000000' + convert(varchar(20), run_time), 6), 2) + ':' +
+			left(right(right('000000' + convert(varchar(20), run_time), 6), 4), 2) + ':' +
+			right(right('000000' + convert(varchar(20), run_time), 6), 2) + '.000' >= '' + convert(varchar(20), @dLastJobData, 120) + ''
+		order by a.job_id, b.run_date, b.run_time, b.step_id
 
 	--*********************************************************************************************************************
-	-- All jobs
+	-- Add job data to local mart tables
 	--*********************************************************************************************************************
 
-	create table #allJobs (Job_ID uniqueidentifier, Last_Run_Date int, Last_Run_Time varchar(6), Next_Run_Date int, Next_Run_Time varchar(6),
-		Next_Run_Schedule_ID int, Requested_To_Run int, Request_Source int, Request_Source_ID varchar(100), Running int,
-		Current_Step int, Current_Retry_Attempt int, State int, ymd dateTime, last_run_outcome int, job_id_char varchar(100),
-		nextRun dateTime, minutesRunning decimal(10,2), startTime dateTime, spid int)
+	insert into dm_serverJobs (ukey_server, jobName, job_id, isEnabled)
+	select distinct @nUkeyServer, a.jobName, a.job_id, a.isEnabled
+		from #jobHistory a
+		left outer join dm_serverJobs b (nolock) on b.ukey_server = @nUkeyServer
+			and b.jobName = a.jobName
+			and a.job_id = b.job_id
+		where b.ukey is null
 
-	insert into #allJobs (job_id, last_run_date, last_run_time, next_run_date, next_run_time, next_run_schedule_id, requested_to_run,
+	insert into dm_serverJobSteps (ukey_server, ukey_job, stepName, stepCommand, stepNumber)
+	select distinct @nUkeyServer, a.ukey, b.stepName, b.stepCommand, b.stepNumber
+		from dm_serverJobs a
+		join #jobStepHistory b on a.job_id = b.job_id
+		left outer join dm_serverJobSteps c (nolock) on c.ukey_server = @nUkeyServer
+			and a.ukey = c.ukey_job
+			and b.stepNumber = c.stepNumber
+		where a.ukey_server = @nUkeyServer
+			and c.ukey is null
+
+	update dm_serverJobSteps
+		set stepCommand = b.stepCommand,
+			stepName = b.stepName
+		from dm_serverJobSteps a
+		join (
+			select distinct b.ukey as ukey_job, a.stepNumber, a.stepName, a.stepCommand
+				from #jobStepHistory a
+				join dm_serverJobs b (nolock) on a.job_id = b.job_id
+					and b.ukey_server = @nUkeyServer
+			) b on a.ukey_job = b.ukey_job
+				and a.stepNumber = b.stepNumber
+
+	insert into jobHistory (ymd, ukey_job, ukey_server, jobOutcome, runningSeconds, isSuccess)
+	select distinct a.ymd, b.ukey, @nUkeyServer, a.jobOutcome, a.runningSeconds, a.isSuccess
+		from #jobHistory a
+		join dm_serverJobs b on a.job_id = b.job_id
+			and a.jobName = b.jobName
+			and b.ukey_server = @nUkeyServer
+		left outer join jobHistory c (nolock) on b.ukey = c.ukey_job
+			and c.ukey_server = @nUkeyServer
+			and a.ymd = c.ymd
+		where c.ukey is null
+
+	update #jobStepHistory
+		set ymd_jobRun = b.ymd
+		from #jobStepHistory a
+		join (
+			select a.ukey, max(b.ymd) as ymd
+				from #jobStepHistory a
+				join #jobHistory b on a.job_id = b.job_id
+					and b.ymd <= a.ymd
+				group by a.ukey
+			) b on a.ukey = b.ukey
+
+	insert into jobStepHistory (ymd, ukey_job, ukey_server, ukey_jobHistory, ukey_jobStep, stepOutcome, isSuccess, runningSeconds)
+	select a.ymd, c.ukey, @nUkeyServer, e.ukey, d.ukey, a.stepOutcome, a.isSuccess, a.runningSeconds
+		from #jobStepHistory a
+		join #jobHistory b on a.job_id = b.job_id
+			and a.ymd_jobRun = b.ymd
+		join dm_serverJobs c (nolock) on c.ukey_server = @nUkeyServer
+			and a.job_id = c.job_id
+			and b.jobName = c.jobName
+		join dm_serverJobSteps d (nolock) on d.ukey_server = @nUkeyServer
+			and d.ukey_job = c.ukey
+			and d.stepName = a.stepName
+		join jobHistory e (nolock) on b.ymd = e.ymd
+			and e.ukey_server = @nUkeyServer
+			and e.ukey_job = c.ukey
+		left outer join jobStepHistory f (nolock) on a.ymd = f.ymd
+			and f.ukey_server = @nUkeyServer
+			and f.ukey_job = c.ukey
+			and f.ukey_jobHistory = e.ukey
+			and f.ukey_jobStep = d.ukey
+		where f.ukey is null
+
+
+	--********************************************************************************************************
+	--********************************************************************************************************
+	-- Now, figure out what is running and what the expected runtime is
+	insert into #runningJobs (job_id, last_run_date, last_run_time, next_run_date, next_run_time, next_run_schedule_id, requested_to_run,
 		request_source, request_source_id, running, current_step, current_retry_attempt, state)
 	exec master.dbo.xp_sqlagent_enum_jobs 1, ''
 
-	update #allJobs
+	update #runningJobs
 		set last_run_outcome = b.last_run_outcome
-		from #allJobs a
-		join msdb..sysjobservers b (nolock) on a.job_id = b.job_id
+		from #runningJobs a
+		join msdb.dbo.sysjobservers b  on a.job_id = b.job_id
 
-	update #allJobs
+	update #runningJobs
+		set jobName = isnull(left(rtrim(ltrim(b.name)), 200), '')
+		from #runningJobs a
+		left outer join msdb.dbo.sysjobs b  on a.job_id = b.job_id
+
+	update #runningJobs
+		set currentStepName = left(b.step_name, 200),
+			currentStepText = left(b.command, 1000)
+		from #runningJobs a
+		join msdb.dbo.sysjobsteps b on a.job_id = b.job_id
+		where isnull(a.current_step, 0) > 0
+
+	update #runningJobs
 		set job_id_char = dbo.fn_hex_to_char(job_id,16)
 
-	update #allJobs
+	update #runningJobs
 		set Last_Run_Time = replicate('0', 6 - len(rtrim(Last_Run_Time))) + rtrim(ltrim(Last_Run_Time))
 		where len(rtrim(Last_Run_Time)) < 6
-	update #allJobs
+	update #runningJobs
 		set Next_Run_Time = replicate('0', 6 - len(rtrim(Next_Run_Time))) + rtrim(ltrim(Next_Run_Time))
 		where len(rtrim(Next_Run_Time)) < 6
 
-	update #allJobs
+	update #runningJobs
 		set ymd = convert(dateTime, left(last_run_date, 4) + '-' + left(right(last_run_date, 4), 2) + '-' + right(last_run_date, 2) + ' ' + left(last_run_time, 2) + ':' + left(right(Last_Run_Time, 4), 2) + ':' + right(Last_Run_Time, 2) + '.000')
 		where left(last_run_date, 2) = '20'
-	update #allJobs
+	update #runningJobs
 		set nextRun = convert(dateTime, left(Next_run_date, 4) + '-' + left(right(Next_run_date, 4), 2) + '-' + right(Next_run_date, 2) + ' ' + left(Next_run_time, 2) + ':' + left(right(Next_Run_Time, 4), 2) + ':' + right(Next_Run_Time, 2) + '.000')
 		where left(Next_run_date, 2) = '20'
 
-	update #allJobs
+	-- For SP4, the JOBID is no longer in the programName field. Improvise.
+	update #runningJobs
+		set spidStartTime = b.spidStartTime
+		from #runningJobs a
+		join (
+			select a.job_id, min(isnull(c.login_time, isnull(c.last_batch, getDate()))) as spidStartTime
+				from #runningJobs a
+				left outer join master.dbo.sysprocesses c on c.program_name like '%' + a.job_id_char + '%'
+				group by a.job_id
+			) b on a.job_id = b.job_id
+
+	update #runningJobs
 		set startTime = case
-				when request_source = 4 then getDate() -- user initiated
-				else isnull(isnull(c.login_time, isnull(c.last_batch, case when nextRun <= getDate() then a.nextRun else a.ymd end)), getDate())
-				end,
-			spid = c.spid
-		from #allJobs a
-		left outer join master..sysprocesses c (nolock) on substring(c.program_name,32,32)= a.job_id_char
---		where a.running = 1
+			-- kicked off by hand, we already know we didn't match to a running SPID and are likely an SP4 box
+			when request_source = 4
+				then getDate()
 
-	update #allJobs
-		set minutesRunning = isnull(dateDiff(minute, startTime, getDate()), 0)
+			-- normal case, fired on schedule
+			when isnull(nextRun, getDate()) < getDate() and request_source <> 4 -- run on a schedule
+				then nextRun
 
-	update #allJobs
+			-- for SP3 and down, the JOBID is in programname for SP_WHO2
+			-- this case will code when jobs are fired programmatically or by hand
+			when spidStartTime is not null
+				then spidStartTime
+
+			-- ymd=lastruntime
+			-- only valid when the job is not running
+			when running = 0
+				then ymd
+
+			else getDate()
+			end
+
+	update #runningJobs
+		set startTime = null
+		where startTime is not null
+			and dateDiff(hour, startTime, getDate()) > 12
+
+	update #runningJobs
+		set minutesRunning = isnull(dateDiff(minute, startTime, getDate()), 0), secondsRunning = isnull(dateDiff(second, startTime, getDate()), 0)
+
+	update #runningJobs
 		set running = 0
 		where abs(dateDiff(minute, startTime, getDate())) < 5
 			or abs(dateDiff(minute, nextRun, getDate())) < 5
 
-	-- insert into hist_monitorBigBrother (stepName) values ('Job data processed')
+	update #runningJobs
+		set spid = c.spid
+		from #runningJobs a
+		left outer join master..sysprocesses c (nolock) on substring(c.program_name,32,32)= a.job_id_char
+
+	-- now, let's get rid of anything that is not currently running
+	delete from #runningJobs where running = 0
+
+	--********************************************************************************************************
+	--********************************************************************************************************
+	-- Now, let's find any jobs that are running now and running longer than they should
+
+	-- first, look at last weeks at exactly this time
+	update #runningJobs
+		set expectedRunningSeconds = b.expectedRunningSeconds,
+			maxRunningSeconds = b.maxRunningSeconds
+		from #runningJobs a
+		join (
+			select b.job_id,
+				avg(runningSeconds) as expectedRunningSeconds,
+				max(runningSeconds) as maxRunningSeconds
+				from jobHistory a (nolock)
+				join dm_serverJobs b (nolock) on a.ukey_job = b.ukey
+					and b.ukey_server = @nUkeyServer
+				where a.ukey_server = @nUkeyServer
+					and (
+						a.ymd between dateAdd(week, -1, dateAdd(minute, -30, getDate())) and dateAdd(week, -1, dateAdd(minute, 30, getDate()))
+						or a.ymd between dateAdd(week, -2, dateAdd(minute, -30, getDate())) and dateAdd(week, -2, dateAdd(minute, 30, getDate()))
+						or a.ymd between dateAdd(week, -3, dateAdd(minute, -30, getDate())) and dateAdd(week, -3, dateAdd(minute, 30, getDate()))
+						or a.ymd between dateAdd(week, -4, dateAdd(minute, -30, getDate())) and dateAdd(week, -4, dateAdd(minute, 30, getDate()))
+						)
+				group by b.job_id
+			) b on a.job_id = b.job_id
+
+	-- if that didn't work, look at last few days at this time
+	update #runningJobs
+		set expectedRunningSeconds = b.expectedRunningSeconds,
+			maxRunningSeconds = b.maxRunningSeconds
+		from #runningJobs a
+		join (
+			select b.job_id,
+				avg(runningSeconds) as expectedRunningSeconds,
+				max(runningSeconds) as maxRunningSeconds
+				from jobHistory a (nolock)
+				join dm_serverJobs b (nolock) on a.ukey_job = b.ukey
+					and b.ukey_server = @nUkeyServer
+				where a.ukey_server = @nUkeyServer
+					and (
+						a.ymd between dateAdd(day, -1, dateAdd(minute, -30, getDate())) and dateAdd(day, -1, dateAdd(minute, 30, getDate()))
+						or a.ymd between dateAdd(day, -2, dateAdd(minute, -30, getDate())) and dateAdd(day, -2, dateAdd(minute, 30, getDate()))
+						or a.ymd between dateAdd(day, -3, dateAdd(minute, -30, getDate())) and dateAdd(day, -3, dateAdd(minute, 30, getDate()))
+						or a.ymd between dateAdd(day, -4, dateAdd(minute, -30, getDate())) and dateAdd(day, -4, dateAdd(minute, 30, getDate()))
+						)
+				group by b.job_id
+			) b on a.job_id = b.job_id
+		where isnull(a.expectedRunningSeconds, 0) = 0
+
+	-- and if there's nothing else, look at the last little while
+	update #runningJobs
+		set expectedRunningSeconds = b.expectedRunningSeconds,
+			maxRunningSeconds = b.maxRunningSeconds
+		from #runningJobs a
+		join (
+			select b.job_id,
+				avg(runningSeconds) as expectedRunningSeconds,
+				max(runningSeconds) as maxRunningSeconds
+				from jobHistory a (nolock)
+				join dm_serverJobs b (nolock) on a.ukey_job = b.ukey
+					and b.ukey_server = @nUkeyServer
+				where a.ukey_server = @nUkeyServer
+					and a.ymd >= dateAdd(hour, -2, getDate())
+				group by b.job_id
+			) b on a.job_id = b.job_id
+		where isnull(a.expectedRunningSeconds, 0) = 0
+
+
+
+	--********************************************************************************************************
+	--********************************************************************************************************
+	-- We have expected runtime data now, so generate alerts
+
+	-- these we'll handle separately
+	update #runningJobs
+		set isSystemJob = 1
+		where jobName like '%trim history%'
+			or jobName like '%eventlog check%'
+			or jobName like '%fragmentation check%'
+			or jobName like '%configuration check%'
+			or jobName like '%import weblogs%'
+			or jobName like '%monitor sql objects%'
+			or jobName like '%monitor sql statistics%'
+			or jobName like '%monitor table sizes%'
+			or jobName like 'maintenance%'
 
 	-- jobs that we have a history for
 	insert into #results (message, severity, subject, isLongRunningJob)
-	select distinct 'Job [' + isnull(rtrim(ltrim(b.name)), '') + '], ' +
-			'which usually runs in ' + isnull(convert(varchar(20), d.runtime), '') + ' minutes' +
-				case when d.isTimeOfDaySpecific = 1 then ' at this time of day' else '' end + ', ' +
-			'has been running for more than ' + convert(varchar(20), minutesRunning) + ' ' +
-			'(Started at: ' + convert(varchar(20), startTime) + ').' as message,
-		-- if runtime > 4x, then it's a critical alert
+	select distinct left(
+			'Job [' + jobName + '], ' +
+			'which usually runs in ' + isnull(convert(varchar(20), expectedRunningSeconds), '') + ' seconds, ' +
+			'has been running for ' + convert(varchar(20), secondsRunning) + ' seconds. ' + char(13) + char(13) +
+			'Start time: ' + convert(varchar(20), startTime) + char(13) +
+			'Current step: ' + a.currentStepName + char(13) +
+			'Current step text: ' + char(13) + a.currentStepText, 2000) as message,
+		-- if runtime > 2x, then it's a critical alert
 		-- otherwise, sit on it
-		case when minutesRunning > d.runtime * 4 and minutesRunning > 5 then 1 else 2 end as severity,
-		'Job [' + isnull(rtrim(ltrim(b.name)), '') + '] has been running for more than ' + convert(varchar(20), convert(int, (minutesRunning/10)) * 10) + ' minutes.' as subject,
+		case
+			when @bIsOffHours = 1 then 2
+			when minutesRunning > expectedRunningSeconds * 2 then 1
+			else 2
+			end as severity,
+		'Job [' + isnull(rtrim(ltrim(jobName)), '') + '] has been running for more than ' + convert(varchar(20), convert(int, (minutesRunning/10)) * 10) + ' minutes.' as subject,
 		1 as isLongRunningJob
-		from #allJobs a
-		join msdb..sysjobs b (nolock) on a.job_id = b.job_id
-		join #jobAverageRuntimes d on a.job_id = d.job_id
-			and (
-				(
-					minutesRunning > d.runtime * 2 -- running 4x longer than average
-					and a.minutesRunning > 15
-					)
- 				)
-		where a.running = 1
-			-- must have been running for more than 45 minutes before I care about it
-			and datePart(year, a.startTime) <> 1900
-			and b.[name] not like '%trim history%'
-			and b.[name] not like '%eventlog check%'
-			and b.[name] not like '%fragmentation check%'
-			and b.[name] not like '%configuration check%'
-			and b.[name] not like '%import weblogs%'
-			and b.[name] not like '%monitor sql objects%'
-			and b.[name] not like '%monitor sql statistics%'
-			and b.[name] not like '%monitor table sizes%'
-			and b.[name] not like 'maintenance%'
+		from #runningJobs a
+		where secondsRunning > expectedRunningSeconds * 1.5
+			and secondsRunning > 60
+			-- should be at least 90% of the longest runtime we've observed
+			and secondsRunning > maxRunningSeconds * 0.9
+			and expectedRunningSeconds > 0
+			and isSystemJob = 0
 
 	-- jobs that we do not have a history for
 	-- this should be a rare case, only for new jobs
 	insert into #results (message, severity, subject, isLongRunningJob)
-	select distinct 'Job [' + isnull(rtrim(ltrim(b.name)), '') + '], ' +
-			'which has no history, ' +
-			'has been running for ' + convert(varchar(20), minutesRunning) + ' minutes ' +
-			'(Started at: ' + convert(varchar(20), startTime) + '). ' + char(13) +
-			'The current time is ' + convert(varchar(20), getDate(), 120) + '.' as message,
-		2 as severity,
-		'Job [' + isnull(rtrim(ltrim(b.name)), '') + '] has been running for more than ' + convert(varchar(20), convert(int, (minutesRunning/10)) * 10) + ' minutes.' as subject,
+	select distinct left(
+			'Job [' + jobName + '], ' +
+			'which has no runtime history, ' +
+			'has been running for ' + convert(varchar(20), secondsRunning) + ' seconds. ' + char(13) + char(13) +
+			'Start time: ' + convert(varchar(20), startTime) + char(13) +
+			'Current step: ' + a.currentStepName + char(13) +
+			'Current step text: ' + char(13) + a.currentStepText, 2000) as message,
+		-- if runtime > 2x, then it's a critical alert
+		-- otherwise, sit on it
+		case
+			when @bIsOffHours = 1 then 2
+			else 2
+			end as severity,
+		'Job [' + isnull(rtrim(ltrim(jobName)), '') + '] has been running for more than ' + convert(varchar(20), convert(int, (minutesRunning/10)) * 10) + ' minutes.' as subject,
 		1 as isLongRunningJob
-		from #allJobs a
-		join msdb..sysjobs b (nolock) on a.job_id = b.job_id
-		left outer join  #jobAverageRuntimes d on a.job_id = d.job_id
---		left outer join msdb..sycategories c on a.category_id = c.category_id
-		where running = 1
-			and d.job_id is null
-			-- must have been running for more than 60 minutes before I care about it
-			and minutesRunning > 45
-			and datePart(year, startTime) <> 1900
-			and b.[name] not like '%trim history%'
-			and b.[name] not like '%eventlog check%'
-			and b.[name] not like '%fragmentation check%'
-			and b.[name] not like '%configuration check%'
-			and b.[name] not like '%import weblogs%'
-			and b.[name] not like '%monitor sql objects%'
-			and b.[name] not like '%monitor sql statistics%'
-			and b.[name] not like '%monitor table sizes%'
-			and isnull(b.[name], '') not like '%sqlautomation%'
-			and isnull(b.[name], '') not like '%sqlbeat%'
-			and b.[name] not like 'maintenance%'
+		from #runningJobs a
+		where secondsRunning > 60*5
+			and expectedRunningSeconds = 0
+			and isSystemJob = 0
 
 	-- if we found some long running jobs, kill 'em off if they're over five times normal runtime
 	if (select count(*) from #results where isLongRunningJob = 1) > 0
@@ -603,57 +799,35 @@ begin
 
 		while exists (
 			select top 1 SPID
-				from #allJobs a
-				join msdb..sysjobs b (nolock) on a.job_id = b.job_id
-				left outer join #jobAverageRuntimes d on a.job_id = d.job_id
-				where a.running = 1
-					and datePart(year, a.startTime) <> 1900
-					and not isnull(rtrim(ltrim(b.name)), '') like '%log shipping%'
-					and not isnull(rtrim(ltrim(b.name)), '') like '%transaction log%'
-					and b.[name] not like '%trim history%'
-					and b.[name] not like '%eventlog check%'
-					and b.[name] not like '%configuration check%'
-					and b.[name] not like '%monitor sql objects%'
-					and b.[name] not like '%import weblogs%'
-					and b.[name] not like '%monitor sql statistics%'
-					and b.[name] not like '%monitor table sizes%'
-					and b.[name] > @cThisJob
-					and minutesRunning > 30
+				from #runningJobs a
+				where jobName > @cThisJob
+					and isSystemJob = 0
 					and (
-						d.job_id is null
+						(secondsRunning > 60*5 and expectedRunningSeconds = 0)
 						or (
-							d.job_id is not null
-							and minutesRunning > d.runtime * 4
+							secondsRunning > expectedRunningSeconds * 1.5
+							and secondsRunning > 60
+							-- should be at least 90% of the longest runtime we've observed
+							and secondsRunning > maxRunningSeconds * 0.9
 						)
 					)
 			)
 		begin
 
-			select top 1 @nThisSPID = spid, @cThisJob = left(b.[name], 200)
-				from #allJobs a
-				join msdb..sysjobs b (nolock) on a.job_id = b.job_id
-				left outer join #jobAverageRuntimes d on a.job_id = d.job_id
-				where a.running = 1
-					and datePart(year, a.startTime) <> 1900
-					and not isnull(rtrim(ltrim(b.name)), '') like '%log shipping%'
-					and not isnull(rtrim(ltrim(b.name)), '') like '%transaction log%'
-					and b.[name] not like '%trim history%'
-					and b.[name] not like '%eventlog check%'
-					and b.[name] not like '%configuration check%'
-					and b.[name] not like '%monitor sql objects%'
-					and b.[name] not like '%import weblogs%'
-					and b.[name] not like '%monitor sql statistics%'
-					and b.[name] not like '%monitor table sizes%'
-					and b.[name] > @cThisJob
-					and minutesRunning > 30
+			select top 1 @nThisSPID = spid, @cThisJob = left(jobName, 200)
+				from #runningJobs a
+				where jobName > @cThisJob
+					and isSystemJob = 0
 					and (
-						d.job_id is null
+						(secondsRunning > 60*5 and expectedRunningSeconds = 0)
 						or (
-							d.job_id is not null
-							and minutesRunning > d.runtime * 4
+							secondsRunning > expectedRunningSeconds * 1.5
+							and secondsRunning > 60
+							-- should be at least 90% of the longest runtime we've observed
+							and secondsRunning > maxRunningSeconds * 0.9
 						)
 					)
-				order by b.[name]
+				order by jobName
 
 			if @nThisSPID is not null
 			begin
@@ -679,149 +853,203 @@ begin
 		end
 	end
 
-	-- jobs that have failed, with detail
-	insert into #results (message, severity, subject, isJobFailure)
-	select left('Job [' + isnull(rtrim(ltrim(b.name)), '') + '] ' +
-			'failed on ' + isnull(convert(varchar(20), d.run_date), '') +
-			' at ' + isnull(convert(varchar(20), d.run_time, 101), '') + char(13) + char(13) +
-			'Step: (' + isnull(convert(varchar(20), d.step_id), '-') + ') ' + isnull(d.step_name, 'N/A') + char(13) +
-			'Error message: ' + isnull(d.message, 'N/A'),
-			2000) as message,
-			2 as severity,
-			'Job [' + isnull(rtrim(ltrim(b.name)), '') + '] failed at ' + isnull(convert(varchar(20), d.run_time, 101), '') + '.' as subject,
-			1 as isJobFailure
-		from #allJobs a
-		join msdb..sysjobs b (nolock) on a.job_id = b.job_id
-			and b.[name] not like '%sql detailed check -%'
-		join (
-			select a.job_id, max(c.instance_id) as instance_id
-				from #allJobs a
-				join msdb..sysJobHistory c (nolock) on a.job_id = c.job_id
-					and c.run_status = 0
-					and c.step_id <> 0
-					and dateDiff(minute,
-							dateAdd(minute,
-								left(right(right('000000' + convert(varchar(6), c.run_duration), 6), 4), 2) +
-								left(right('000000' + convert(varchar(6), c.run_duration), 6), 2) * 60,
-								convert(dateTime, left(c.run_date, 4) + '-' +
-									left(right(c.run_date, 4), 2) + '-' +
-									right(c.run_date, 2) + ' ' +
-									left(replicate('0', 6 - len(rtrim(c.Run_Time))) +
-									rtrim(ltrim(c.Run_Time)), 2) + ':' +
-									left(right(replicate('0', 6 - len(rtrim(c.Run_Time))) +
-									rtrim(ltrim(c.Run_Time)), 4), 2) + ':' +
-									right(replicate('0', 6 - len(rtrim(c.Run_Time))) +
-									rtrim(ltrim(c.Run_Time)), 2) + '.000'
-									)
-								),
-							getDate()) < @nMinutesBackToLook
-				group by a.job_id
-			) c on a.job_id = c.job_id
-		join msdb..sysjobhistory d (nolock) on a.job_id = d.job_id
-			and c.instance_id = d.instance_id
-			and d.run_status = 0
+	--********************************************************************************************************
+	--********************************************************************************************************
+	-- Job Failures
 
-	-- jobs that have failed multiple times in the last hour or two, which would be a high priority off hours
-	select
-		convert(varchar(8000), 'Job [' + isnull(rtrim(ltrim(b.name)), '') + '] ' +
-			'has failed ' + isnull(convert(varchar(20), c.numFailures), '!!') + ' ' +
-			'times in the last 45 minutes.') as message,
-		case when numFailures >= 5 then 1 else 2 end as severity,
-		'Job [' + isnull(rtrim(ltrim(b.name)), '') + '] has failed at ' + right(convert(varchar(20), latestFailure, 120), 8) as subject,
-		1 as isJobFailure,
-		a.job_id
-		into #jobMultipleFailures
-		from #allJobs a
-		join msdb..sysjobs b (nolock) on a.job_id = b.job_id
-		join (
-			select a.job_id,
-				count(distinct c.instance_id) as numFailures,
-				max(dateAdd(minute,
-						left(right(right('000000' + convert(varchar(6), c.run_duration), 6), 4), 2) +
-						left(right('000000' + convert(varchar(6), c.run_duration), 6), 2) * 60,
-						convert(dateTime, left(c.run_date, 4) + '-' +
-							left(right(c.run_date, 4), 2) + '-' +
-							right(c.run_date, 2) + ' ' +
-							left(replicate('0', 6 - len(rtrim(c.Run_Time))) +
-							rtrim(ltrim(c.Run_Time)), 2) + ':' +
-							left(right(replicate('0', 6 - len(rtrim(c.Run_Time))) +
-							rtrim(ltrim(c.Run_Time)), 4), 2) + ':' +
-							right(replicate('0', 6 - len(rtrim(c.Run_Time))) +
-							rtrim(ltrim(c.Run_Time)), 2) + '.000'
-							)
-						)
-					) as latestFailure
-				from #allJobs a
-				join msdb..sysJobHistory c (nolock) on a.job_id = c.job_id
-					and c.run_status = 0
-					and c.step_id <> 0
-					and dateDiff(minute,
-							dateAdd(minute,
-								left(right(right('000000' + convert(varchar(6), c.run_duration), 6), 4), 2) +
-								left(right('000000' + convert(varchar(6), c.run_duration), 6), 2) * 60,
-								convert(dateTime, left(c.run_date, 4) + '-' +
-									left(right(c.run_date, 4), 2) + '-' +
-									right(c.run_date, 2) + ' ' +
-									left(replicate('0', 6 - len(rtrim(c.Run_Time))) +
-									rtrim(ltrim(c.Run_Time)), 2) + ':' +
-									left(right(replicate('0', 6 - len(rtrim(c.Run_Time))) +
-									rtrim(ltrim(c.Run_Time)), 4), 2) + ':' +
-									right(replicate('0', 6 - len(rtrim(c.Run_Time))) +
-									rtrim(ltrim(c.Run_Time)), 2) + '.000'
-									)
-								),
-							getDate()) < 45
-					and c.message not like '%middle of a restore%'
-					and c.message not like '%definition of object%'
-					and c.message not like '%has no columns%'
-				group by a.job_id
-				having count(distinct c.instance_id) >= 3
-			) c on a.job_id = c.job_id
-				and dateDiff(minute, latestFailure, getDate()) < @nMinutesBackToLook*2
+	-- first, identify failures of jobs
+	declare @nUkeyJob int
+	declare @dJobFailure dateTime
+	set @nThisUkey = 0
 
-	update #jobMultipleFailures
-		set message = left(a.message + char(13) +
-			'Last failure message: ' + char(13) +
-			isnull(d.message, 'N/A'), 8000)
-		from #jobMultipleFailures a
-		join (
-			select a.job_id, max(c.instance_id) as instance_id
-				from #allJobs a
-				join msdb..sysJobHistory c (nolock) on a.job_id = c.job_id
-					and c.run_status = 0
-					and c.step_id <> 0
-					and dateDiff(minute,
-							dateAdd(minute,
-								left(right(right('000000' + convert(varchar(6), c.run_duration), 6), 4), 2) +
-								left(right('000000' + convert(varchar(6), c.run_duration), 6), 2) * 60,
-								convert(dateTime, left(c.run_date, 4) + '-' +
-									left(right(c.run_date, 4), 2) + '-' +
-									right(c.run_date, 2) + ' ' +
-									left(replicate('0', 6 - len(rtrim(c.Run_Time))) +
-									rtrim(ltrim(c.Run_Time)), 2) + ':' +
-									left(right(replicate('0', 6 - len(rtrim(c.Run_Time))) +
-									rtrim(ltrim(c.Run_Time)), 4), 2) + ':' +
-									right(replicate('0', 6 - len(rtrim(c.Run_Time))) +
-									rtrim(ltrim(c.Run_Time)), 2) + '.000'
-									)
-								),
-							getDate()) < @nMinutesBackToLook
-				group by a.job_id
-			) c on a.job_id = c.job_id
-		join msdb..sysjobhistory d (nolock) on a.job_id = d.job_id
-			and c.instance_id = d.instance_id
-			and d.run_status = 0
+	while exists (
+		select top 1 ukey
+			from jobHistory (nolock)
+			where ukey_server = @nUkeyServer
+				and isSuccess = 0
+				and ymd >= dateAdd(minute, -@nMinutesBackToLook, getDate())
+				and ukey > @nThisUkey
+		)
+	begin
+		set @cThisSubject = ''
 
-	insert into #results (message, severity, subject, isJobFailure)
-	select a.message, a.severity, a.subject, 1
-		from #jobMultipleFailures a
+		select top 1
+			@nThisUkey = a.ukey,
+			@nUkeyJob = a.ukey_job,
+			@dJobFailure = a.ymd,
+			@cThisMessage = 'Job ' + b.jobName + ' failed at ' + convert(varchar(20), a.ymd, 120) + '.<br>' +
+				'Message: ' + isnull(a.jobOutcome, 'N/A') + '<br>' +
+				'Runtime: ' + convert(varchar(20), isnull(runningSeconds, 0)) + 's<br>',
+			@cThisSubject = left('Job ' + b.jobName + ' failed at ' + convert(varchar(20), a.ymd, 120) + '.', 300),
+			@cJobName = b.jobName
+			from jobHistory a (nolock)
+			join dm_serverJobs b (nolock) on a.ukey_job = b.ukey
+				and b.ukey_server = @nUkeyServer
+			where a.ukey_server = @nUkeyServer
+				and a.isSuccess = 0
+				and a.ymd >= dateAdd(minute, -@nMinutesBackToLook, getDate())
+				and a.ukey > @nThisUkey
 
-	drop table #jobMultipleFailures
+		select
+			@nNumSuccess = sum(case when a.isSuccess = 1 then 1 else 0 end),
+			@nNumFailure = sum(case when a.isSuccess = 0 then 1 else 0 end)
+			from jobHistory a (nolock)
+			where a.ukey_server = @nUkeyServer
+				and a.isSuccess = 0
+				and a.ukey_job = @nUkeyJob
+				and a.ymd >= dateAdd(minute, -@nMinutesBackToLook, getDate())
+
+		-- if this job has failed more than once in the last 30 minutes, change alert style
+		if (@nNumSuccess = 0 and @nNumFailure > 1)
+		begin
+
+			set @dLastSuccess = (
+				select max(a.ymd)
+					from jobHistory a (nolock)
+					where a.ukey_server = @nUkeyServer
+						and a.ukey_job = @nUkeyJob
+						and a.isSuccess = 1
+						and a.ymd >= dateAdd(day, -1, getDate())
+				)
+
+			set @dLastFailure = (
+				select max(a.ymd)
+					from jobHistory a (nolock)
+					where a.ukey_server = @nUkeyServer
+						and a.ukey_job = @nUkeyJob
+						and a.isSuccess = 0
+						and a.ymd >= dateAdd(day, -1, getDate())
+				)
+
+			set @cThisSubject = 'Job ' + @cJobName + ' failing at ' + convert(varchar(20), dbo.fn_returnTimeBlock(@dJobFailure), 120)
+			set @cThisMessage = 'Job ' + @cJobName + ' is failing. <br>' +
+				'Failures: ' + convert(varchar(20), @nNumFailure) + '<br>' +
+				'Successes: ' + convert(varchar(20), @nNumSuccess) + '<br>' +
+				'Last Failure: ' + convert(varchar(20), @dLastFailure, 120) + '<br>' +
+				'Last Success: ' + convert(varchar(20), @dLastSuccess, 120) + '<br>' +
+				replicate('=', 20) + '<br>'
+
+			select @cThisMessage = @cThisMessage +
+				'==<b>' + isnull(b.stepName, 'N/A') + '</b> @ ' + convert(varchar(20), a.ymd, 120) + ' <br>' +
+					'Runtime: ' + convert(varchar(20), isnull(a.runningSeconds, 0)) + 's<br>' +
+					'Outcome: ' + case when a.isSuccess = 1 then 'OK' else isnull(a.stepOutcome, 'N/A') end + '<br>' +
+					case when a.isSuccess = 1 then '' else 'Step Text:' + isnull(b.stepCommand, 'N/A') end + '<br>'
+				from jobStepHistory a (nolock)
+				join dm_serverJobSteps b (nolock) on a.ukey_jobStep = b.ukey
+					and b.ukey_server = @nUkeyServer
+					and b.ukey_job = @nUkeyJob
+				where a.ukey_server = @nUkeyServer
+					and a.ukey_jobHistory = @nThisUkey
+					and a.ukey_job = @nUkeyJob
+				order by a.ymd
+
+			-- don't send a message for this time block
+			if dbo.fn_returnTimeBlock(@dJobFailure) < dbo.fn_returnTimeBlock(getDate())
+				insert into #results (ymd, subject, message, severity, isJobFailure) values (@dJobFailure, @cThisSubject, @cThisMessage, 1, 1)
+		end
+		else
+		begin
+
+			select @cThisMessage = @cThisMessage +
+				'==<b>' + isnull(b.stepName, 'N/A') + '</b> @ ' + convert(varchar(20), a.ymd, 120) + ' <br>' +
+					'Runtime: ' + convert(varchar(20), isnull(a.runningSeconds, 0)) + 's<br>' +
+					'Outcome: ' + case when a.isSuccess = 1 then 'OK' else isnull(a.stepOutcome, 'N/A') end + '<br>' +
+					case when a.isSuccess = 1 then '' else 'Step Text:' + isnull(b.stepCommand, 'N/A') end + '<br>'
+				from jobStepHistory a (nolock)
+				join dm_serverJobSteps b (nolock) on a.ukey_jobStep = b.ukey
+					and b.ukey_server = @nUkeyServer
+					and b.ukey_job = @nUkeyJob
+				where a.ukey_server = @nUkeyServer
+					and a.ukey_jobHistory = @nThisUkey
+					and a.ukey_job = @nUkeyJob
+				order by a.ymd
+
+			insert into #results (ymd, subject, message, severity, isJobFailure) values (@dJobFailure, @cThisSubject, @cThisMessage, 1, 1)
+		end
+	end
+
+	-- then, identify failures of steps where the job succeeded
+	set @nThisUkey = 0
+
+	while exists (
+		select top 1 ukey
+			from jobStepHistory (nolock)
+			where ukey_server = @nUkeyServer
+				and isSuccess = 0
+				and ymd >= dateAdd(minute, -@nMinutesBackToLook, getDate())
+				and ukey > @nThisUkey
+				and ukey_jobHistory in (
+					select distinct ukey
+						from jobHistory (nolock)
+						where ukey_server = @nUkeyServer
+							and isSuccess = 1
+							and ymd >= dateAdd(minute, -@nMinutesBackToLook, getDate())
+					)
+		)
+	begin
+		set @cThisSubject = ''
+
+		select top 1
+			@nThisUkey = a.ukey,
+			@nUkeyJob = a.ukey_job,
+			@dJobFailure = a.ymd,
+			@cThisMessage = 'Job step ' + c.stepName + ' of job ' + b.jobName + ' failed at ' + convert(varchar(20), a.ymd, 120) + '.<br>' +
+				'Message: ' + isnull(a.stepOutcome, 'N/A') + '<br>' +
+				'Runtime: ' + convert(varchar(20), isnull(a.runningSeconds, 0)) + 's<br>' +
+				'Text   : ' + isnull(c.stepCommand, ''),
+			@cThisSubject = left('Job step ' + c.stepName + ' of job ' + b.jobName + ' failed at ' + convert(varchar(20), a.ymd, 120) + '.', 300)
+			from jobStepHistory a (nolock)
+			join dm_serverJobs b (nolock) on a.ukey_job = b.ukey
+				and b.ukey_server = @nUkeyServer
+			join dm_serverJobSteps c (nolock) on a.ukey_jobStep = c.ukey
+				and a.ukey_job = c.ukey_job
+				and c.ukey_server = @nUkeyServer
+			where a.ukey_server = @nUkeyServer
+				and a.isSuccess = 0
+				and a.ymd >= dateAdd(minute, -@nMinutesBackToLook, getDate())
+				and a.ukey > @nThisUkey
+				and a.ukey_jobHistory in (
+					select distinct ukey
+						from jobHistory (nolock)
+						where ukey_server = @nUkeyServer
+							and isSuccess = 1
+							and ymd >= dateAdd(minute, -@nMinutesBackToLook, getDate())
+					)
+
+		insert into #results (ymd, subject, message, severity, isJobFailure) values (@dJobFailure, @cThisSubject, @cThisMessage, 1, 1)
+	end
+
+	insert into #results (ymd, serverName, subject, message, severity, isJobFailure)
+	select min(ymd) as ymd, serverName, 'SQLAgent service does not appear to be running', max(message), 1, 0
+		from #results
+		where isJobFailure = 1
+			and message like '%xp_sqlagent_enum_jobs%'
+			and message like '%the object has no columns%'
+		group by serverName
 
 	delete from #results
 		where isJobFailure = 1
-			and subject like '%monitor websites%'
-			and message like '%sql server does not exist%'
+			and subject <> 'SQLAgent service does not appear to be running'
+			and serverName in (
+				select distinct serverName
+					from #results
+					where isJobFailure = 1
+						and subject = 'SQLAgent service does not appear to be running'
+				)
+
+	update dm_servers
+		set isSQLAgentServiceRunning = 0
+		where serverName in (
+			select distinct serverName
+				from #results
+				where isJobFailure = 1
+					and subject = 'SQLAgent service does not appear to be running'
+			)
+
+--	delete from #results
+--		where isJobFailure = 1
+--			and subject like '%monitor websites%'
+--			and message like '%sql server does not exist%'
 
 	-- insert into hist_monitorBigBrother (stepName) values ('Regular job alerts generated')
 
@@ -1141,8 +1369,7 @@ begin
 			join dm_serverGroups c on a.ukey_group = c.ukey
 
 			join msdb..sysjobs e on e.[name] = 'Configuration Check - ' + c.groupName
-			join #allJobs f on e.job_id = f.job_id
-				and f.running = 1
+			join #runningJobs f on e.job_id = f.job_id
 
 			join dm_servers g on a.serverName = g.serverName
 
@@ -1212,8 +1439,7 @@ begin
 		join dm_serverGroups c on a.ukey_group = c.ukey
 
 		join msdb..sysjobs e on e.[name] = 'EventLog Check - ' + c.groupName
-		join #allJobs f on e.job_id = f.job_id
-			and f.running = 1
+		join #runningJobs f on e.job_id = f.job_id
 
 		join dm_servers g on a.serverName = g.serverName
 
@@ -1283,8 +1509,7 @@ begin
 		from #results
 
 	drop table #results
-	drop table #jobAverageRuntimes
-	drop table #allJobs
+	drop table #runningJobs
 
 	drop table #userActivity
 	drop table #processes
