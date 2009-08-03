@@ -1,7 +1,11 @@
+USE [Notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_monitorBigBrother]    Script Date: 08/03/2009 09:22:48 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 -- update dm_servers set serviceCheck = 1 where isSQLBox = 1 and detailedCheck = 1
 
 -- select top 100 * from messagesSent order by ymd desc
@@ -26,6 +30,7 @@ begin
 	declare @nUkey int
 	declare @nUkeyServer int
 	declare @nThisUkey int
+	declare @nUkeyGroup int
 
 	declare @cThisSubject varchar(8000)
 	declare @cThisMessage varchar(8000)
@@ -36,6 +41,7 @@ begin
 
 	declare @dLastSuccess dateTime
 	declare @dLastFailure dateTime
+	declare @dEndTime dateTime
 
 	set @nUkeyServer = -1
 
@@ -734,10 +740,12 @@ begin
 			or jobName like '%eventlog check%'
 			or jobName like '%fragmentation check%'
 			or jobName like '%configuration check%'
+			or jobName like '%detailed check%'
 			or jobName like '%import weblogs%'
 			or jobName like '%monitor sql objects%'
 			or jobName like '%monitor sql statistics%'
 			or jobName like '%monitor table sizes%'
+			or jobName like '%monitor indexing%'
 			or jobName like 'maintenance%'
 
 	-- jobs that we have a history for
@@ -803,12 +811,13 @@ begin
 				where jobName > @cThisJob
 					and isSystemJob = 0
 					and (
-						(secondsRunning > 60*5 and expectedRunningSeconds = 0)
+						(secondsRunning > 60*15 and expectedRunningSeconds = 0)
 						or (
-							secondsRunning > expectedRunningSeconds * 1.5
+							secondsRunning > expectedRunningSeconds * 5
 							and secondsRunning > 60
 							-- should be at least 90% of the longest runtime we've observed
 							and secondsRunning > maxRunningSeconds * 0.9
+							and expectedRunningSeconds <> 0
 						)
 					)
 			)
@@ -819,12 +828,13 @@ begin
 				where jobName > @cThisJob
 					and isSystemJob = 0
 					and (
-						(secondsRunning > 60*5 and expectedRunningSeconds = 0)
+						(secondsRunning > 60*15 and expectedRunningSeconds = 0)
 						or (
-							secondsRunning > expectedRunningSeconds * 1.5
+							secondsRunning > expectedRunningSeconds * 5
 							and secondsRunning > 60
 							-- should be at least 90% of the longest runtime we've observed
 							and secondsRunning > maxRunningSeconds * 0.9
+							and expectedRunningSeconds <> 0
 						)
 					)
 				order by jobName
@@ -1057,12 +1067,18 @@ begin
 	-- if the automation job fails, check which server it conked on
 	--**************************************************************************************************************************
 
-	create table #detailedCheckJobs (job_id uniqueIdentifier, jobStartTime dateTime, jobEndTime dateTime, isSuccess bit, serverGroup varchar(200),
-		ukey_group int, errorMessage varchar(8000))
 
 	--declare @cBuffer varchar(8000)
 	--declare @nUkey int
 	--declare @dStartTime dateTime
+	--declare @dEndTime dateTime
+	--declare @nUkeyGroup int
+	--declare @nNumFailure int
+	--declare @cThisMessage varchar(8000)
+	--declare @cThisSubject varchar(8000)
+	--declare @nUkeyServer int
+
+	--set @nUkeyServer = -1
 
 	select
 		identity(int) as ukey,
@@ -1073,12 +1089,55 @@ begin
 		max(ymd) as endTime,
 		max(case when stepName = 'END' then 1 else 0 end) as isSuccess,
 		dateDiff(second, min(ymd), max(ymd)) as runningSeconds,
-		convert(varchar(8000), null) as runHistory
+		convert(varchar(8000), null) as runHistory,
+		convert(varchar(8000), null) as jobHistory
 		into #detailedChecks
 		from notificationLog_history (nolock)
 		where runGUID is not null
 			and ukey_group is not null
 		group by ukey_group, serverName, runGUID
+
+	-- if it's still running and just in progress, don't mark it as a failure
+	update #detailedChecks
+		set isSuccess = 1
+		from #detailedChecks a
+		join (
+			select serverName, max(startTime) as latestRun
+				 from #detailedChecks
+				 group by serverName
+			) b on a.serverName = b.serverName
+				and a.startTime = b.latestRun
+
+	select a.serverName, sum(case when isSuccess = 0 then 1 else 0 end) as numFailures
+		into #failingServers
+		from #detailedChecks a
+		join dm_servers b on a.serverName = b.serverName
+			and b.detailedCheck = 1
+		where startTime >= dateAdd(minute, -60, getDate())
+		group by a.serverName
+		having sum(case when isSuccess = 1 then 1 else 0 end) = 0
+			and sum(case when isSuccess = 0 then 1 else 0 end) >= 2
+
+	set @nNumFailure = @@rowcount
+
+	-- disable further checks of any server that consistently fails
+	if @nNumFailure > 0
+	begin
+		set @cThisSubject = 'SQL Detailed checks disabled for ' + convert(varchar(20), @nNumFailure) + ' failing servers.'
+		set @cThisMessage = ''
+
+		select @cThisMessage = @cThisMessage + serverName + ': ' + convert(varchar(20), numFailures) + ' failures.<br>'
+			from #failingServers
+
+		insert into #results (serverName, subject, message, severity) values (@@serverName, @cThisSubject, @cThisMessage, 1)
+
+		update dm_servers
+			set detailedCheck = 0
+			from dm_servers a
+			join #failingServers b on a.serverName = b.serverName
+	end
+
+	drop table #failingServers
 
 	delete from #detailedChecks where startTime < dateAdd(minute, -30, getDate())
 
@@ -1089,7 +1148,9 @@ begin
 	begin
 		select top 1
 			@nUkey = ukey,
-			@dStartTime = startTime
+			@dStartTime = startTime,
+			@dEndTime = endTime,
+			@nUkeyGroup = ukey_group
 			from #detailedChecks
 			where ukey > @nukey
 			order by ukey
@@ -1108,77 +1169,34 @@ begin
 			order by b.ukey
 
 		update #detailedChecks set runHistory = @cBuffer where ukey = @nUkey
+
+		set @cBuffer = ''
+
+		select
+			@cBuffer = left(@cBuffer + stepOutcome, 8000)
+			from dm_serverJobs a (nolock)
+			join dm_serverJobSteps b (nolock) on a.ukey = b.ukey_job
+			join jobHistory c (nolock) on a.ukey = c.ukey_job
+				and c.ymd <= @dStartTime
+				and dateAdd(second, c.runningSeconds+15, c.ymd) >= @dEndTime
+			join dm_serverGroups d (nolock) on rtrim(ltrim(substring(a.jobName, charindex('-', a.jobName) + 1, 99))) = d.groupName
+				and d.ukey = @nUkeyGroup
+			join jobStepHistory e on a.ukey = e.ukey_job
+				and c.ukey = e.ukey_jobHistory
+			where a.ukey_server = @nUkeyServer
+				and a.jobName like '%sql detailed check%'
+
+		update #detailedChecks set jobHistory = @cBuffer where ukey = @nUkey
 	end
 
-	insert into #detailedCheckJobs (job_id, jobStartTime, jobEndTime, isSuccess, serverGroup, errorMessage)
-	select
-		a.job_id,
-		convert(dateTime, left(c.run_date, 4) + '-' +
-			left(right(c.run_date, 4), 2) + '-' +
-			right(c.run_date, 2) + ' ' +
-			left(replicate('0', 6 - len(rtrim(c.Run_Time))) +
-			rtrim(ltrim(c.Run_Time)), 2) + ':' +
-			left(right(replicate('0', 6 - len(rtrim(c.Run_Time))) +
-			rtrim(ltrim(c.Run_Time)), 4), 2) + ':' +
-			right(replicate('0', 6 - len(rtrim(c.Run_Time))) +
-			rtrim(ltrim(c.Run_Time)), 2) + '.000'
-			) as jobStartTime,
-		dateAdd(second,
-			right(right('000000' + convert(varchar(6), c.run_duration), 6), 2)  +
-			left(right(right('000000' + convert(varchar(6), c.run_duration), 6), 4), 2) * 60 +
-			left(right('000000' + convert(varchar(6), c.run_duration), 6), 2) * 60 * 60,
-			convert(dateTime, left(c.run_date, 4) + '-' +
-				left(right(c.run_date, 4), 2) + '-' +
-				right(c.run_date, 2) + ' ' +
-				left(replicate('0', 6 - len(rtrim(c.Run_Time))) +
-				rtrim(ltrim(c.Run_Time)), 2) + ':' +
-				left(right(replicate('0', 6 - len(rtrim(c.Run_Time))) +
-				rtrim(ltrim(c.Run_Time)), 4), 2) + ':' +
-				right(replicate('0', 6 - len(rtrim(c.Run_Time))) +
-				rtrim(ltrim(c.Run_Time)), 2) + '.000'
-				)
-			) as jobEndTime,
-		case when c.run_status = 0 then 0 else 1 end as isSuccess,
-		rtrim(ltrim(substring(a.[name], charindex('-', a.[name]) + 1, 99))) as serverGroup,
-		left(c.message, 2000) as errorMessage
-		from msdb..sysjobs a (nolock)
-		join msdb..sysJobHistory c (nolock) on a.job_id = c.job_id
-			and c.step_id <> 0
-			and dateDiff(minute,
-					dateAdd(minute,
-						left(right(right('000000' + convert(varchar(6), c.run_duration), 6), 4), 2) +
-						left(right('000000' + convert(varchar(6), c.run_duration), 6), 2) * 60,
-						convert(dateTime, left(c.run_date, 4) + '-' +
-							left(right(c.run_date, 4), 2) + '-' +
-							right(c.run_date, 2) + ' ' +
-							left(replicate('0', 6 - len(rtrim(c.Run_Time))) +
-							rtrim(ltrim(c.Run_Time)), 2) + ':' +
-							left(right(replicate('0', 6 - len(rtrim(c.Run_Time))) +
-							rtrim(ltrim(c.Run_Time)), 4), 2) + ':' +
-							right(replicate('0', 6 - len(rtrim(c.Run_Time))) +
-							rtrim(ltrim(c.Run_Time)), 2) + '.000'
-							)
-						),
-					getDate()) < 30
-
-			-- ignore errors that result from attempting to touch a db that slipped into a RESTORE mid-statement
-			and c.message not like '%middle of a restore%'
-			and c.message not like '%definition of object%'
-		where a.[name] like '%sql detailed check -%'
-
-	update #detailedCheckJobs
-		set ukey_group = b.ukey
-		from #detailedCheckJobs a
-		join dm_serverGroups b on a.serverGroup = b.groupName
-
-	-- these should be failures or timeouts
+	-- these should be failures and long running detailed check jobs.
 	insert into #results (serverName, subject, message, severity)
 	select
 		a.serverName,
 		'Detailed check ' +
 			'of ' + a.serverName + ' ' +
 			'@ ' + right(convert(varchar(20), a.startTime, 120), 8) + ' ' +
-			case when c.job_id is not null
+			case when a.isSuccess = 0
 				then 'FAILED.'
 				else 'running ' + convert(varchar(20), dateDiff(second, a.startTime, getDate())) + 's.'
 				end
@@ -1187,7 +1205,7 @@ begin
 			'Detailed check ' +
 				'of ' + a.serverName + ' ' +
 				'@ ' + right(convert(varchar(20), a.startTime, 120), 8) + ' ' +
-				case when c.job_id is not null
+				case when a.isSuccess = 0
 					then 'FAILED.'
 					else 'running ' + convert(varchar(20), dateDiff(second, a.startTime, getDate())) + 's.'
 					end +
@@ -1196,7 +1214,7 @@ begin
 				'Run History: ' + char(13) +
 				isnull(a.runHistory, 'N/A') + char(13) + char(13) +
 				'Job Status: ' + char(13) +
-				isnull(c.errorMessage, 'N/A'),
+				isnull(a.jobHistory, 'N/A'),
 			8000) as message,
 		1 as severity
 		from #detailedChecks a
@@ -1208,20 +1226,16 @@ begin
 				having count(*) >= 3
 			) b on a.ukey_group = b.ukey_group
 				and a.serverName = b.serverName
-		left outer join #detailedCheckJobs c on a.ukey_group = c.ukey_group
-			and a.startTime >= c.jobStartTime
-			and a.endTime <= c.jobEndTime
-			and c.isSuccess = 0
 		where a.isSuccess = 0
-			and (
-				(b.avgRuntime is not null and a.runningSeconds > b.avgRuntime * 4)
-					or (b.avgRuntime is null and a.runningSeconds > 60*3)
+			or (
+				(
+					(b.avgRuntime is not null and a.runningSeconds > b.avgRuntime * 4)
+						or (b.avgRuntime is null and a.runningSeconds > 60*3)
+					)
+				and a.runningSeconds > 60*5
 				)
-			and a.runningSeconds > 60*5
-
 
 	drop table #detailedChecks
-	drop table #detailedCheckJobs
 
 
 	-- insert into hist_monitorBigBrother (stepName) values ('Automation job alerts created')

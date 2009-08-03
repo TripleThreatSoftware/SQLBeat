@@ -1,4 +1,6 @@
-/****** Object:  StoredProcedure [dbo].[pr_checkDeepSQLStats]    Script Date: 05/19/2009 13:59:45 ******/
+USE [Notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_checkDeepSQLStats]    Script Date: 08/03/2009 09:17:55 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -7,7 +9,7 @@ GO
 --***********************************************************************************************************************************************
 
 
-CREATE procedure [dbo].[pr_checkDeepSQLStats]
+ALTER procedure [dbo].[pr_checkDeepSQLStats]
 as
 begin
 
@@ -82,8 +84,21 @@ begin
 --					or nastyLine like '%incorrect syntax%'
 				order by ukey
 
-			insert into notificationLog_stage (serverName, severity, subject, message)
-				values (@cServerName, 2, 'Deep SQL scan failed at ' + convert(varchar(20), getDate(), 120), @cMessage)
+
+			if (select count(*) from notificationLog where serverName = @cServerName and subject like '%deep sql scan failed%' and ymd >= dateAdd(hour, -3, getDate())) > 2
+			begin
+				-- disable the server
+				update dm_servers set deepSQL2005Check = 0
+					where ukey = @nUkeyServer
+
+				insert into notificationLog_stage (serverName, severity, subject, message)
+					values (@cServerName, 2, 'Deep SQL scan DISABLED at ' + convert(varchar(20), getDate(), 120), @cMessage)
+			end
+			else
+			begin
+				insert into notificationLog_stage (serverName, severity, subject, message)
+					values (@cServerName, 2, 'Deep SQL scan failed at ' + convert(varchar(20), getDate(), 120), @cMessage)
+			end
 
 			continue
 		end
@@ -215,7 +230,9 @@ begin
 						and subkeyName = 'Tables not indexed'
 						and charindex('against', keyValue) > 0
 						and charindex(' ', keyValue) > 0
+						and charindex(' ', substring(keyValue, charindex('against', keyValue) + 8, 5000)) > 2
 				) a
+			where charindex('.', objectname) > 1
 
 		insert into deepSQLStats_indexesNotOptimal (ymd, ukey_server, serverName, databaseName, tableName, indexNumber, isClustered, tableScans, indexSeeks)
 		select
@@ -296,4 +313,3 @@ begin
 	drop table #performance
 	drop table #results
 end
-GO

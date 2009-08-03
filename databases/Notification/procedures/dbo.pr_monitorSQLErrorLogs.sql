@@ -1,3 +1,11 @@
+USE [Notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_monitorSQLErrorLogs]    Script Date: 08/03/2009 10:11:37 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
 ALTER procedure [dbo].[pr_monitorSQLErrorLogs]
 as
 begin
@@ -49,46 +57,35 @@ begin
 		from #errorsFound
 		where isDeadlock = 1
 
-	select
-		serverName,
-		ymd,
-		replace(substring(logMessage, charindex('client:', logMessage) + 8, 8000), ']', '') as clientAddress,
-		substring(logMessage, charindex('for user', logMessage) + 10, charindex('.', logMessage) - charindex('for user', logMessage) - 11) as loginName,
-		logMessage
+	select a.*,
+		'Login failure for user "' + loginName + '" from "' + clientAddress + '" at ' + convert(varchar(20), ymd, 120) + '.' as subject,
+		'Login failure for user "' + loginName + '" from "' + clientAddress + '" at ' + convert(varchar(20), ymd, 120) + '.' as message,
+		identity(int) as ukey
 		into #loginFailures
-		from #errorsFound
-		where isLoginFailure = 1
-			and charindex('client:', logMessage) > 0
-			and logMessage not like '%sspi%'
+		from (
+			select
+				serverName,
+				ymd,
+				replace(substring(logMessage, charindex('client:', logMessage) + 8, 8000), ']', '') as clientAddress,
+				substring(logMessage, charindex('for user', logMessage) + 10, charindex('.', logMessage) - charindex('for user', logMessage) - 11) as loginName,
+				logMessage
+				from #errorsFound
+				where isLoginFailure = 1
+					and charindex('client:', logMessage) > 0
+					and logMessage not like '%sspi%'
+			) a
 
-	select
-		serverName,
-		min(ymd) as ymd_min,
-		max(ymd) as ymd_max,
-		clientAddress,
-		'Login failure alert for host "' + clientAddress + '" at ' + convert(varchar(20), max(ymd), 120) + '.' as subject,
-		'Between ' + convert(varchar(20), min(ymd), 120) + ' and ' + convert(varchar(20), max(ymd), 120) + ' there have been ' + convert(varchar(20), count(*)) + ' failed login attempts from host "' + clientAddress + '".' as message,
-		identity(int) as ukey
-		into #loginAddressFailures
-		from #loginFailures
-		where ymd < @dMinDate
-			and clientAddress <> ''
-		group by serverName, clientAddress, convert(varchar(10), ymd, 120), datePart(hour, ymd), datePart(minute, ymd) / 15
-
-	select
-		serverName,
-		min(ymd) as ymd_min,
-		max(ymd) as ymd_max,
-		loginName,
-		'Login failure alert for user "' + loginName + '" at ' + convert(varchar(20), max(ymd), 120) + '.' as subject,
-		'Between ' + convert(varchar(20), min(ymd), 120) + ' and ' + convert(varchar(20), max(ymd), 120) + ' there have been ' + convert(varchar(20), count(*)) + ' failed login attempts for login "' + loginName + '".' as message,
-		identity(int) as ukey
-		into #loginNameFailures
-		from #loginFailures
-		where ymd < @dMinDate
-			and loginName <> ''
-		group by serverName, loginName, convert(varchar(10), ymd, 120), datePart(hour, ymd), datePart(minute, ymd) / 15
-
+	-- only report on failures since the last attempt
+	delete #loginFailures
+		from #loginFailures a
+		join (
+			select serverName, max(ymd) as ymd
+				from notificationLog (nolock)
+				where subject like '%login failure%'
+					and ymd >= dateAdd(hour, -1, getDate())
+				group by serverName
+			) b on a.serverName = b.serverName
+				and a.ymd <= b.ymd
 
 	declare @nThisUkey int
 	declare @cServerName varchar(100)
@@ -98,63 +95,49 @@ begin
 	declare @cLoginName varchar(200)
 	declare @cClientAddress varchar(200)
 	declare @cProcessInfo varchar(200)
-	set @nThisUkey = 0
+	declare @nNumFailures int
+	declare @cSubject varchar(8000)
 
-	while exists (select top 1 ukey from #loginAddressFailures where ukey > @nThisUkey)
+	set @cServerName = ''
+	while exists (select top 1 serverName from #loginFailures where serverName > @cServerName)
 	begin
 		select top 1
-			@nThisUkey = ukey,
 			@cServerName = serverName,
-			@dYMDBegin = ymd_min,
-			@dYMDEnd = ymd_max,
-			@cClientAddress = clientAddress
-			from #loginAddressFailures
-			where ukey > @nThisUkey
-			order by ukey
-
-		set @cMessage = ''
-
-		select @cMessage = @cMessage + logMessage + char(13)
+			@nNumFailures = count(*),
+			@dYMDBegin = max(ymd)
 			from #loginFailures
-			where serverName = @cServerName
-				and ymd >= @dYMDBegin
-				and ymd <= @dYMDEnd
-				and clientAddress = @cClientAddress
-			order by ymd
+			where serverName > @cServerName
+			group by serverName
+			order by serverName
 
-		update #loginAddressFailures
-			set message = message + char(13) + @cMessage
-			where ukey = @nThisUkey
+		-- if we've got lots of failures for a long time, deprioritize
+		if @nNumFailures > 5
+			or (
+--				@nNumFailures > 1
+--				and (
+				(
+					select count(*)
+						from notificationLog (nolock)
+						where serverName = @cServerName
+							and subject like '%login failure%'
+							and ymd >= dateAdd(hour, -1, getDate())
+					) > 1
+				)
+		begin
+			set @cSubject = 'Login failure for ' + convert(varchar(20), @nNumFailures) + ' users at ' + convert(varchar(20), @dYMDBegin, 120) + '.'
+			set @cMessage = ''
+
+			select @cMessage = @cMessage + '<br>' + [message]
+				from #loginFailures
+				where serverName = @cServerName
+				order by ymd
+
+			insert into notificationLog_stage (serverName, subject, message, severity) values (@cServerName, @cSubject, @cMessage, 2)
+
+			delete from #loginFailures where serverName = @cServerName
+		end
 	end
 
-	set @nThisUkey = 0
-
-	while exists (select top 1 ukey from #loginNameFailures where ukey > @nThisUkey)
-	begin
-		select top 1
-			@nThisUkey = ukey,
-			@cServerName = serverName,
-			@dYMDBegin = ymd_min,
-			@dYMDEnd = ymd_max,
-			@cLoginName = loginName
-			from #loginNameFailures
-			where ukey > @nThisUkey
-			order by ukey
-
-		set @cMessage = ''
-
-		select @cMessage = @cMessage + logMessage + char(13)
-			from #loginFailures
-			where serverName = @cServerName
-				and ymd >= @dYMDBegin
-				and ymd <= @dYMDEnd
-				and loginName = @cLoginName
-			order by ymd
-
-		update #loginNameFailures
-			set message = message + char(13) + @cMessage
-			where ukey = @nThisUkey
-	end
 
 	set @nThisUkey = 0
 
@@ -184,25 +167,15 @@ begin
 	end
 
 
-	delete #loginAddressFailures
-		from #loginAddressFailures a
+	delete #loginFailures
+		from #loginFailures a
 		join dm_servers b on a.serverName = b.serverName
 		left outer join dm_serverGroups c on b.ukey_group = c.ukey
 			and c.isProduction = 1
 		where c.ukey is null
-
-	delete #loginNameFailures
-		from #loginNameFailures a
-		join dm_servers b on a.serverName = b.serverName
-		left outer join dm_serverGroups c on b.ukey_group = c.ukey
-			and c.isProduction = 1
-		where c.ukey is null
-
 
 	insert into notificationLog_stage (ymd, serverName, severity, subject, message)
-	select distinct ymd_max, serverName, 1, subject, message from #loginAddressFailures
-	union
-	select distinct ymd_max, serverName, 1, subject, message from #loginNameFailures
+	select distinct ymd, serverName, 1, subject, message from #loginFailures
 	union
 	select distinct ymd, serverName, 1, subject, message from #deadlocks
 	union
@@ -216,7 +189,5 @@ begin
 
 	drop table #errorsFound
 	drop table #loginFailures
-	drop table #loginAddressFailures
-	drop table #loginNameFailures
 	drop table #deadlocks
 end
