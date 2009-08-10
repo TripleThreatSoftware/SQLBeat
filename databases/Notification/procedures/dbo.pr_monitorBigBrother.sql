@@ -1,11 +1,3 @@
-USE [Notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_monitorBigBrother]    Script Date: 08/03/2009 09:22:48 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-
 -- update dm_servers set serviceCheck = 1 where isSQLBox = 1 and detailedCheck = 1
 
 -- select top 100 * from messagesSent order by ymd desc
@@ -746,6 +738,7 @@ begin
 			or jobName like '%monitor sql statistics%'
 			or jobName like '%monitor table sizes%'
 			or jobName like '%monitor indexing%'
+			or jobName like '%monitor myself%'
 			or jobName like 'maintenance%'
 
 	-- jobs that we have a history for
@@ -764,7 +757,7 @@ begin
 			when minutesRunning > expectedRunningSeconds * 2 then 1
 			else 2
 			end as severity,
-		'Job [' + isnull(rtrim(ltrim(jobName)), '') + '] has been running for more than ' + convert(varchar(20), convert(int, (minutesRunning/10)) * 10) + ' minutes.' as subject,
+		'Job [' + isnull(rtrim(ltrim(jobName)), '') + '] running for ' + convert(varchar(20), convert(int, (minutesRunning/10)) * 10) + ' minutes.' as subject,
 		1 as isLongRunningJob
 		from #runningJobs a
 		where secondsRunning > expectedRunningSeconds * 1.5
@@ -790,7 +783,7 @@ begin
 			when @bIsOffHours = 1 then 2
 			else 2
 			end as severity,
-		'Job [' + isnull(rtrim(ltrim(jobName)), '') + '] has been running for more than ' + convert(varchar(20), convert(int, (minutesRunning/10)) * 10) + ' minutes.' as subject,
+		'Job [' + isnull(rtrim(ltrim(jobName)), '') + '] running for ' + convert(varchar(20), convert(int, (minutesRunning/10)) * 10) + ' minutes.' as subject,
 		1 as isLongRunningJob
 		from #runningJobs a
 		where secondsRunning > 60*5

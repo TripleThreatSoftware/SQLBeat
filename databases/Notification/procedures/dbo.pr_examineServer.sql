@@ -1,8 +1,3 @@
-/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 07/27/2009 12:11:48 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
 --alter table notificationLog_history add runGUID uniqueIdentifier
 --go
 --create clustered index ix_notificationLogHistory_ukey_group_serverName_runGUID on notificationLog_history (ukey, serverName, ukey_group, runGUID) with fillfactor = 50
@@ -16,7 +11,7 @@ GO
 -- EXEC sp_configure 'agent xps', '1'
 -- reconfigure
 -- select * from dm_servers where serverName = 'sqlcluster01'
--- select top 100 * from notificationLog_history order by ymd desc
+-- select top 100 * from notificationLog_history (nolock) where servername = 'devmssql02' order by ymd desc
 -- select top 100 * from processLog (nolock) where serverName = 'sqlcluster01' and command <> 'awaiting command' order by ymd desc
 -- exec pr_examineServer 'devmssql02', 600
 -- exec pr_examineServer '10.3.10.197', 600
@@ -50,6 +45,7 @@ begin
 	declare @cThisSubject varchar(2000)
 	declare @cStringToAdd varchar(2000)
 	declare @cThisDatabase varchar(100)
+	declare @cJobName varchar(500)
 
 	declare @cSQLString nvarchar(4000)
 	declare @cProcedureName varchar(100)
@@ -62,6 +58,8 @@ begin
 	declare @nMultipleBlockAlert int
 	declare @nThisUkey int
 	declare @nUkeyServer int
+	declare @nNumSuccess int
+	declare @nNumFailure int
 
 	declare @nRunStamp bigint
 	declare @nLowSpaceThreshold bigint
@@ -73,6 +71,8 @@ begin
 	declare @bIsOffHours bit
 
 	declare @dLastCheck dateTime
+	declare @dLastSuccess dateTime
+	declare @dLastFailure dateTime
 
 	insert into notificationLog_history (runGUID, serverName, stepName, ukey_group) values (@cRunGUID, @cServerName, 'START', @nUkeyGroup)
 
@@ -708,6 +708,12 @@ begin
 		--********************************************************************************************************
 		-- We have expected runtime data now, so generate alerts
 
+		-- try and ignore any system jobs
+		delete from #runningJobs
+			where jobName like '%distribution clean up%'
+				or currentStepText like '%repl%'
+				or currentStepText like '%sp_ms%'
+
 		-- jobs that we have a history for
 		insert into #results (message, severity, subject, isLongRunningJob)
 		select distinct left(
@@ -795,7 +801,8 @@ begin
 				@cThisMessage = 'Job ' + b.jobName + ' failed at ' + convert(varchar(20), a.ymd, 120) + '.<br>' +
 					'Message: ' + isnull(a.jobOutcome, 'N/A') + '<br>' +
 					'Runtime: ' + convert(varchar(20), isnull(runningSeconds, 0)) + 's<br>',
-				@cThisSubject = left('Job ' + b.jobName + ' failed at ' + convert(varchar(20), a.ymd, 120) + '.', 300)
+				@cThisSubject = left('Job ' + b.jobName + ' failed at ' + convert(varchar(20), a.ymd, 120) + '.', 300),
+				@cJobName = b.jobName
 				from jobHistory a (nolock)
 				join dm_serverJobs b (nolock) on a.ukey_job = b.ukey
 					and b.ukey_server = @nUkeyServer
@@ -804,21 +811,78 @@ begin
 					and a.ymd >= dateAdd(minute, -@nMinutesBackToLook, getDate())
 					and a.ukey > @nThisUkey
 
-			select @cThisMessage = @cThisMessage +
-				'==<b>' + isnull(b.stepName, 'N/A') + '</b> @ ' + convert(varchar(20), a.ymd, 120) + ' <br>' +
-					'Runtime: ' + convert(varchar(20), isnull(a.runningSeconds, 0)) + 's<br>' +
-					'Outcome: ' + case when a.isSuccess = 1 then 'OK' else isnull(a.stepOutcome, 'N/A') end + '<br>' +
-					case when a.isSuccess = 1 then '' else 'Step Text:' + isnull(b.stepCommand, 'N/A') end + '<br>'
-				from jobStepHistory a (nolock)
-				join dm_serverJobSteps b (nolock) on a.ukey_jobStep = b.ukey
-					and b.ukey_server = @nUkeyServer
-					and b.ukey_job = @nUkeyJob
+			select
+				@nNumSuccess = sum(case when a.isSuccess = 1 then 1 else 0 end),
+				@nNumFailure = sum(case when a.isSuccess = 0 then 1 else 0 end)
+				from jobHistory a (nolock)
 				where a.ukey_server = @nUkeyServer
-					and a.ukey_jobHistory = @nThisUkey
+					and a.isSuccess = 0
 					and a.ukey_job = @nUkeyJob
-				order by a.ymd
+					and a.ymd >= dateAdd(minute, -@nMinutesBackToLook, getDate())
 
-			insert into #results (ymd, subject, message, severity, isJobFailure) values (@dJobFailure, @cThisSubject, @cThisMessage, 1, 1)
+			-- if this job has failed more than once in the last 30 minutes, change alert style
+			if (@nNumSuccess = 0 and @nNumFailure > 1)
+			begin
+
+				set @dLastSuccess = (
+					select max(a.ymd)
+						from jobHistory a (nolock)
+						where a.ukey_server = @nUkeyServer
+							and a.ukey_job = @nUkeyJob
+							and a.isSuccess = 1
+							and a.ymd >= dateAdd(day, -1, getDate())
+					)
+
+				set @dLastFailure = (
+					select max(a.ymd)
+						from jobHistory a (nolock)
+						where a.ukey_server = @nUkeyServer
+							and a.ukey_job = @nUkeyJob
+							and a.isSuccess = 0
+							and a.ymd >= dateAdd(day, -1, getDate())
+					)
+
+				set @cThisSubject = 'Job ' + @cJobName + ' failing at ' + convert(varchar(20), dbo.fn_returnTimeBlock(@dJobFailure), 120)
+				set @cThisMessage = 'Job ' + @cJobName + ' is failing. <br>' +
+					'Failures: ' + convert(varchar(20), @nNumFailure) + '<br>' +
+					'Successes: ' + convert(varchar(20), @nNumSuccess) + '<br>' +
+					'Last Failure: ' + convert(varchar(20), @dLastFailure, 120) + '<br>' +
+					'Last Success: ' + convert(varchar(20), @dLastSuccess, 120) + '<br>' +
+					replicate('=', 20) + '<br>'
+
+				select @cThisMessage = @cThisMessage +
+					'==<b>' + isnull(b.stepName, 'N/A') + '</b> @ ' + convert(varchar(20), a.ymd, 120) + ' <br>' +
+						'Runtime: ' + convert(varchar(20), isnull(a.runningSeconds, 0)) + 's<br>' +
+						'Outcome: ' + case when a.isSuccess = 1 then 'OK' else isnull(a.stepOutcome, 'N/A') end + '<br>' +
+						case when a.isSuccess = 1 then '' else 'Step Text:' + isnull(b.stepCommand, 'N/A') end + '<br>'
+					from jobStepHistory a (nolock)
+					join dm_serverJobSteps b (nolock) on a.ukey_jobStep = b.ukey
+						and b.ukey_server = @nUkeyServer
+						and b.ukey_job = @nUkeyJob
+					where a.ukey_server = @nUkeyServer
+						and a.ukey_jobHistory = @nThisUkey
+						and a.ukey_job = @nUkeyJob
+					order by a.ymd
+			end
+			else
+			begin
+
+				select @cThisMessage = @cThisMessage +
+					'==<b>' + isnull(b.stepName, 'N/A') + '</b> @ ' + convert(varchar(20), a.ymd, 120) + ' <br>' +
+						'Runtime: ' + convert(varchar(20), isnull(a.runningSeconds, 0)) + 's<br>' +
+						'Outcome: ' + case when a.isSuccess = 1 then 'OK' else isnull(a.stepOutcome, 'N/A') end + '<br>' +
+						case when a.isSuccess = 1 then '' else 'Step Text:' + isnull(b.stepCommand, 'N/A') end + '<br>'
+					from jobStepHistory a (nolock)
+					join dm_serverJobSteps b (nolock) on a.ukey_jobStep = b.ukey
+						and b.ukey_server = @nUkeyServer
+						and b.ukey_job = @nUkeyJob
+					where a.ukey_server = @nUkeyServer
+						and a.ukey_jobHistory = @nThisUkey
+						and a.ukey_job = @nUkeyJob
+					order by a.ymd
+
+				insert into #results (ymd, subject, message, severity, isJobFailure) values (@dJobFailure, @cThisSubject, @cThisMessage, 1, 1)
+			end
 		end
 
 		-- then, identify failures of steps where the job succeeded

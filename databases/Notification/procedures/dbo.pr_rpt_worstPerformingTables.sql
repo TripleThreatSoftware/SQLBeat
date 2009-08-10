@@ -1,11 +1,14 @@
-/****** Object:  StoredProcedure [dbo].[pr_rpt_worstPerformingTables]    Script Date: 05/19/2009 13:59:45 ******/
+USE [Notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_rpt_worstPerformingTables]    Script Date: 08/10/2009 10:46:06 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
--- exec pr_rpt_worstPerformingTables 'sqlcluster01', 168
 
-CREATE procedure [dbo].[pr_rpt_worstPerformingTables] (@cServerName varchar(200) = '', @nNumHours int = 24)
+-- exec pr_rpt_worstPerformingTables 'sql-primary', 168
+
+ALTER procedure [dbo].[pr_rpt_worstPerformingTables] (@cServerName varchar(200) = '', @nNumHours int = 24)
 as
 begin
 
@@ -20,16 +23,15 @@ begin
 		into #previousRun
 		from indexPerformanceLog (nolock)
 		where ymd >= dateAdd(hour, -@nNumHours, getDate())
-			and ymd < dateAdd(hour, -1, getDate())
+--			and ymd < dateAdd(hour, -1, getDate())
 			and (serverName = @cServerName or isnull(@cServerName, '') = '')
 		group by servername
 
-	select serverName, max(ymd) as ymd
+	select serverName, databaseName, tableName, max(ymd) as ymd
 		into #latestTableSizeData
 		from tableSizeLog (nolock)
-		where (serverName = @cServerName or isnull(@cServerName, '') = '')
-			and ymd >= dateAdd(week, -1, getDate())
-		group by servername
+		where ymd >= dateAdd(week, -1, getDate())
+		group by servername, databaseName, tableName
 
 	create clustered index ix_tmp_latestTableSizeData on #latestTableSizeData (serverName, ymd) with fillfactor = 100
 	create clustered index ix_tmp_previousRun on #previousRun (serverName, ymd) with fillfactor = 100
@@ -54,10 +56,13 @@ begin
 		set numRows = isnull(b.rows, 0)
 		from #performanceSummary a
 		left outer join (
-			select a.serverName, a.databaseName, a.tableName, a.rows
+			select a.serverName, a.databaseName, a.tableName, max(a.rows) as rows
 				from tableSizeLog a (nolock)
 				join #latestTableSizeData b on a.serverName = b.serverName
+					and a.databaseName = b.databaseName
+					and a.tableName = b.tableName
 					and a.ymd = b.ymd
+				group by a.serverName, a.databaseName, a.tableName
 			) b on a.serverName = b.serverName
 				and a.databaseName = b.databaseName
 				and a.tableName = b.tableName
@@ -97,7 +102,8 @@ begin
 			select top 10
 				serverName, databaseName, tableName
 				from #performanceSummary
-				order by (user_scans_24 * isnull(numRows, 1)) desc
+				group by serverName, databaseName, tableName
+				order by sum(user_scans_24 * isnull(numRows, 1)) desc
 			) b on a.serverName = b.serverName
 			and a.databaseName = b.databaseName
 			and a.tableName = b.tableName
@@ -109,4 +115,3 @@ begin
 	drop table #performanceSummary
 
 end
-GO

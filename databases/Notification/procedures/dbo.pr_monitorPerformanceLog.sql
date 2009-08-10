@@ -220,6 +220,9 @@ begin
 	-- we don't care if the hit ratio is getting better
 	delete from #results where counterName = 'Buffer cache hit ratio' and time10 > time1
 
+	-- we don't care about version store related counters
+	delete from #results where counterName like 'version%'
+
 	-- we don't care if something is waiting for less than 250ms or if the waiting time is going down
 	delete from #results where counterName like '%time (ms)%' and (time10 < time1 or time10 < 250)
 

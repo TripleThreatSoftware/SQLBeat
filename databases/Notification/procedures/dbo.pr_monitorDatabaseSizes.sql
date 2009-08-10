@@ -42,12 +42,14 @@ begin
 				-- this needs to not be the first time we've seen this DB
 				where sizeBefore is not null
 			) a
-		join dm_servers b on a.serverName = b.serverName
-		join dm_serverGroups c on b.ukey_group = c.ukey
+		join dm_servers b (nolock) on a.serverName = b.serverName
+		join dm_serverGroups c (nolock) on b.ukey_group = c.ukey
 			and c.isProduction = 1
 		where delta > 5
-			and (sizeNow - sizeBefore) > 500
-			and sizeNow > 5000
+			-- at least a 500mb increase
+			and (sizeNow - sizeBefore) > 500000
+			-- needs to be at least 5gb
+			and sizeNow > 5000000
 			and sizeBefore <> 0
 		order by a.serverName, a.databaseName
 

@@ -1,14 +1,9 @@
-/****** Object:  StoredProcedure [dbo].[pr_processEventLogMessages]    Script Date: 05/19/2009 13:59:45 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
 -- create table eventLog_stage_hist (ukey_group int, ymd dateTime default getDate(), step varchar(200))
 -- pr_processEventLogMessages 1
 -- select * from eventLog_history order by ymd desc
 -- select * from eventLog_stage
 
-CREATE procedure [dbo].[pr_processEventLogMessages] (@nUkeyGroup int)
+ALTER procedure [dbo].[pr_processEventLogMessages] (@nUkeyGroup int)
 as
 begin
 
@@ -26,6 +21,12 @@ begin
 
 	if @@rowcount = 0
 		return
+
+	-- in case we picked up any alerts from a server which has a different name from the one we know, delete them
+	delete eventLog_stage
+		from eventLog_stage a
+		left outer join dm_servers b (nolock) on (a.computerName = b.serverName or a.computerName = isnull(b.friendlyName, ''))
+		where b.ukey is null
 
 	delete #eventLog with (rowlock)
 		from #eventLog a
@@ -89,6 +90,14 @@ begin
 					and message not like '%lsa%'
 					and message not like '%rpc%'
 					and message not like '%sntp%'
+					and message not like '%server process id is%'
+					and message not like '%loggin sql server messages%'
+					and message not like '%informational message only%'
+					and message not like '%this instance of sql server%'
+					and message not like '%new virus definition%'
+					and message not like '%all rights reserved%'
+					and message not like '%authentication mode is%'
+					and message not like '%attempting to cycle error log%'
 					and message not like '%uptime is%'
 					and message not like '%active directory%'
 					and message not like '%windowsupdate%'
@@ -109,6 +118,7 @@ begin
 --					and message not like '%time service%'
 					and sourceName <> 'WinVNC4'
 					and message not like '%wmi adap%'
+					and message not like '%automatic certificate%'
 					and message not like '%invalid buffer%'
 					and message not like '%maintenance plan%'
 					and message not like '%automatic updates%'
@@ -129,7 +139,8 @@ begin
 					and message not like '%waiting for a transaction response%'
 					and message not like '%performance counter data collection%'
 					and message not like '%open procedure name%'
-
+					and message not like '%It has taken too long to refresh the W3SVC counters%'
+					and message not like '%the execute method of job definition%'
 
 					and isnull(a.message, '') <> ''
 			) a
@@ -181,6 +192,18 @@ begin
 				)
 			and numFailures >= 3
 
+	-- if it's successfully read since the last failure, do not disable
+	update #eventLogfailures
+		set disableChecks = 0
+		from #eventLogfailures a
+		join (
+			select computerName, max(monitorDate) as ymd
+				from eventLog (nolock)
+				where monitorDate >= dateAdd(minute, -30, getDate())
+				group by computerName
+			) b on a.serverName = b.computerName
+				and a.latest < b.ymd
+
 	insert into notificationLog_stage (subject, message, severity, isEventLog, serverName)
 	select
 		'EventLog checks have failed ' + convert(varchar(20), numFailures) + ' times for ' + serverName + ' at ' + right(convert(varchar(20), latest, 120), 8) as subject,
@@ -218,4 +241,3 @@ begin
 	drop table #eventLogFailures
 	drop table #eventLog
 end
-GO
