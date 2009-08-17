@@ -1,12 +1,14 @@
-/****** Object:  StoredProcedure [dbo].[pr_examineAllServers]    Script Date: 05/19/2009 13:59:45 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE    procedure [dbo].[pr_examineAllServers] (@nServerGroup int)
+
+ALTER    procedure [dbo].[pr_examineAllServers] (@nServerGroup int)
 as
 begin
 	set nocount on
+
+	insert into notificationLog_history (stepName, ukey_group) values ('START All', @nServerGroup)
 
 	declare @cServerName varchar(200)
 	declare @cSQLString nvarchar(2000)
@@ -54,7 +56,7 @@ begin
 
 			if @@error <> 0
 			begin
-				set @cSubject = 'SQL Automated Alerts : Failed to make contact with ' + @cServerName
+				set @cSubject = 'Failed to make contact with ' + @cServerName
 				set @cMessage = 'SQLBeat failed to make contact with ' + @cServerName
 
 				insert into notificationLog_stage (subject, message, serverName, severity) values (
@@ -75,5 +77,7 @@ begin
 					and detailedCheck = 1
 
 	end
+
+	insert into notificationLog_history (stepName, ukey_group) values ('END All', @nServerGroup)
+
 end
-GO

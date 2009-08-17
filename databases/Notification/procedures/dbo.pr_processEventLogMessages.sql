@@ -1,3 +1,8 @@
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
 -- create table eventLog_stage_hist (ukey_group int, ymd dateTime default getDate(), step varchar(200))
 -- pr_processEventLogMessages 1
 -- select * from eventLog_history order by ymd desc
@@ -90,6 +95,11 @@ begin
 					and message not like '%lsa%'
 					and message not like '%rpc%'
 					and message not like '%sntp%'
+					and message not like '%windows installer service%'
+					and message not like '%error log has been reinitialized%'
+					and message not like '%microsoft corporation%'
+					and message not like '%cache has been temporarily disabled%'
+					and message not like '%cache has been reenabled%'
 					and message not like '%server process id is%'
 					and message not like '%loggin sql server messages%'
 					and message not like '%informational message only%'
