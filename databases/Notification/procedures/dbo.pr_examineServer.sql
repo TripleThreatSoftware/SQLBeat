@@ -11,9 +11,10 @@
 -- EXEC sp_configure 'agent xps', '1'
 -- reconfigure
 -- select * from dm_servers where serverName = 'sqlcluster01'
--- select top 100 * from notificationLog_history (nolock) where servername = 'devmssql02' order by ymd desc
+-- select top 500 * from notificationLog_history (nolock) where runGUID = 'CFCB992F-12E5-47C9-95CD-C36B133A0640' order by ymd
+-- select top 500 * from notificationLog_history (nolock) where ymd >= '2009-08-20 15:09:00.000' order by ymd
 -- select top 100 * from processLog (nolock) where serverName = 'sqlcluster01' and command <> 'awaiting command' order by ymd desc
--- exec pr_examineServer 'devmssql02', 600
+-- exec pr_examineServer 'sql-primary', 600
 -- exec pr_examineServer '10.3.10.197', 600
 ALTER procedure [dbo].[pr_examineServer] (@cServerName varchar(100), @nMinutesBackToLook int)
 as
@@ -187,7 +188,8 @@ begin
 		sql_handle binary(20), ignoreSPID bit default 0,
 		lastWaitType varchar(32), login_time dateTime, net_address varchar(12),
 		waitType binary(2), waitTime bigint, waitResource varchar(256), ymd dateTime default getDate(),
-		lastCPU bigint default 0, lastDisk bigint default 0, lastData dateTime)
+		lastCPU bigint default 0, lastDisk bigint default 0, lastData dateTime,
+		pagesInMemory bigint, diskReads bigint, diskWrites bigint, logicalReads bigint)
 
 	create table #locks (spid int, dbid int, objid int, indid int, type varchar(100), resource varchar(100), mode varchar(100), status varchar(100))
 
@@ -263,7 +265,7 @@ begin
 	if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
 		execute('drop procedure ' + @cProcedureName)
 
-	insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Log size: Database names', @cSQLString, @nUkeyGroup)
+	insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Determine Database names', @cSQLString, @nUkeyGroup)
 	exec sp_executeSQL @cSQLString
 
 	if @bTesting = 1
@@ -309,6 +311,177 @@ begin
 	if @bTesting = 1
 		print @cSQLString
 	EXECUTE(@cProcedureName)
+
+	if @cVersion like '%2005%' or @cVersion like '%2008%'
+	begin
+
+		create table #memory ([size] bigint, [base] bigint)
+
+		set @cSQLString = '
+			insert into #memory (size, base)
+			select size, base
+				from openQuery([' + @cServerName + '], ''
+				SELECT
+					CONVERT(VARBINARY, SUM(region_size_in_bytes)) AS Size,
+					region_allocation_base_address AS Base
+					FROM sys.dm_os_virtual_address_dump
+					WHERE region_allocation_base_address <> 0x0
+					GROUP BY region_allocation_base_address
+				UNION
+				SELECT
+					CONVERT(VARBINARY, region_size_in_bytes),
+					region_allocation_base_address
+					FROM sys.dm_os_virtual_address_dump
+					WHERE region_allocation_base_address  = 0x0 '')'
+
+		insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'SQL 2005 Performance Counters', @cSQLString, @nUkeyGroup)
+
+		if @bTesting = 1
+			print @cSQLString
+
+		exec sp_executeSQL @cSQLString
+--select * from performanceLog_stage where objectName like '%sqlbeat%'
+
+		insert into performanceLog_stage (serverName, [objectName], [counterName], [instanceName], counterValue, counterType, runStamp)
+		select @cServerName, 'SQLBeat Statistics', 'Total Available Memory (kb)', '', SUM(Size*Free)/1024, '', @nRunStamp
+			from (
+				SELECT
+					Size =
+						Size,
+						Reserved =  SUM(
+							CASE(Base^0)
+								WHEN 0 THEN 0
+								ELSE 1
+								END
+							),
+						Free = SUM(
+							CASE(Base^0)
+								WHEN 0 THEN 1
+								ELSE 0
+								END
+							)
+					from #memory
+					group by [size]
+				) a
+			WHERE Free <> 0
+
+		insert into performanceLog_stage (serverName, [objectName], [counterName], [instanceName], counterValue, counterType, runStamp)
+		select @cServerName, 'SQLBeat Statistics', 'Maximum Free Memory (kb)', '', MAX(Size)/1024, '', @nRunStamp
+			from (
+				SELECT
+					Size =
+						Size,
+						Reserved =  SUM(
+							CASE(Base^0)
+								WHEN 0 THEN 0
+								ELSE 1
+								END
+							),
+						Free = SUM(
+							CASE(Base^0)
+								WHEN 0 THEN 1
+								ELSE 0
+								END
+							)
+					from #memory
+					group by [size]
+				) a
+			WHERE Free <> 0
+
+		drop table #memory
+
+		--***********************************************************************************
+		--***********************************************************************************
+		-- clerk consumers of memory
+		create table #clerks (clerkType varchar(500), clerkName varchar(800), singlePages bigint, multiPages bigint, virtualMemoryReserved bigint,
+			virtualMemoryCommitted  bigint, aweAllocated bigint, sharedMemoryReserved bigint, sharedMemoryCommitted bigint)
+
+		set @cSQLString = '
+			insert into #clerks
+			select *
+				from openQuery([' + @cServerName + '], ''
+					SELECT [type], [name], single_pages_kb, multi_pages_kb, virtual_memory_reserved_kb, virtual_memory_committed_kb, awe_allocated_kb, shared_memory_reserved_kb, shared_memory_committed_kb
+					FROM sys.dm_os_memory_clerks
+					WHERE (single_pages_kb + multi_pages_kb + virtual_memory_reserved_kb + virtual_memory_committed_kb + awe_allocated_kb + shared_memory_reserved_kb + shared_memory_committed_kb) > 0 '')'
+
+		insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'SQL 2005 Memory Clerks', @cSQLString, @nUkeyGroup)
+
+		if @bTesting = 1
+			print @cSQLString
+
+		exec sp_executeSQL @cSQLString
+
+		insert into performanceLog_stage (serverName, [objectName], [counterName], [instanceName], counterValue, counterType, runStamp)
+		select @cServerName, 'Memory Clerks', rtrim(ltrim(clerkType)) + ':' + clerkName, 'Single Pages (kb)', singlePages, '', @nRunStamp from #clerks
+		union
+		select @cServerName, 'Memory Clerks', rtrim(ltrim(clerkType)) + ':' + clerkName, 'Multiple Pages (kb)', multiPages, '', @nRunStamp from #clerks
+		union
+		select @cServerName, 'Memory Clerks', rtrim(ltrim(clerkType)) + ':' + clerkName, 'Virtual Memory Reserved (kb)', virtualMemoryReserved, '', @nRunStamp from #clerks
+		union
+		select @cServerName, 'Memory Clerks', rtrim(ltrim(clerkType)) + ':' + clerkName, 'Virtual Memory Committed (kb)', virtualMemoryCommitted, '', @nRunStamp from #clerks
+		union
+		select @cServerName, 'Memory Clerks', rtrim(ltrim(clerkType)) + ':' + clerkName, 'AWE Allocated (kb)', aweAllocated, '', @nRunStamp from #clerks
+		union
+		select @cServerName, 'Memory Clerks', rtrim(ltrim(clerkType)) + ':' + clerkName, 'Shared Memory Reserved (kb)', sharedMemoryReserved, '', @nRunStamp from #clerks
+		union
+		select @cServerName, 'Memory Clerks', rtrim(ltrim(clerkType)) + ':' + clerkName, 'Shared Memory Committed (kb)', sharedMemoryCommitted, '', @nRunStamp from #clerks
+
+		drop table #clerks
+
+		--***********************************************************************************
+		--***********************************************************************************
+		-- buffer pool status
+		create table #memorySummary (physicalMemory bigint, virtualMemory bigint, bpoolBuffers bigint, bpoolBuffersNeeded bigint, accessibleBPoolBuffers bigint)
+
+		set @cSQLString = '
+			insert into #memorySummary
+			select *
+				from openQuery([' + @cServerName + '], ''
+					SELECT physical_memory_in_bytes / 1024 as physicalMemory, virtual_memory_in_bytes / 1024 as virtualMemory,	bpool_committed, bpool_commit_target, bpool_visible
+						FROM sys.dm_os_sys_info  '')'
+
+		insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'SQL 2005 BPool Statistics', @cSQLString, @nUkeyGroup)
+
+		if @bTesting = 1
+			print @cSQLString
+
+		exec sp_executeSQL @cSQLString
+
+		insert into performanceLog_stage (serverName, [objectName], [counterName], [instanceName], counterValue, counterType, runStamp)
+		select @cServerName, 'SQLBeat Statistics', 'Buffer Pool', 'Physical Memory (kb)', physicalMemory, '', @nRunStamp from #memorySummary
+		union
+		select @cServerName, 'SQLBeat Statistics', 'Buffer Pool', 'Virtual Memory (kb)', virtualMemory, '', @nRunStamp from #memorySummary
+		union
+		select @cServerName, 'SQLBeat Statistics', 'Buffer Pool', '8kb Buffers In Pool', bpoolBuffers, '', @nRunStamp from #memorySummary
+		union
+		select @cServerName, 'SQLBeat Statistics', 'Buffer Pool', '8kb Buffers Needed', bpoolBuffersNeeded, '', @nRunStamp from #memorySummary
+		union
+		select @cServerName, 'SQLBeat Statistics', 'Buffer Pool', '8kb Buffers Accessible', accessibleBPoolBuffers, '', @nRunStamp from #memorySummary
+
+		drop table #memorySummary
+
+		--***********************************************************************************
+		--***********************************************************************************
+		-- pages of memory consumed
+		create table #memoryConsumed (type varchar(500), pagesAllocated bigint)
+
+		set @cSQLString = '
+			insert into #memoryConsumed
+			select *
+				from openQuery([' + @cServerName + '], ''select [type], sum(PAGES_ALLOCATED_COUNT) as pagesAllocated from SYS.DM_OS_MEMORY_OBJECTS group by [type]'')'
+
+		insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'SQL 2005 Memory Pages Consumed', @cSQLString, @nUkeyGroup)
+
+		if @bTesting = 1
+			print @cSQLString
+
+		exec sp_executeSQL @cSQLString
+
+		insert into performanceLog_stage (serverName, [objectName], [counterName], [instanceName], counterValue, counterType, runStamp)
+		select @cServerName, 'SQLBeat Statistics', 'Memory Pages Allocated', [type], pagesAllocated, '', @nRunStamp from #memoryConsumed
+
+		drop table #memoryConsumed
+	end
 
 	--*********************************************************************************************************************
 	--*********************************************************************************************************************
@@ -659,6 +832,11 @@ begin
 							or a.ymd between dateAdd(week, -2, dateAdd(minute, -30, getDate())) and dateAdd(week, -2, dateAdd(minute, 30, getDate()))
 							or a.ymd between dateAdd(week, -3, dateAdd(minute, -30, getDate())) and dateAdd(week, -3, dateAdd(minute, 30, getDate()))
 							or a.ymd between dateAdd(week, -4, dateAdd(minute, -30, getDate())) and dateAdd(week, -4, dateAdd(minute, 30, getDate()))
+
+							or dateAdd(second, runningSeconds, a.ymd) between dateAdd(week, -1, dateAdd(minute, -30, getDate())) and dateAdd(week, -1, dateAdd(minute, 30, getDate()))
+							or dateAdd(second, runningSeconds, a.ymd) between dateAdd(week, -2, dateAdd(minute, -30, getDate())) and dateAdd(week, -2, dateAdd(minute, 30, getDate()))
+							or dateAdd(second, runningSeconds, a.ymd) between dateAdd(week, -3, dateAdd(minute, -30, getDate())) and dateAdd(week, -3, dateAdd(minute, 30, getDate()))
+							or dateAdd(second, runningSeconds, a.ymd) between dateAdd(week, -4, dateAdd(minute, -30, getDate())) and dateAdd(week, -4, dateAdd(minute, 30, getDate()))
 							)
 					group by b.job_id
 				) b on a.job_id = b.job_id
@@ -681,6 +859,11 @@ begin
 							or a.ymd between dateAdd(day, -2, dateAdd(minute, -30, getDate())) and dateAdd(day, -2, dateAdd(minute, 30, getDate()))
 							or a.ymd between dateAdd(day, -3, dateAdd(minute, -30, getDate())) and dateAdd(day, -3, dateAdd(minute, 30, getDate()))
 							or a.ymd between dateAdd(day, -4, dateAdd(minute, -30, getDate())) and dateAdd(day, -4, dateAdd(minute, 30, getDate()))
+
+							or dateAdd(second, runningSeconds, a.ymd) between dateAdd(day, -1, dateAdd(minute, -30, getDate())) and dateAdd(day, -1, dateAdd(minute, 30, getDate()))
+							or dateAdd(second, runningSeconds, a.ymd) between dateAdd(day, -2, dateAdd(minute, -30, getDate())) and dateAdd(day, -2, dateAdd(minute, 30, getDate()))
+							or dateAdd(second, runningSeconds, a.ymd) between dateAdd(day, -3, dateAdd(minute, -30, getDate())) and dateAdd(day, -3, dateAdd(minute, 30, getDate()))
+							or dateAdd(second, runningSeconds, a.ymd) between dateAdd(day, -4, dateAdd(minute, -30, getDate())) and dateAdd(day, -4, dateAdd(minute, 30, getDate()))
 							)
 					group by b.job_id
 				) b on a.job_id = b.job_id
@@ -703,6 +886,24 @@ begin
 					group by b.job_id
 				) b on a.job_id = b.job_id
 			where isnull(a.expectedRunningSeconds, 0) = 0
+
+		-- last resort - any history at all
+		update #runningJobs
+			set expectedRunningSeconds = b.expectedRunningSeconds,
+				maxRunningSeconds = b.maxRunningSeconds
+			from #runningJobs a
+			join (
+				select b.job_id,
+					avg(runningSeconds) as expectedRunningSeconds,
+					max(runningSeconds) as maxRunningSeconds
+					from jobHistory a (nolock)
+					join dm_serverJobs b (nolock) on a.ukey_job = b.ukey
+						and b.ukey_server = @nUkeyServer
+					where a.ukey_server = @nUkeyServer
+					group by b.job_id
+				) b on a.job_id = b.job_id
+			where isnull(a.expectedRunningSeconds, 0) = 0
+
 
 		--********************************************************************************************************
 		--********************************************************************************************************
@@ -1118,6 +1319,28 @@ begin
 		exec sp_executeSQL @cSQLString
 
 
+		if @cVersion like '%2005%' or @cVersion like '%2008%'
+		begin
+			create table #processActivity (spid int, cpuTime bigint, pagesInMemory bigint, reads bigint, writes bigint, logicalReads bigint)
+
+			set @cSQLString = 'select * from openQuery([' + @cServerName + '], ''select session_id, cpu_time, memory_usage, reads, writes, logical_reads from SYS.DM_EXEC_SESSIONS'')'
+			insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Running processes', @cSQLString, @nUkeyGroup)
+
+			insert into #processActivity
+			exec sp_executeSQL @cSQLString
+
+			update #processes
+				set cpuTime = b.cpuTime,
+					pagesInMemory = b.pagesInMemory,
+					diskReads = b.reads,
+					diskWrites = b.writes,
+					logicalReads = b.logicalReads
+				from #processes a
+				join #processActivity b on a.spid = b.spid
+
+			drop table #processActivity
+		end
+
 		declare @dLastProcessCheck dateTime
 		set @dLastProcessCheck = (select max(ymd) from processLog where serverName = @cServerName)
 
@@ -1447,7 +1670,14 @@ begin
 
 				if @bTesting = 1
 					print @cSQLString
-				EXECUTE(@cProcedureName)
+
+				begin try
+					EXECUTE(@cProcedureName)
+				end try
+				begin catch
+					set @cThisMessage = 'ERROR: ' + error_message()
+					insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, @cThisMessage, @cSQLString, @nUkeyGroup)
+				end catch
 
 			end
 
@@ -1503,10 +1733,12 @@ begin
 
 		insert into processLog(serverName, spid, status, login, hostname, blockedBy, dbName, command, cputime, diskio,
 			lastbatch, programName,	buffercontents, lastBatchTime, locks, isBlocked, isBlocker, isWild, sql_handle,
-			lastWaitType, login_time, net_address, waitType, waitTime, waitResource, ymd)
+			lastWaitType, login_time, net_address, waitType, waitTime, waitResource, ymd,
+			pagesInMemory, diskReads, diskWrites, logicalReads)
 		select @cServerName, spid, status, login, hostname, blockedBy, dbName, command, cputime, diskio,
 			lastbatch, programName,	buffercontents, lastBatchTime, locks, isBlocked, isBlocker, isWild, sql_handle,
-			lastWaitType, login_time, net_address, waitType, waitTime, waitResource, ymd
+			lastWaitType, login_time, net_address, waitType, waitTime, waitResource, ymd,
+			pagesInMemory, diskReads, diskWrites, logicalReads
 
 			from #processes
 
@@ -1909,7 +2141,14 @@ begin
 				exec sp_executeSQL @cSQLString
 				if @bTesting = 1
 					print @cSQLString
-				EXECUTE(@cProcedureName)
+
+				begin try
+					EXECUTE(@cProcedureName)
+				end try
+				begin catch
+					set @cThisMessage = 'ERROR: ' + error_message()
+					insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, @cThisMessage, @cSQLString, @nUkeyGroup)
+				end catch
 
 				set @cSQLString = ''
 			end
@@ -1931,7 +2170,15 @@ begin
 			exec sp_executeSQL @cSQLString
 			if @bTesting = 1
 				print @cSQLString
-			EXECUTE(@cProcedureName)
+
+			begin try
+				EXECUTE(@cProcedureName)
+			end try
+			begin catch
+				set @cThisMessage = 'ERROR: ' + error_message()
+				insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, @cThisMessage, @cSQLString, @nUkeyGroup)
+			end catch
+
 		end
 
 		update #fileSizes

@@ -974,7 +974,9 @@ begin
 					and a.ukey_job = @nUkeyJob
 				order by a.ymd
 
-			insert into #results (ymd, subject, message, severity, isJobFailure) values (@dJobFailure, @cThisSubject, @cThisMessage, 1, 1)
+			-- silence permanently any job failure messages due to a database restore
+			if @cThisMessage not like '%in the middle of a restore%' and @cThisMessage not like '%has changed since it was compiled%'
+				insert into #results (ymd, subject, message, severity, isJobFailure) values (@dJobFailure, @cThisSubject, @cThisMessage, 1, 1)
 		end
 	end
 
