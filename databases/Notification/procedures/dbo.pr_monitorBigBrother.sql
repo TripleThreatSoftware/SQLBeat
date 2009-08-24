@@ -740,6 +740,7 @@ begin
 			or jobName like '%fragmentation check%'
 			or jobName like '%configuration check%'
 			or jobName like '%detailed check%'
+			or jobName like '%integrity check%'
 			or jobName like '%import weblogs%'
 			or jobName like '%monitor sql objects%'
 			or jobName like '%monitor sql statistics%'
@@ -1198,25 +1199,16 @@ begin
 
 		update #detailedChecks set runHistory = @cBuffer where ukey = @nUkey
 
-		set @cBuffer = ''
+		-- if it finished, loop!
+		if charindex('END (', @cBuffer) > 0
+			delete from #detailedChecks where ukey = @nUkey
+		else
+		begin
 
-		select
-			@cBuffer = left(@cBuffer + stepOutcome, 8000)
-			from dm_serverJobs a (nolock)
-			join dm_serverJobSteps b (nolock) on a.ukey = b.ukey_job
-			join jobHistory c (nolock) on a.ukey = c.ukey_job
-				and c.ymd <= @dStartTime
-				and dateAdd(second, c.runningSeconds+15, c.ymd) >= @dEndTime
-			join dm_serverGroups d (nolock) on rtrim(ltrim(substring(a.jobName, charindex('-', a.jobName) + 1, 99))) = d.groupName
-				and d.ukey = @nUkeyGroup
-			join jobStepHistory e on a.ukey = e.ukey_job
-				and c.ukey = e.ukey_jobHistory
-			where a.ukey_server = @nUkeyServer
-				and a.jobName like '%sql detailed check%'
+			set @cBuffer = ''
 
-		set @bSuccess = (
 			select
-				top 1 c.isSuccess
+				@cBuffer = left(@cBuffer + stepOutcome, 8000)
 				from dm_serverJobs a (nolock)
 				join dm_serverJobSteps b (nolock) on a.ukey = b.ukey_job
 				join jobHistory c (nolock) on a.ukey = c.ukey_job
@@ -1224,14 +1216,30 @@ begin
 					and dateAdd(second, c.runningSeconds+15, c.ymd) >= @dEndTime
 				join dm_serverGroups d (nolock) on rtrim(ltrim(substring(a.jobName, charindex('-', a.jobName) + 1, 99))) = d.groupName
 					and d.ukey = @nUkeyGroup
+				join jobStepHistory e on a.ukey = e.ukey_job
+					and c.ukey = e.ukey_jobHistory
 				where a.ukey_server = @nUkeyServer
 					and a.jobName like '%sql detailed check%'
-			)
 
-		update #detailedChecks
-			set jobHistory = @cBuffer,
-				isFailure = case when @bSuccess = 0 then 1 else 0 end
-				where ukey = @nUkey
+			set @bSuccess = (
+				select
+					top 1 c.isSuccess
+					from dm_serverJobs a (nolock)
+					join dm_serverJobSteps b (nolock) on a.ukey = b.ukey_job
+					join jobHistory c (nolock) on a.ukey = c.ukey_job
+						and c.ymd <= @dStartTime
+						and dateAdd(second, c.runningSeconds+15, c.ymd) >= @dEndTime
+					join dm_serverGroups d (nolock) on rtrim(ltrim(substring(a.jobName, charindex('-', a.jobName) + 1, 99))) = d.groupName
+						and d.ukey = @nUkeyGroup
+					where a.ukey_server = @nUkeyServer
+						and a.jobName like '%sql detailed check%'
+				)
+
+			update #detailedChecks
+				set jobHistory = @cBuffer,
+					isFailure = case when @bSuccess = 0 then 1 else 0 end
+					where ukey = @nUkey
+		end
 	end
 
 	-- these should be failures and long running detailed check jobs.

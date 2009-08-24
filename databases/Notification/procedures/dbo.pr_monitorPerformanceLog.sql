@@ -1,8 +1,3 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-
 -- exec pr_monitorPerformanceLog '2009-08-20 00:09.000'
 -- exec pr_monitorPerformanceLog '2009-08-17 11:45.000'
 
@@ -433,3 +428,8 @@ select * from #results where ukey_server = @nUkeyServer
 	drop table #servers
 	drop table #allRuns
 end
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO

@@ -1760,6 +1760,8 @@ begin
 					or bufferContents like '%repl%'
 					or dbName = 'distribution'
 					)
+				-- and it's been hosed up for more than 20 minutes
+				and waitTime > 60000 * 20
 			having count(*) >= 4
 
 		-- if there's just a little bit of blocking, go easy

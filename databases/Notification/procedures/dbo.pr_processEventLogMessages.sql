@@ -1,8 +1,3 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-
 -- create table eventLog_stage_hist (ukey_group int, ymd dateTime default getDate(), step varchar(200))
 -- pr_processEventLogMessages 1
 -- select * from eventLog_history order by ymd desc
@@ -71,6 +66,9 @@ begin
 					or a.message like '%shutdown%'
 					or a.message like '%eaas%'
 					or a.message like '%degraded%'
+					or a.message like '%lost communication%'
+					or a.message like '%network adapter%'
+					or a.message like '%cluster node%'
 					or a.message like '%sensor%'
 					or a.message like '%drive array%'
 					or a.message like '%power supply%'
@@ -251,3 +249,4 @@ begin
 	drop table #eventLogFailures
 	drop table #eventLog
 end
+GO

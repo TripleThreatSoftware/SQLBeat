@@ -1,10 +1,3 @@
-USE [Notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_checkDeepSQLStats]    Script Date: 08/03/2009 09:17:55 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
 --***********************************************************************************************************************************************
 --***********************************************************************************************************************************************
 
@@ -313,3 +306,8 @@ begin
 	drop table #performance
 	drop table #results
 end
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO

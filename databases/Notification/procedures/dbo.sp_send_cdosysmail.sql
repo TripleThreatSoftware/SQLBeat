@@ -1,14 +1,14 @@
-/****** Object:  StoredProcedure [dbo].[sp_send_cdosysmail]    Script Date: 05/19/2009 13:59:45 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE  PROCEDURE [dbo].[sp_send_cdosysmail]
+ALTER  PROCEDURE [dbo].[sp_send_cdosysmail]
 	@From varchar(100) ,
 	@To varchar(100) ,
-	@Subject varchar(100)=" ",
+	@Subject varchar(5000)=" ",
 	@Body varchar(8000) =" ",
-	@AttachmentPath varchar(1000) = " "
+	@AttachmentPath varchar(1000) = " ",
+	@HTMLBody varchar(8000) =" "
 
 	/*********************************************************************
 
@@ -62,9 +62,13 @@ begin
 	EXEC @hr = sp_OASetProperty @iMsg, 'Subject', @Subject
 
 	-- If you are using HTML e-mail, use 'HTMLBody' instead of 'TextBody'.
-	EXEC @hr = sp_OASetProperty @iMsg, 'TextBody', @Body
+	if isnull(@HTMLBody, '') <> ''
+		EXEC @hr = sp_OASetProperty @iMsg, 'HTMLBody', @HTMLBody
+	else
+		EXEC @hr = sp_OASetProperty @iMsg, 'TextBody', @Body
 
-	EXEC @hr = sp_OAMethod @iMsg, 'AddAttachment', @output out, @AttachmentPath
+	if rtrim(ltrim(isnull(@AttachmentPath, ''))) <> ''
+		EXEC @hr = sp_OAMethod @iMsg, 'AddAttachment', @output out, @AttachmentPath
 
 	EXEC @hr = sp_OAMethod @iMsg, 'Send', NULL
 
@@ -124,4 +128,3 @@ begin
 		RETURN
 	END
 end
-GO

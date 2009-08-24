@@ -1,16 +1,11 @@
-USE [Notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_monitorSQLErrorLogs]    Script Date: 08/03/2009 10:11:37 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
+--select top 10 * from notificationLog_Stage
 
 ALTER procedure [dbo].[pr_monitorSQLErrorLogs]
 as
 begin
 	declare @dMinDate dateTime
-	set @dMinDate = dateAdd(minute, 15 * datePart(minute, getDate()) / 15, convert(varchar(14), getDate(), 120) + '00.000')
+	set @dMinDate = dateAdd(hour, -1, getDate())
+--	set @dMinDate = dateAdd(minute, 15 * datePart(minute, getDate()) / 15, convert(varchar(14), getDate(), 120) + '00.000')
 
 	create table #errorsFound (ymd dateTime, serverName varchar(200), processInfo varchar(500), logMessage varchar(8000),
 		ukey int, isLoginFailure bit default 0, isDeadlock bit default 0)
@@ -19,7 +14,7 @@ begin
 	select
 		ymd, serverName, processInfo, convert(varchar(8000), logMessage) as logMessage, ukey
 		from sqlErrorLog (nolock)
-		where ymd >= dateAdd(day, -2, getDate())
+		where ymd >= @dMinDate
 			and (
 				logMessage like '%deadlock%'
 				or logMessage like '%login failed%'
@@ -82,7 +77,7 @@ begin
 			select serverName, max(ymd) as ymd
 				from notificationLog (nolock)
 				where subject like '%login failure%'
-					and ymd >= dateAdd(hour, -1, getDate())
+					and ymd >= dateAdd(hour, -12, getDate())
 				group by serverName
 			) b on a.serverName = b.serverName
 				and a.ymd <= b.ymd
@@ -155,7 +150,7 @@ begin
 		set @cMessage = ''
 
 		select @cMessage = @cMessage + logMessage + char(13)
-			from #deadlocks
+			from #errorsFound
 			where serverName = @cServerName
 				and ymd = @dYMDBegin
 				and processInfo = @cProcessInfo
@@ -191,3 +186,8 @@ begin
 	drop table #loginFailures
 	drop table #deadlocks
 end
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO

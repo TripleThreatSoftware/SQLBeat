@@ -1,8 +1,3 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-
 ALTER    procedure [dbo].[pr_examineAllServers] (@nServerGroup int)
 as
 begin
@@ -81,3 +76,8 @@ begin
 	insert into notificationLog_history (stepName, ukey_group) values ('END All', @nServerGroup)
 
 end
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO

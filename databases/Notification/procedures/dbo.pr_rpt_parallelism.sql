@@ -1,16 +1,11 @@
-/****** Object:  StoredProcedure [dbo].[pr_rpt_parallelism]    Script Date: 05/19/2009 13:59:45 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
--- exec pr_rpt_paralellism 'spiderxps\sqlbeat'
-CREATE procedure [dbo].[pr_rpt_parallelism] (@cServerName varchar(100))
+-- exec pr_rpt_parallelism 'mssqla-ny'
+alter procedure [dbo].[pr_rpt_parallelism] (@cServerName varchar(100))
 as
 begin
 
 	select a.ymd, a.spid, a.dbname, a.command, a.cpuTime, a.diskIO, a.lastBatchTime, a.programName, a.blockedBy, a.lastWaitType,
 		a.waitTime, a.waitResource,
-		dbo.fn_returnFormattedBuffer(a.bufferContents) as bufferContents,
+		replace(replace(dbo.fn_returnFormattedBuffer(a.bufferContents), '====', '='), '~', '') as bufferContents,
 		replace(a.locks, char(13), '<br>') as locks
 		from processLog a (nolock)
 		join (
@@ -30,4 +25,3 @@ begin
 		order by a.ymd, a.spid
 
 end
-GO
