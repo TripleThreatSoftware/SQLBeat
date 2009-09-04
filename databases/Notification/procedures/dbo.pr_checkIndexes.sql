@@ -1,9 +1,8 @@
-/****** Object:  StoredProcedure [dbo].[pr_checkIndexes]    Script Date: 05/19/2009 13:59:45 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE procedure [dbo].[pr_checkIndexes]
+ALTER procedure [dbo].[pr_checkIndexes]
 as
 begin
 	set nocount on
@@ -32,6 +31,8 @@ begin
 				and indexCheck = 1
 				and isSQLBox = 1
 				and (lastIndexCheck is null or dateDiff(minute, lastIndexCheck, getDate()) > isnull(indexCheckMinuteInterval, 5))
+				and right(convert(varchar(20), getDate(), 120), 8) >= right(convert(varchar(20), maintenanceWindowStart, 120), 8)
+				and right(convert(varchar(20), getDate(), 120), 8) <= right(convert(varchar(20), maintenanceWindowStop, 120), 8)
 		)
 	begin
 		truncate table #performance
@@ -48,6 +49,8 @@ begin
 				and indexCheck = 1
 				and isSQLBox = 1
 				and (lastIndexCheck is null or dateDiff(minute, lastIndexCheck, getDate()) > isnull(indexCheckMinuteInterval, 5))
+				and right(convert(varchar(20), getDate(), 120), 8) >= right(convert(varchar(20), maintenanceWindowStart, 120), 8)
+				and right(convert(varchar(20), getDate(), 120), 8) <= right(convert(varchar(20), maintenanceWindowStop, 120), 8)
 			order by serverName
 
 		print @cFriendlyName
@@ -142,4 +145,3 @@ begin
 
 	drop table #performance
 end
-GO

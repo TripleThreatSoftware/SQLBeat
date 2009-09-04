@@ -1,9 +1,8 @@
-/****** Object:  StoredProcedure [dbo].[pr_checkObjects]    Script Date: 05/07/2009 10:30:18 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE procedure [dbo].[pr_checkObjects]
+ALTER procedure [dbo].[pr_checkObjects]
 as
 begin
 	set nocount on
@@ -39,6 +38,8 @@ begin
 				and (lastObjectCheck is null or dateDiff(minute, lastObjectCheck, getDate()) > isnull(objectCheckMinuteInterval, 5))
 				and isServerPingable = 1
 				and skipNextRun <> 1
+				and right(convert(varchar(20), getDate(), 120), 8) >= right(convert(varchar(20), maintenanceWindowStart, 120), 8)
+				and right(convert(varchar(20), getDate(), 120), 8) <= right(convert(varchar(20), maintenanceWindowStop, 120), 8)
 		)
 	begin
 		truncate table #objectText
@@ -57,6 +58,8 @@ begin
 				and (lastObjectCheck is null or dateDiff(minute, lastObjectCheck, getDate()) > isnull(objectCheckMinuteInterval, 5))
 				and isServerPingable = 1
 				and skipNextRun <> 1
+				and right(convert(varchar(20), getDate(), 120), 8) >= right(convert(varchar(20), maintenanceWindowStart, 120), 8)
+				and right(convert(varchar(20), getDate(), 120), 8) <= right(convert(varchar(20), maintenanceWindowStop, 120), 8)
 			order by servername
 
 		print 'Processing ' + @cServerName
@@ -406,4 +409,3 @@ begin
 	drop table #indexes
 	drop table #foreignKeys
 end
-GO
