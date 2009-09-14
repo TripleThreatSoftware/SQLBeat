@@ -1,7 +1,14 @@
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
 -- create table eventLog_stage_hist (ukey_group int, ymd dateTime default getDate(), step varchar(200))
--- pr_processEventLogMessages 1
--- select * from eventLog_history order by ymd desc
+-- pr_processEventLogMessages 35
+-- select * from eventLog_history where servername = 'prooradb06' order by ymd desc
 -- select * from eventLog_stage
+-- select * from notificationLog_stage
 
 ALTER procedure [dbo].[pr_processEventLogMessages] (@nUkeyGroup int)
 as
@@ -13,7 +20,11 @@ begin
 	-- Get rid of duplicates
 	--*********************************************************************************************************************
 
-	select *
+	select *,
+		convert(varchar(8000), '') as emailMessage,
+		convert(varchar(8000), '') as emailSubject,
+		convert(int, 2) as severity,
+		convert(bit, 1) as isInformational
 		into #eventLog
 		from eventLog_stage a (nolock)
 		join dm_servers b (nolock) on (a.computerName = b.serverName or a.computerName = isnull(b.friendlyName, ''))
@@ -21,6 +32,14 @@ begin
 
 	if @@rowcount = 0
 		return
+
+	update dm_servers with (rowlock)
+		set lastEventLogCheck = getDate()
+		from dm_servers a
+		join (
+			select distinct computerName
+				from #eventLog
+			) b on a.serverName = b.computerName
 
 	-- in case we picked up any alerts from a server which has a different name from the one we know, delete them
 	delete eventLog_stage
@@ -53,105 +72,148 @@ begin
 	-- Generate alerts
 	--*********************************************************************************************************************
 
+	update #eventLog
+		set isInformational = 0
+		where not (message like '%log shipping%' or message like '%tlog%')
+			and message not like '%log truncated%'
+			and message not like '%printer%'
+			and message not like '%backup%'
+			and message not like '%restore%'
+			and message not like '%dtc%'
+			and message not like '%stale counters are being used%'
+			and message not like '%print spool%'
+			and message not like '%lsa%'
+			and message not like '%rpc%'
+			and message not like '%sntp%'
+			and message not like '%windows installer service%'
+			and message not like '%error log has been reinitialized%'
+			and message not like '%microsoft corporation%'
+			and message not like '%cache has been temporarily disabled%'
+			and message not like '%cache has been reenabled%'
+			and message not like '%server process id is%'
+			and message not like '%loggin sql server messages%'
+			and message not like '%informational message only%'
+			and message not like '%this instance of sql server%'
+			and message not like '%new virus definition%'
+			and message not like '%all rights reserved%'
+			and message not like '%authentication mode is%'
+			and message not like '%attempting to cycle error log%'
+			and message not like '%uptime is%'
+			and message not like '%active directory%'
+			and message not like '%windowsupdate%'
+			and message not like '%terminal server%'
+			and message not like '%fax service%'
+			and message not like '%crypt32%'
+			and message not like '%winhttp%'
+			and message not like '%trace level%'
+			and message not like '%master browser%'
+			and message not like '%tracefile%'
+			and message not like '%logging sql server messages in file%'
+			and message not like '%incorrectly formatted request%'
+			and message not like '%ntpclient%'
+			and message not like '%sql server scheduled job%'
+			and message not like '%you may need to delete some files%'
+			and message not like '%spnregister%'
+			and message not like '%spooler%'
+			and sourceName <> 'WinVNC4'
+			and message not like '%wmi adap%'
+			and message not like '%automatic certificate%'
+			and message not like '%invalid buffer%'
+			and message not like '%maintenance plan%'
+			and message not like '%automatic updates%'
+			and message not like '%Failed to set the user%'
+			and message not like '%The registry will be unloaded%'
+			and message not like '%classes registry file%'
+			and message not like '%Security policies were propagated with warning%'
+			and message not like '%Group Policy client-side extension Security failed to log RSOP%'
+			and not (message like '%rsop%' and message like '%hostingmodel%')
+
+			and message not like '%landesk%'
+			and message not like '%time service%'
+			and message not like '%local activation permission%'
+			and message not like '%profile cannot be loaded%'
+
+			and message not like '%http server is terminating%'
+			and message not like '%JIT Debugging%'
+			and message not like '%waiting for a transaction response%'
+			and message not like '%performance counter data collection%'
+			and message not like '%open procedure name%'
+			and message not like '%It has taken too long to refresh the W3SVC counters%'
+			and message not like '%the execute method of job definition%'
+
+			and isnull(message, '') <> ''
+
+	update #eventLog
+		set emailMessage = isnull(computerName, 'BAD COMPUTER NAME') + ' @ ' + convert(varchar(20), convert(dateTime, timeWritten), 120) + char(13) + char(13) + isnull(message, 'BAD MESSAGE'),
+			severity = case when
+				message like '%temperature%'
+				or message like '%thermal%'
+				or message like '%shutdown%'
+				or message like '%eaas%'
+				or message like '%degraded%'
+				or message like '%lost communication%'
+				or message like '%network adapter%'
+				or message like '%cluster node%'
+				or message like '%sensor%'
+				or message like '%drive array%'
+				or message like '%power supply%'
+				or message like '%connectivity has been lost%'
+				or message like '%network link is down%'
+				or message like '%The Event log service was stopped%'
+				or message like '%The Event log service was started%'
+				or ((sourceName like '%clussvc%' or sourceName like '%mssqlserver%') and type = 'Error')
+				then 1
+				else 2 end,
+			emailSubject = 'EventLog @ ' + left(right(convert(varchar(20), convert(dateTime, timeWritten), 120), 8), 5) + ' : ' + isnull(message, 'BAD MESSAGE')
+		where isInformational = 0
+
+	select computerName, logType, message, sourceName, count(*) as numAlerts, min(timeWritten) as minYMD, max(timeWritten) as maxYMD
+		into #repeatingAlerts
+		from eventLog (nolock)
+		where timeWritten >= dateAdd(minute, -60, getDate())
+		group by computerName, logType, message, sourceName
+		having count(*) >= 5
+
+	-- if it was repeating, but isn't any more, ignore it
+	delete #repeatingAlerts
+		from #repeatingAlerts a
+		left outer join #eventLog b on a.computerName = b.computerName
+			and a.logType = b.logType
+			and a.message = b.message
+			and a.sourcename = b.sourceName
+		where b.timeWritten is null
+
+	-- get rid of any single alerts that we know to be repeating
+	delete #eventLog
+		from #eventLog a
+		join #repeatingAlerts b on a.computerName = b.computerName
+			and a.logType = b.logType
+			and a.message = b.message
+			and a.sourcename = b.sourceName
+
 	insert into notificationLog_stage (message, severity, subject, serverName, isEventLog, ymd)
-	select distinct left(message, 2000) as message, severity, left(subject, 300) as subject,
-		computerName, 1, timeWritten
-		from (
-			select distinct
-				isnull(a.computerName, 'BAD COMPUTER NAME') + ' @ ' + convert(varchar(20), convert(dateTime, a.timeWritten), 120) + char(13) + char(13) +
-					isnull(a.message, 'BAD MESSAGE') as message,
-				case when
-					a.message like '%temperature%'
-					or a.message like '%thermal%'
-					or a.message like '%shutdown%'
-					or a.message like '%eaas%'
-					or a.message like '%degraded%'
-					or a.message like '%lost communication%'
-					or a.message like '%network adapter%'
-					or a.message like '%cluster node%'
-					or a.message like '%sensor%'
-					or a.message like '%drive array%'
-					or a.message like '%power supply%'
-					or a.message like '%connectivity has been lost%'
-					or a.message like '%network link is down%'
-					or a.message like '%The Event log service was stopped%'
-					or a.message like '%The Event log service was started%'
-					or ((sourceName like '%clussvc%' or sourceName like '%mssqlserver%') and type = 'Error')
-					then 1
-					else 2 end as severity,
-				'EventLog @ ' + left(right(convert(varchar(20), convert(dateTime, a.timeWritten), 120), 8), 5) + ' : ' + isnull(a.message, 'BAD MESSAGE') as subject,
-				convert(dateTime, a.timeWritten) as ymd,
-				isnull(a.computerName, 'BAD COMPUTER NAME') as computerName,
-				a.timeWritten
-				from #eventLog a (nolock)
-				where not (message like '%log shipping%' or message like '%tlog%')
-					and message not like '%log truncated%'
-					and message not like '%printer%'
-					and message not like '%backup%'
-					and message not like '%restore%'
-					and message not like '%dtc%'
-					and message not like '%lsa%'
-					and message not like '%rpc%'
-					and message not like '%sntp%'
-					and message not like '%windows installer service%'
-					and message not like '%error log has been reinitialized%'
-					and message not like '%microsoft corporation%'
-					and message not like '%cache has been temporarily disabled%'
-					and message not like '%cache has been reenabled%'
-					and message not like '%server process id is%'
-					and message not like '%loggin sql server messages%'
-					and message not like '%informational message only%'
-					and message not like '%this instance of sql server%'
-					and message not like '%new virus definition%'
-					and message not like '%all rights reserved%'
-					and message not like '%authentication mode is%'
-					and message not like '%attempting to cycle error log%'
-					and message not like '%uptime is%'
-					and message not like '%active directory%'
-					and message not like '%windowsupdate%'
-					and message not like '%terminal server%'
---					and message not like '%snmp%'
-					and message not like '%fax service%'
-					and message not like '%crypt32%'
-					and message not like '%winhttp%'
-					and message not like '%trace level%'
-					and message not like '%master browser%'
-					and message not like '%tracefile%'
-					and message not like '%incorrectly formatted request%'
-					and message not like '%ntpclient%'
-					and message not like '%sql server scheduled job%'
-					and message not like '%you may need to delete some files%'
-					and message not like '%spnregister%'
-					and message not like '%spooler%'
---					and message not like '%time service%'
-					and sourceName <> 'WinVNC4'
-					and message not like '%wmi adap%'
-					and message not like '%automatic certificate%'
-					and message not like '%invalid buffer%'
-					and message not like '%maintenance plan%'
-					and message not like '%automatic updates%'
-					and message not like '%Failed to set the user%'
-					and message not like '%The registry will be unloaded%'
-					and message not like '%classes registry file%'
-					and message not like '%Security policies were propagated with warning%'
-					and message not like '%Group Policy client-side extension Security failed to log RSOP%'
-					and not (message like '%rsop%' and message like '%hostingmodel%')
+	select distinct
+		left(emailMessage, 2000) as message,
+		severity,
+		left(emailSubject, 300) as subject,
+		computerName,
+		1,
+		timeWritten
+		from #eventLog
+		where isInformational = 0
 
-					and message not like '%landesk%'
-					and message not like '%time service%'
-					and message not like '%local activation permission%'
-					and message not like '%profile cannot be loaded%'
-
-					and message not like '%http server is terminating%'
-					and message not like '%JIT Debugging%'
-					and message not like '%waiting for a transaction response%'
-					and message not like '%performance counter data collection%'
-					and message not like '%open procedure name%'
-					and message not like '%It has taken too long to refresh the W3SVC counters%'
-					and message not like '%the execute method of job definition%'
-
-					and isnull(a.message, '') <> ''
-			) a
+	insert into notificationLog_stage (message, severity, subject, serverName, isEventLog, ymd)
+	select distinct
+		'Between ' + convert(varchar(20), minYMD, 120) + ' and ' + convert(varchar(20), maxYMD, 120) + ', the following alert has triggered ' + convert(varchar(20), numAlerts) + ' times.<br><br>' +
+			'Log: ' + isnull(logType, '') + '<br>' +
+			'Source: ' + isnull(sourceName, '') + '<br>' +
+			'Message: ' + isnull(message, '') as message,
+		2 as severity,
+		left('EventLog Repeating Alert: ' + isnull(message, ''), 300) as subject,
+		computerName,
+		1 as isEventLog,
+		maxYMD
+		from #repeatingAlerts
 
 	insert into eventLog_history (notes, ukey_group) values ('Alerts staged', @nUkeyGroup)
 
@@ -236,17 +298,8 @@ begin
 		join #eventLogFailures b on a.serverName = b.serverName
 			and b.disableChecks = 1
 
-	update dm_servers with (rowlock)
-		set lastEventLogCheck = getDate()
-		from dm_servers a
-		join (
-			select distinct computerName
-				from #eventLog
-			) b on a.serverName = b.computerName
-
 	insert into eventLog_history (notes, ukey_group) values ('Servers disabled', @nUkeyGroup)
 
 	drop table #eventLogFailures
 	drop table #eventLog
 end
-GO

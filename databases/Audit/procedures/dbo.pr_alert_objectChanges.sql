@@ -1,10 +1,9 @@
-/****** Object:  StoredProcedure [dbo].[pr_alert_objectChanges]    Script Date: 05/07/2009 10:30:18 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
 -- exec pr_alert_objectChanges '2008-09-15 00:00:00.000', '2008-09-16 10:00:00.000'
-CREATE procedure [dbo].[pr_alert_objectChanges] (@dStartDate dateTime = null, @dEndDate dateTime = null)
+ALTER procedure [dbo].[pr_alert_objectChanges] (@dStartDate dateTime = null, @dEndDate dateTime = null)
 as
 begin
 	set nocount on
@@ -12,7 +11,7 @@ begin
 --	declare @dStartDate dateTime
 --	declare @dEndDate dateTime
 
-	set @dStartdate = isnull(@dStartDate, dateAdd(hour, -28, getDate()))
+	set @dStartdate = isnull(@dStartDate, dateAdd(minute, -60, getDate()))
 	set @dEndDate = isnull(@dEndDate, getDate())
 
 	select distinct serverName, databaseName
@@ -403,4 +402,3 @@ begin
 	drop table #now
 	drop table #messages
 end
-GO

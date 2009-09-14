@@ -1,7 +1,8 @@
 -- exec pr_alert_replicationSynchronization 'mssql-ny', 'mssql_slv-ny', 'transactions_ap'
 -- exec pr_alert_replicationSynchronization 'mssql-ny', 'mssql_slv-ny', 'transactions_hk'
 
-ALTER procedure [dbo].[pr_alert_replicationSynchronization] (@cServerName_Publisher varchar(100), @cServerName_Subscriber varchar(100), @cDatabaseName varchar(100))
+ALTER procedure [dbo].[pr_alert_replicationSynchronization] (@cServerName_Publisher varchar(100), @cServerName_Subscriber varchar(100),
+	@cDatabaseName varchar(100), @cTableName varchar(100) = 'transactions', @cDateField varchar(100) = 'dateCreated')
 as
 begin
 
@@ -35,12 +36,12 @@ begin
 	begin
 		select *
 			from openQuery([' + @cServerName_Publisher + '], ''
-		select ''''publisher'''', convert(varchar(10), DateCreated, 120), count(*), max(dateCreated) as latestData
-			from [' + @cDatabaseName + '].dbo.transactions (nolock)
-			where DateCreated >= ''''' + convert(varchar(20), @dStartDate, 120) + '''''
-				and DateCreated < ''''' + convert(varchar(20), @dEndDate, 120) + '''''
-			group by convert(varchar(10), DateCreated, 120)
-			order by convert(varchar(10), DateCreated, 120)'')
+		select ''''publisher'''', convert(varchar(10), [' + @cDateField + '], 120), count(*), max([' + @cDateField + ']) as latestData
+			from [' + @cDatabaseName + '].dbo.[' + @cTableName + '] (nolock)
+			where [' + @cDateField + '] >= ''''' + convert(varchar(20), @dStartDate, 120) + '''''
+				and [' + @cDateField + '] < ''''' + convert(varchar(20), @dEndDate, 120) + '''''
+			group by convert(varchar(10), [' + @cDateField + '], 120)
+			order by convert(varchar(10), [' + @cDateField + '], 120)'')
 	end'
 
 	exec sp_executeSQL @cSQLString
@@ -60,12 +61,12 @@ begin
 	begin
 		select *
 			from openQuery([' + @cServerName_Subscriber + '], ''
-		select ''''subscriber'''', convert(varchar(10), DateCreated, 120), count(*), max(dateCreated) as latestData
-			from [' + @cDatabaseName + '].dbo.transactions (nolock)
-			where DateCreated >= ''''' + convert(varchar(20), @dStartDate, 120) + '''''
-				and DateCreated < ''''' + convert(varchar(20), @dEndDate, 120) + '''''
-			group by convert(varchar(10), DateCreated, 120)
-			order by convert(varchar(10), DateCreated, 120)'')
+		select ''''subscriber'''', convert(varchar(10), [' + @cDateField + '], 120), count(*), max([' + @cDateField + ']) as latestData
+			from [' + @cDatabaseName + '].dbo.[' + @cTableName + '] (nolock)
+			where [' + @cDateField + '] >= ''''' + convert(varchar(20), @dStartDate, 120) + '''''
+				and [' + @cDateField + '] < ''''' + convert(varchar(20), @dEndDate, 120) + '''''
+			group by convert(varchar(10), [' + @cDateField + '], 120)
+			order by convert(varchar(10), [' + @cDateField + '], 120)'')
 	end'
 
 	exec sp_executeSQL @cSQLString
@@ -87,19 +88,22 @@ begin
 	insert into notification..notificationLog_stage (serverName, subject, message, severity)
 	select @cServerName_Subscriber as serverName,
 		'Subscription [' + @cDatabaseName + '] is out of synch ' +
-			'as of ' + isnull(convert(varchar(10), b.latestData, 120), 'NO DATA') + ' ' +
-			'(' + convert(varchar(20), dateDiff(hour, b.latestData, getDate())) + 'hrs).'
+			'as of ' + isnull(right(convert(varchar(10), b.latestData, 120), 5), 'NO DATA') + ' ' +
+			'(' + convert(varchar(20), convert(decimal(10,2), convert(decimal(10,2), dateDiff(minute, b.latestData, getDate())) / 60.00)) + 'hrs).'
 			as subject,
-		'Publisher [' + @cServerName_Publisher + '].[' + @cDatabaseName + '] ' +
-			'shows ' + convert(varchar(20), a.numTransactions) + ' rows ' +
-			'as of ' + convert(varchar(20), a.latestData, 120) + ', ' +
-			'while the subscriber [' + @cServerName_Subscriber + '].[' + @cDatabaseName + '] ' +
-			'shows ' + isnull(convert(varchar(20), b.numTransactions), '0') + ' rows ' +
-			'as of ' + isnull(convert(varchar(20), b.latestData, 120), '(No Data)') + '. ',
+		'<b>Publisher [' + @cServerName_Publisher + '].[' + @cDatabaseName + ']</b> <br>' +
+			'  Rows: ' + convert(varchar(20), a.numTransactions) + '<br>' +
+			'  Data Timestamp: ' + convert(varchar(20), a.latestData, 120) + '<br><br>' +
+		'<b>Subscriber [' + @cServerName_Subscriber + '].[' + @cDatabaseName + ']</b><br> ' +
+			'  Rows: ' + isnull(convert(varchar(20), b.numTransactions), '0') + '<br>' +
+			'  Data Timestamp: ' + isnull(convert(varchar(20), b.latestData, 120), '(No Data)'),
 		1 as severity
 		from ( select ymd, numTransactions, latestData from #results where location = 'publisher' ) a
 		left outer join ( select ymd, numTransactions, latestData from #results where location = 'subscriber' ) b on a.ymd = b.ymd
 		where abs(isnull(a.numTransactions, 0) - isnull(b.numTransactions, 0)) >= 15
+			-- because of the ETL process, silence the alerts
+			and not datePart(hour, getDate()) in (14, 15, 20, 21)
+			and dateDiff(minute, b.latestData, getDate()) > 15
 		order by a.ymd
 
 	if exists (select [name] from mart.dbo.sysobjects where [name] = 'mart_replicationStatus')
@@ -108,7 +112,7 @@ begin
 		select
 			@cServerName_Publisher as serverName,
 			@cDatabaseName as databaseName,
-			'transactions' as tableName,
+			@cTableName as tableName,
 			numTransactions as numRows,
 			latestData as maxDate
 			from #results
@@ -118,7 +122,7 @@ begin
 		select
 			@cServerName_Subscriber as serverName,
 			@cDatabaseName as databaseName,
-			'transactions' as tableName,
+			@cTableName as tableName,
 			numTransactions as numRows,
 			latestData as maxDate
 			from #results

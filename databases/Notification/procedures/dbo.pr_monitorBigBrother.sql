@@ -748,6 +748,7 @@ begin
 			or jobName like '%monitor indexing%'
 			or jobName like '%monitor myself%'
 			or jobName like 'maintenance%'
+			or jobName like '%mart%'
 
 	-- jobs that we have a history for
 	insert into #results (message, severity, subject, isLongRunningJob)

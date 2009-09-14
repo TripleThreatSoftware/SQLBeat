@@ -1,5 +1,5 @@
 -- exec pr_monitorPerformanceLog '2009-08-20 00:09.000'
--- exec pr_monitorPerformanceLog '2009-08-17 11:45.000'
+-- exec pr_monitorPerformanceLog '2009-09-02 13:15.000'
 
 ALTER procedure [dbo].[pr_monitorPerformanceLog] (@dRightNow dateTime = null)
 as
@@ -10,8 +10,8 @@ begin
 	declare @cServerName varchar(200)
 	declare @dStartDate dateTime
 	declare @dEndDate dateTime
-	declare @cSubject varchar(max)
-	declare @cMessage varchar(max)
+	declare @cSubject varchar(500)
+	declare @cMessage varchar(8000)
 	declare @nUkeyServer int
 
 	if isnull(@dRightNow, '') = ''
@@ -41,8 +41,8 @@ begin
 				join #servers b on a.ukey_server = b.ukey_server
 				where a.runStamp >= dbo.fn_returnRunstamp(@dStartDate)
 					and a.runStamp <= dbo.fn_returnRunstamp(@dEndDate)
-					and a.ymd >= @dStartDate
-					and a.ymd <= @dEndDate
+--					and a.ymd >= @dStartDate
+--					and a.ymd <= @dEndDate
 			) a
 		order by a.ukey_server, a.runstamp
 
@@ -69,6 +69,16 @@ begin
 				having count(distinct runNumber) <> 10
 			) b on a.ukey_server = b.ukey_server
 
+	-- if we don't have 20 total data points for history, forget it
+	delete #runstamps
+		from #runstamps a
+		join (
+			select ukey_server
+				from #allRuns
+				group by ukey_server
+				having count(distinct runstamp) < 20
+			) b on a.ukey_server = b.ukey_server
+
 	set @cSQLString = 'select a.ukey_server, left(b.objectName, 200),left(c.counterName, 200), left(a.instanceName, 200), '
 
 	select @cSQLString = @cSQLString + char(13) +
@@ -88,13 +98,15 @@ begin
 		join dm_performanceObjects b (nolock) on a.ukey_object = b.ukey
 		join dm_performanceCounters c (nolock) on a.ukey_counter = c.ukey
 		join #runstamps d on a.ukey_server = d.ukey_server and a.runstamp = d.runstamp
-		where a.ymd >= ''' + convert(varchar(20), @dStartDate, 120) + '''
-			and a.ymd <= ''' + convert(varchar(20), @dEndDate, 120) + '''
-			and a.runStamp >= ''' + convert(varchar(50), dbo.fn_returnRunstamp(@dStartDate)) + '''
+		where a.runStamp >= ''' + convert(varchar(50), dbo.fn_returnRunstamp(@dStartDate)) + '''
 			and a.runStamp <= ''' + convert(varchar(50), dbo.fn_returnRunstamp(@dEndDate)) + '''
 			and counterName not in (''Cache Objects in use'', ''Transactions'', ''Log Cache Hit Ratio'', ''Log Cache Hit Ratio Base'', ''Cache Hit Ratio'', ''Cache Hit Ratio Base'', ''Page life expectancy'')
 			and objectName not in (''SQLServer:Buffer Partition'', ''SQLServer:Buffer Node'')
 		group by a.ukey_server, b.objectName, c.counterName, a.instanceName'
+
+--a.ymd >= ''' + convert(varchar(20), @dStartDate, 120) + '''
+--			and a.ymd <= ''' + convert(varchar(20), @dEndDate, 120) + '''
+--			and
 
 	create table #results (ukey int identity, ukey_server int, objectName varchar(200), counterName varchar(200), instanceName varchar(200),
 		time1 bigint, time2 bigint, time3 bigint, time4 bigint, time5 bigint, time6 bigint, time7 bigint, time8 bigint, time9 bigint, time10 bigint,
@@ -108,32 +120,6 @@ begin
 	delete from #results
 		where time10=time9 and time9=time8 and time8=time7 and time7=time6 and time6=time5 and time5=time4 and time4=time3 and time3=time2 and time2=time1
 
-	select
-		distinct
-		ukey_server, objectName, counterName
-		into #incrementing
-		from #results
-		where time10>=time9 and time9>=time8 and time8>=time7 and time7>=time6 and time6>=time5 and time5>=time4 and time4>=time3 and time3>=time2
-			and (time1+time2+time3+time4+time5+time6+time7+time8+time9+time10) <> 0
-			and (counterName like '%/sec' or counterName like '%(ms)')
-
-	update #results
-		set time10 = time10 - time9,
-			time9 = time9 - time8,
-			time8 = time8 - time7,
-			time7 = time7 - time6,
-			time6 = time6 - time5,
-			time5 = time5 - time4,
-			time4 = time4 - time3,
-			time3 = time3 - time2,
-			time2 = time2 - time1,
-			time1 = null
-		from #results a
-		join #incrementing b on a.ukey_server = b.ukey_server
-			and a.objectName = b.objectName
-			and a.counterName = b.counterName
-
-	drop table #incrementing
 
 	update #results
 		set delta9 = case when time8 = 0 then 0
@@ -195,31 +181,33 @@ begin
 
 	-- now, roll in the highlights from the last 24 hours
 	update #results
-		set historicalAverage = b.avgValue,
-			historicalMinValue = b.minValue,
-			historicalMaxValue = b.maxValue
+		set historicalAverage = d.avgValue,
+			historicalMinValue = d.minValue,
+			historicalMaxValue = d.maxValue
 		from #results a
+		join dm_performanceObjects b (nolock) on a.objectName = b.objectName
+			and b.objectName not in ('SQLServer:Buffer Partition', 'SQLServer:Buffer Node')
+		join dm_performanceCounters c (nolock) on a.counterName = c.counterName
+			and c.counterName not in ('Cache Objects in use', 'Transactions', 'Log Cache Hit Ratio', 'Log Cache Hit Ratio Base', 'Cache Hit Ratio', 'Cache Hit Ratio Base', 'Page life expectancy')
 		join (
-			select a.ukey_server, b.objectName, c.counterName, a.instanceName,
-				isnull(max(a.counterValue), 0) as maxValue,
-				isnull(min(a.counterValue), 0) as minValue,
-				isnull(avg(a.counterValue), 0) as avgValue
-				from performanceLog a (nolock)
-				join dm_performanceObjects b (nolock) on a.ukey_object = b.ukey
-				join dm_performanceCounters c (nolock) on a.ukey_counter = c.ukey
-				join #servers d on a.ukey_server = d.ukey_server
-				where a.ymd >= dateAdd(hour, -36, @dStartDate)
-					and a.ymd <= dateAdd(hour, -3, @dEndDate)
-					and a.runStamp >= dbo.fn_returnRunstamp(dateAdd(hour, -24, @dStartDate))
-					and a.runStamp <= dbo.fn_returnRunstamp(dateAdd(hour, -3, @dEndDate))
-					and counterName not in ('Cache Objects in use', 'Transactions', 'Log Cache Hit Ratio', 'Log Cache Hit Ratio Base', 'Cache Hit Ratio', 'Cache Hit Ratio Base', 'Page life expectancy')
-					and objectName not in ('SQLServer:Buffer Partition', 'SQLServer:Buffer Node')
-					and len(a.counterValue) <= 15
-				group by a.ukey_server, b.objectName, c.counterName, a.instanceName
-			) b on a.ukey_server = b.ukey_server
-				and a.objectName = b.objectName
-				and a.counterName = b.counterName
-				and a.instanceName = b.instanceName
+			select
+				a.ukey_server, a.ukey_counter, a.ukey_object, a.instanceName,
+				isnull(max(a.maxValue), 0) as maxValue,
+				isnull(min(a.minValue), 0) as minValue,
+				isnull(avg(a.avgValue), 0) as avgValue
+				from mart_performanceLog_byday a (nolock)
+				where ymd >= dateAdd(week, -2, convert(varchar(10), getDate(), 120))
+				group by a.ukey_server, a.ukey_counter, a.ukey_object, a.instanceName
+			) d on a.ukey_server = d.ukey_server
+				and b.ukey = d.ukey_object
+				and c.ukey = d.ukey_counter
+				and a.instanceName = d.instanceName
+
+
+
+--a.ymd >= dateAdd(hour, -36, @dStartDate)
+--					and a.ymd <= dateAdd(hour, -3, @dEndDate)
+--					and
 
 	-- for any increment-only counter, the historical numbers are hopeless
 	update #results
@@ -317,6 +305,14 @@ begin
 				)
 			and isAlert = 0
 
+	-- if it's climbing and not the highest, or dropping and not the lowest
+	delete from #results
+		where (
+				(delta10 <= 1 and not (time10 <= historicalMinValue))
+				or (delta10 >= 1 and not (time10 >= historicalMaxValue))
+				)
+			and isAlert = 0
+
 	-- if it's climbing, get rid of anything that isn't at least 90% of the highest value we've seen in the last 24 hours
 	delete from #results
 		where (delta9 > 1 and delta10 > 1)
@@ -360,10 +356,12 @@ begin
 				and b.numGood < 2
 		where isAlert = 0
 
-	print 'Deleted ' + convert(varchar(20), @@rowcount) + ' junk sets'
-
 	delete from #results where delta10 = 0 and isAlert = 0
 
+	delete from #results where counterName like '%transactions/sec%'
+
+	--******************************************************************************************************
+	--******************************************************************************************************
 	set @nUkeyServer = 0
 	while exists (select top 1 ukey_server from #servers where ukey_server > @nUkeyServer)
 	begin
@@ -378,8 +376,6 @@ begin
 		if (select count(*) from #results where ukey_server = @nUkeyServer) > 2
 			and (select count(*) from #results where ukey_server = @nUkeyServer and counterName not like '%/sec%') > 0
 		begin
-
-select * from #results where ukey_server = @nUkeyServer
 
 			set @cSubject = convert(varchar(20), (select count(*) from #results where ukey_server = @nUkeyServer)) + ' counters out of tolerance at ' + (select top 1 dbo.fn_runstampToString(runStamp) from #runstamps where ukey = 10) + '.'
 			set @cMessage = ''
@@ -401,7 +397,7 @@ select * from #results where ukey_server = @nUkeyServer
 				'<tr><td><b>' + 'Time09' + '</b></td><td align="right">' + dbo.fn_returnFormattedInt(time9) + '</td><td>' + case when averageValue = 0 then '100' else convert(varchar(20), convert(decimal(10,0), 100 * convert(decimal(20,4), time9) / averageValue)) end + '% of average' + '</td></tr>' +
 				'<tr><td><b>' + 'Time10' + '</b></td><td align="right">' + dbo.fn_returnFormattedInt(time10) + '</td><td>' + case when averageValue = 0 then '100' else convert(varchar(20), convert(decimal(10,0), 100 * convert(decimal(20,4), time10) / averageValue)) end + '% of average' + '</td></tr>' +
 				'</table><hr>'
-				, 7900)
+				, 7800)
 				from #results a
 				where ukey_server = @nUkeyServer
 
@@ -419,7 +415,7 @@ select * from #results where ukey_server = @nUkeyServer
 			print @cSubject
 			print @cMessage
 
---			insert into notificationLog_stage (serverName, subject, message, severity) values (@cServerName, @cSubject, @cMessage, 1)
+			insert into notificationLog_stage (serverName, subject, message, severity) values (@cServerName, @cSubject, @cMessage, 1)
 		end
 	end
 
@@ -428,8 +424,3 @@ select * from #results where ukey_server = @nUkeyServer
 	drop table #servers
 	drop table #allRuns
 end
-GO
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO

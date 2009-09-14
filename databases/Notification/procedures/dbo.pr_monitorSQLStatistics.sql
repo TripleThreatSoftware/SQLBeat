@@ -1,3 +1,7 @@
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 --drop table dm_performanceStatThresholds
 --go
 --create table dm_performanceStatThresholds (ukey int identity, ymd dateTime default getDate(),
@@ -35,7 +39,7 @@ begin
 		join dm_performanceCounters c (nolock) on a.ukey_counter = c.ukey
 		join dm_performanceObjects d (nolock) on a.ukey_object = d.ukey
 		join dm_servers e (nolock) on a.ukey_server = e.ukey
-
+			and e.statisticsCheck = 1
 		join #latestRun f on a.runStamp = f.runStamp
 			and a.ukey_server = f.ukey_server
 		where isnumeric(a.counterValue) = 1
@@ -64,7 +68,7 @@ begin
 				'<td>' + rtrim(ltrim(instanceName)) + '</td>' +
 				'<td align="right">' + convert(varchar(100), counterValue) + '</td>' +
 				'<td align="right">' + isnull(convert(varchar(100), minValue), 'N/A') + '</td>' +
-				'<td align="right">' + isnull(convert(varchar(100), maxValue), 'N/A') + '</td>' +
+				'<td align="right">' + isnull(convert(varchar(100), case when maxValue > 100 then convert(int, maxValue) else maxValue end), 'N/A') + '</td>' +
 			'</tr>'
 			from #results
 			where serverName = @cServerName
@@ -78,8 +82,3 @@ begin
 	drop table #latestRun
 	drop table #results
 end
-GO
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO

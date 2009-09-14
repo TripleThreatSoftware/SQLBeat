@@ -12,9 +12,9 @@
 -- reconfigure
 -- select * from dm_servers where serverName = 'sqlcluster01'
 -- select top 500 * from notificationLog_history (nolock) where runGUID = 'CFCB992F-12E5-47C9-95CD-C36B133A0640' order by ymd
--- select top 500 * from notificationLog_history (nolock) where ymd >= '2009-08-20 15:09:00.000' order by ymd
+-- select top 100 * from notificationLog_history (nolock) order by ymd desc
 -- select top 100 * from processLog (nolock) where serverName = 'sqlcluster01' and command <> 'awaiting command' order by ymd desc
--- exec pr_examineServer 'sql-primary', 600
+-- exec pr_examineServer 'devmssql02', 600
 -- exec pr_examineServer '10.3.10.197', 600
 ALTER procedure [dbo].[pr_examineServer] (@cServerName varchar(100), @nMinutesBackToLook int)
 as
@@ -280,26 +280,26 @@ begin
 		create procedure ' + @cProcedureName + '
 		as
 		begin
-
 			insert into performanceLog_stage (serverName, [objectName], [counterName], [instanceName], counterValue, counterType, runStamp)
-			select ''' + @cServerName + ''' as serverName,
-				[object_name], [counter_name], [instance_name], [cntr_value], [cntr_type],
+			select
+				''' + @cServerName + ''' as serverName,
+				a.object_name,
+				a.counter_name,
+				a.instance_name,
+				case
+					when b.counter_name is not null and b.cntr_value <> 0
+						then convert(decimal(30,4), 100 * convert(decimal(30,4), a.cntr_value) / convert(decimal(30,4), b.cntr_value))
+						else convert(decimal(30,4), a.cntr_value)
+						end as cntr_value,
+				a.cntr_type,
 				' + convert(varchar(20), @nRunStamp) + ' as runStamp
-				from [' + @cServerName + '].master.dbo.sysperfinfo
-				where object_name like ''%Buffer Manager%''
-					or object_name like ''%Buffer Partition%''
-					or object_name like ''%Buffer Node%''
-					or object_name like ''%Latches%''
-					or object_name like ''%Access Methods%''
-					or object_name like ''%SQL Errors%''
-					or object_name like ''%SQL Statistics%''
-					or object_name like ''%Plan Cache%''
-					or object_name like ''%Memory Manager%''
-					or object_name like ''%Transactions%''
-					or object_name like ''%Wait Statistics%''
-					or object_name like ''%Exec Statistics%''
-					or (object_name like ''%Databases%'' and counter_name in (''Transactions/sec'', ''Log Cache Hit Ratio'', ''Log Cache Hit Ratio Base''))
-
+				from [' + @cServerName + '].master.dbo.sysperfinfo a
+				left outer join [' + @cServerName + '].master.dbo.sysperfinfo b on a.object_name = b.object_name
+					and a.instance_name = b.instance_name
+					and b.cntr_type in (1073939458, 1107494144, 1073939712, 1073939459, 1073939457)
+					and replace(replace(b.counter_name, ''ratio'', ''''), ''base'', '''') like rtrim(ltrim(replace(replace(a.counter_name, ''ratio'', ''''), ''base'', ''''))) + ''%''
+					and a.cntr_type in (537003264, 549585920, 4260864, 805438464, 591463680, 575735040, 592512256)
+				where a.cntr_type not in (1073939458, 1107494144, 1073939712, 1073939459, 1073939457)
 		 end'
 
 	if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
@@ -412,19 +412,19 @@ begin
 		exec sp_executeSQL @cSQLString
 
 		insert into performanceLog_stage (serverName, [objectName], [counterName], [instanceName], counterValue, counterType, runStamp)
-		select @cServerName, 'Memory Clerks', rtrim(ltrim(clerkType)) + ':' + clerkName, 'Single Pages (kb)', singlePages, '', @nRunStamp from #clerks
+		select @cServerName, 'Memory Clerks:' + rtrim(ltrim(clerkType)), clerkName, 'Single Pages (kb)', singlePages, '', @nRunStamp from #clerks
 		union
-		select @cServerName, 'Memory Clerks', rtrim(ltrim(clerkType)) + ':' + clerkName, 'Multiple Pages (kb)', multiPages, '', @nRunStamp from #clerks
+		select @cServerName, 'Memory Clerks:' + rtrim(ltrim(clerkType)), clerkName, 'Multiple Pages (kb)', multiPages, '', @nRunStamp from #clerks
 		union
-		select @cServerName, 'Memory Clerks', rtrim(ltrim(clerkType)) + ':' + clerkName, 'Virtual Memory Reserved (kb)', virtualMemoryReserved, '', @nRunStamp from #clerks
+		select @cServerName, 'Memory Clerks:' + rtrim(ltrim(clerkType)), clerkName, 'Virtual Memory Reserved (kb)', virtualMemoryReserved, '', @nRunStamp from #clerks
 		union
-		select @cServerName, 'Memory Clerks', rtrim(ltrim(clerkType)) + ':' + clerkName, 'Virtual Memory Committed (kb)', virtualMemoryCommitted, '', @nRunStamp from #clerks
+		select @cServerName, 'Memory Clerks:' + rtrim(ltrim(clerkType)), clerkName, 'Virtual Memory Committed (kb)', virtualMemoryCommitted, '', @nRunStamp from #clerks
 		union
-		select @cServerName, 'Memory Clerks', rtrim(ltrim(clerkType)) + ':' + clerkName, 'AWE Allocated (kb)', aweAllocated, '', @nRunStamp from #clerks
+		select @cServerName, 'Memory Clerks:' + rtrim(ltrim(clerkType)), clerkName, 'AWE Allocated (kb)', aweAllocated, '', @nRunStamp from #clerks
 		union
-		select @cServerName, 'Memory Clerks', rtrim(ltrim(clerkType)) + ':' + clerkName, 'Shared Memory Reserved (kb)', sharedMemoryReserved, '', @nRunStamp from #clerks
+		select @cServerName, 'Memory Clerks:' + rtrim(ltrim(clerkType)), clerkName, 'Shared Memory Reserved (kb)', sharedMemoryReserved, '', @nRunStamp from #clerks
 		union
-		select @cServerName, 'Memory Clerks', rtrim(ltrim(clerkType)) + ':' + clerkName, 'Shared Memory Committed (kb)', sharedMemoryCommitted, '', @nRunStamp from #clerks
+		select @cServerName, 'Memory Clerks:' + rtrim(ltrim(clerkType)), clerkName, 'Shared Memory Committed (kb)', sharedMemoryCommitted, '', @nRunStamp from #clerks
 
 		drop table #clerks
 
@@ -939,6 +939,7 @@ begin
 				-- should be at least 90% of the longest runtime we've observed
 				and secondsRunning > maxRunningSeconds * 0.9
 				and expectedRunningSeconds > 0
+				and convert(int, (minutesRunning/10)) > 0
 
 		-- jobs that we do not have a history for
 		-- this should be a rare case, only for new jobs
@@ -961,6 +962,7 @@ begin
 			from #runningJobs a
 			where secondsRunning > 60*5
 				and expectedRunningSeconds = 0
+				and convert(int, (minutesRunning/10)) > 0
 
 		--********************************************************************************************************
 		--********************************************************************************************************
