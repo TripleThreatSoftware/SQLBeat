@@ -1,3 +1,8 @@
+/****** Object:  StoredProcedure [dbo].[pr_alert_replicationSynchronization]    Script Date: 09/21/2009 12:00:21 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 -- exec pr_alert_replicationSynchronization 'mssql-ny', 'mssql_slv-ny', 'transactions_ap'
 -- exec pr_alert_replicationSynchronization 'mssql-ny', 'mssql_slv-ny', 'transactions_hk'
 

@@ -83,6 +83,8 @@ begin
 			and message not like '%stale counters are being used%'
 			and message not like '%print spool%'
 			and message not like '%lsa%'
+			and message not like '%login succeeded%'
+			and message not like '%dbcc checkdb%found 0 errors%'
 			and message not like '%rpc%'
 			and message not like '%sntp%'
 			and message not like '%windows installer service%'
@@ -182,6 +184,15 @@ begin
 			and a.message = b.message
 			and a.sourcename = b.sourceName
 		where b.timeWritten is null
+
+	-- if it is repeating, but informational, ignore it
+	delete #repeatingAlerts
+		from #repeatingAlerts a
+		join #eventLog b on a.computerName = b.computerName
+			and a.logType = b.logType
+			and a.message = b.message
+			and a.sourcename = b.sourceName
+			and b.isInformational = 1
 
 	-- get rid of any single alerts that we know to be repeating
 	delete #eventLog

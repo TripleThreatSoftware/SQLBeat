@@ -1751,7 +1751,7 @@ begin
 				'and ' + convert(varchar(20), count(*)) + ' threads ' +
 				'blocked ' +
 				'at ' + convert(varchar(20), getDate(), 120) + '.' as message,
-			1 as severity,
+			2 as severity,
 			convert(varchar(20), count(distinct spid)) + ' Replication SPIDs ' +
 				'blocked.' as subject,
 			1 as isBlocking

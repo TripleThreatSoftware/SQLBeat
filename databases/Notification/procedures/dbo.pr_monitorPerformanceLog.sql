@@ -1,5 +1,11 @@
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
 -- exec pr_monitorPerformanceLog '2009-08-20 00:09.000'
--- exec pr_monitorPerformanceLog '2009-09-02 13:15.000'
+-- exec pr_monitorPerformanceLog '2009-09-21 13:22.000'
 
 ALTER procedure [dbo].[pr_monitorPerformanceLog] (@dRightNow dateTime = null)
 as
@@ -13,6 +19,9 @@ begin
 	declare @cSubject varchar(500)
 	declare @cMessage varchar(8000)
 	declare @nUkeyServer int
+	declare @nUkeyCounter int
+	declare @nPage int
+	declare @nNumPages int
 
 	if isnull(@dRightNow, '') = ''
 		set @dRightNow = getDate()
@@ -120,6 +129,8 @@ begin
 	delete from #results
 		where time10=time9 and time9=time8 and time8=time7 and time7=time6 and time6=time5 and time5=time4 and time4=time3 and time3=time2 and time2=time1
 
+	delete from #results
+		where counterName in ('Log File(s) Size (KB)', 'Log Truncations', 'Precent Log Used')
 
 	update #results
 		set delta9 = case when time8 = 0 then 0
@@ -203,7 +214,15 @@ begin
 				and c.ukey = d.ukey_counter
 				and a.instanceName = d.instanceName
 
-
+--select a.*
+--	from mart_performanceLog_byday a
+--	join dm_performanceObjects b (nolock) on a.ukey_object = b.ukey
+--		and b.objectName = 'Memory Clerks:USERSTORE_SCHEMAMGR'
+--	join dm_performanceCounters c (nolock) on a.ukey_counter = c.ukey
+--		and c.counterName = 'SchemaMgr Store'
+--	join dm_servers d on a.ukey_server = d.ukey
+--		and d.serverName = 'mssqla-ny'
+--	where a.ymd >= dateAdd(week, -2, convert(varchar(10), getDate(), 120))
 
 --a.ymd >= dateAdd(hour, -36, @dStartDate)
 --					and a.ymd <= dateAdd(hour, -3, @dEndDate)
@@ -347,13 +366,19 @@ begin
 		join (
 			select
 				ukey_server,
-				sum(case when rtrim(ltrim(objectName)) = 'SQLServer:Plan Cache' then 1 else 0 end) as numBad,
-				sum(case when rtrim(ltrim(objectName)) <> 'SQLServer:Plan Cache' then 1 else 0 end) as numGood
+				sum(case
+					when rtrim(ltrim(objectName)) in ('SQLServer:Plan Cache', 'SQLServer:Catalog Metadata')
+						or (rtrim(ltrim(counterName)) in ('Memory Pages Allocated') and time10 < 20)
+						or (rtrim(ltrim(counterName)) in ('Cursor Memory Usage') and delta10 < 1)
+						or rtrim(ltrim(counterName)) in ('Cache Entries Count')
+						then 1
+						else 0 end) as numBad,
+				count(*) as numTotal
 				from #results
 				group by ukey_server
 			) b on a.ukey_server = b.ukey_server
 				and b.numBad > 0
-				and b.numGood < 2
+				and (b.numTotal - b.numBad) < 2
 		where isAlert = 0
 
 	delete from #results where delta10 = 0 and isAlert = 0
@@ -362,6 +387,15 @@ begin
 
 	--******************************************************************************************************
 	--******************************************************************************************************
+	create table #serverResults (ukey int identity, objectName varchar(200), counterName varchar(200), instanceName varchar(200),
+		time1 bigint, time2 bigint, time3 bigint, time4 bigint, time5 bigint, time6 bigint, time7 bigint, time8 bigint, time9 bigint, time10 bigint,
+		delta9 decimal(30,4), delta10 decimal(30,4),
+		averageValue decimal(30,4), minValue decimal(30,4), maxValue decimal(30,4),
+		historicalAverage decimal(30,4), historicalMinValue decimal(30,4), historicalMaxValue decimal(30,4), isAlert bit default 0)
+
+	set @nPage = 1
+	set @nNumPages = 1
+	set @nUkeyCounter = 0
 	set @nUkeyServer = 0
 	while exists (select top 1 ukey_server from #servers where ukey_server > @nUkeyServer)
 	begin
@@ -376,46 +410,73 @@ begin
 		if (select count(*) from #results where ukey_server = @nUkeyServer) > 2
 			and (select count(*) from #results where ukey_server = @nUkeyServer and counterName not like '%/sec%') > 0
 		begin
+			print 'Generating results for ' + @cServerName
 
-			set @cSubject = convert(varchar(20), (select count(*) from #results where ukey_server = @nUkeyServer)) + ' counters out of tolerance at ' + (select top 1 dbo.fn_runstampToString(runStamp) from #runstamps where ukey = 10) + '.'
-			set @cMessage = ''
+			truncate table #serverResults
 
-			select @cMessage = left(@cMessage +
-				'<table cellspacing="0" cellpadding="3" style="font-family:Verdana; font-size: x-small;">' +
-				'<tr><th colspan="3" align="left" style="border: 0px; border-bottom:1px; border-style:solid; border-color:black;">' + rtrim(ltrim(isnull(objectName, ''))) + ' / ' + rtrim(ltrim(isnull(counterName, ''))) + case when isnull(instanceName, '') <> '' then ' / ' + rtrim(ltrim(isnull(instanceName, ''))) else '' end + '</th></tr>' +
-				'<tr><td width="120px"><b>36 hour Average</b></td><td align="right" width="120px">' + dbo.fn_returnFormattedInt(historicalAverage) + '</td><td></td></tr>' +
-				'<tr><td><b>36 hour Min</b></td><td align="right">' + dbo.fn_returnFormattedInt(historicalMinValue) + '</td><td></td></tr>' +
-				'<tr><td><b>36 hour Max</b></td><td align="right">' + dbo.fn_returnFormattedInt(historicalMaxValue) + '</td><td></td></tr>' +
-				'<tr><td><b>' + 'Time01' + '</b></td><td align="right">' + dbo.fn_returnFormattedInt(time1) + '</td><td></td></tr>' +
-				'<tr><td><b>' + 'Time02' + '</b></td><td align="right">' + dbo.fn_returnFormattedInt(time2) + '</td><td></td></tr>' +
-				'<tr><td><b>' + 'Time03' + '</b></td><td align="right">' + dbo.fn_returnFormattedInt(time3) + '</td><td></td></tr>' +
-				'<tr><td><b>' + 'Time04' + '</b></td><td align="right">' + dbo.fn_returnFormattedInt(time4) + '</td><td></td></tr>' +
-				'<tr><td><b>' + 'Time05' + '</b></td><td align="right">' + dbo.fn_returnFormattedInt(time5) + '</td><td></td></tr>' +
-				'<tr><td><b>' + 'Time06' + '</b></td><td align="right">' + dbo.fn_returnFormattedInt(time6) + '</td><td></td></tr>' +
-				'<tr><td><b>' + 'Time07' + '</b></td><td align="right">' + dbo.fn_returnFormattedInt(time7) + '</td><td></td></tr>' +
-				'<tr><td><b>' + 'Time08' + '</b></td><td align="right">' + dbo.fn_returnFormattedInt(time8) + '</td><td></td></tr>' +
-				'<tr><td><b>' + 'Time09' + '</b></td><td align="right">' + dbo.fn_returnFormattedInt(time9) + '</td><td>' + case when averageValue = 0 then '100' else convert(varchar(20), convert(decimal(10,0), 100 * convert(decimal(20,4), time9) / averageValue)) end + '% of average' + '</td></tr>' +
-				'<tr><td><b>' + 'Time10' + '</b></td><td align="right">' + dbo.fn_returnFormattedInt(time10) + '</td><td>' + case when averageValue = 0 then '100' else convert(varchar(20), convert(decimal(10,0), 100 * convert(decimal(20,4), time10) / averageValue)) end + '% of average' + '</td></tr>' +
-				'</table><hr>'
-				, 7800)
-				from #results a
+			insert into #serverResults (objectName, counterName, instanceName, time1, time2, time3, time4, time5, time6, time7, time8, time9,
+				time10, delta9, delta10, averageValue, minValue, maxValue, historicalAverage, historicalMinValue, historicalMaxValue)
+			select objectName, counterName, instanceName, time1, time2, time3, time4, time5, time6, time7, time8, time9,
+				time10, delta9, delta10, averageValue, minValue, maxValue, historicalAverage, historicalMinValue, historicalMaxValue
+				from #results
 				where ukey_server = @nUkeyServer
+				order by objectName, counterName, instanceName
 
-			set @cMessage = replace(@cMessage, 'Time01', (select top 1 right(dbo.fn_runstampToString(runStamp), 11) from #runstamps where ukey = 1))
-			set @cMessage = replace(@cMessage, 'Time02', (select top 1 right(dbo.fn_runstampToString(runStamp), 11) from #runstamps where ukey = 2))
-			set @cMessage = replace(@cMessage, 'Time03', (select top 1 right(dbo.fn_runstampToString(runStamp), 11) from #runstamps where ukey = 3))
-			set @cMessage = replace(@cMessage, 'Time04', (select top 1 right(dbo.fn_runstampToString(runStamp), 11) from #runstamps where ukey = 4))
-			set @cMessage = replace(@cMessage, 'Time05', (select top 1 right(dbo.fn_runstampToString(runStamp), 11) from #runstamps where ukey = 5))
-			set @cMessage = replace(@cMessage, 'Time06', (select top 1 right(dbo.fn_runstampToString(runStamp), 11) from #runstamps where ukey = 6))
-			set @cMessage = replace(@cMessage, 'Time07', (select top 1 right(dbo.fn_runstampToString(runStamp), 11) from #runstamps where ukey = 7))
-			set @cMessage = replace(@cMessage, 'Time08', (select top 1 right(dbo.fn_runstampToString(runStamp), 11) from #runstamps where ukey = 8))
-			set @cMessage = replace(@cMessage, 'Time09', (select top 1 right(dbo.fn_runstampToString(runStamp), 11) from #runstamps where ukey = 9))
-			set @cMessage = replace(@cMessage, 'Time10', (select top 1 right(dbo.fn_runstampToString(runStamp), 11) from #runstamps where ukey = 10))
+			set @nNumPages = ceiling(convert(decimal(10,2), @@rowcount) / 3.00)
+			set @nPage = 1
+			set @nUkeyCounter = 0
 
-			print @cSubject
-			print @cMessage
+			while exists (select top 1 ukey from #serverResults where ukey > @nUkeyCounter)
+			begin
+				set @cSubject = convert(varchar(20), (select count(*) from #results where ukey_server = @nUkeyServer)) + ' counters out of tolerance ' +
+					'at ' + (select top 1 dbo.fn_runstampToString(runStamp) from #runstamps where ukey = 10) +
+					case when @nNumPages > 1 then ' (' + convert(varchar(20), @nPage) + '/' + convert(varchar(20), @nNumPages) + ')' else '' end +
+					'.'
+				set @cMessage = ''
 
-			insert into notificationLog_stage (serverName, subject, message, severity) values (@cServerName, @cSubject, @cMessage, 1)
+				select
+					@cMessage = left(@cMessage +
+					'<table cellspacing="0" cellpadding="3" style="font-family:Verdana; font-size: x-small;">' +
+					'<tr><th colspan="3" align="left" style="border: 0px; border-bottom:1px; border-style:solid; border-color:black;">' + rtrim(ltrim(isnull(objectName, ''))) + ' / ' + rtrim(ltrim(isnull(counterName, ''))) + case when isnull(instanceName, '') <> '' then ' / ' + rtrim(ltrim(isnull(instanceName, ''))) else '' end + '</th></tr>' +
+					'<tr><td width="120px"><b>36 hour Average</b></td><td align="right" width="120px">' + dbo.fn_returnFormattedInt(historicalAverage) + '</td><td></td></tr>' +
+					'<tr><td><b>36 hour Min</b></td><td align="right">' + dbo.fn_returnFormattedInt(historicalMinValue) + '</td><td></td></tr>' +
+					'<tr><td><b>36 hour Max</b></td><td align="right">' + dbo.fn_returnFormattedInt(historicalMaxValue) + '</td><td></td></tr>' +
+					'<tr><td><b>' + 'Time01' + '</b></td><td align="right">' + dbo.fn_returnFormattedInt(time1) + '</td><td></td></tr>' +
+					'<tr><td><b>' + 'Time02' + '</b></td><td align="right">' + dbo.fn_returnFormattedInt(time2) + '</td><td></td></tr>' +
+					'<tr><td><b>' + 'Time03' + '</b></td><td align="right">' + dbo.fn_returnFormattedInt(time3) + '</td><td></td></tr>' +
+					'<tr><td><b>' + 'Time04' + '</b></td><td align="right">' + dbo.fn_returnFormattedInt(time4) + '</td><td></td></tr>' +
+					'<tr><td><b>' + 'Time05' + '</b></td><td align="right">' + dbo.fn_returnFormattedInt(time5) + '</td><td></td></tr>' +
+					'<tr><td><b>' + 'Time06' + '</b></td><td align="right">' + dbo.fn_returnFormattedInt(time6) + '</td><td></td></tr>' +
+					'<tr><td><b>' + 'Time07' + '</b></td><td align="right">' + dbo.fn_returnFormattedInt(time7) + '</td><td></td></tr>' +
+					'<tr><td><b>' + 'Time08' + '</b></td><td align="right">' + dbo.fn_returnFormattedInt(time8) + '</td><td></td></tr>' +
+					'<tr><td><b>' + 'Time09' + '</b></td><td align="right">' + dbo.fn_returnFormattedInt(time9) + '</td><td>' + case when averageValue = 0 then '100' else convert(varchar(20), convert(decimal(10,0), 100 * convert(decimal(20,4), time9) / averageValue)) end + '% of average' + '</td></tr>' +
+					'<tr><td><b>' + 'Time10' + '</b></td><td align="right">' + dbo.fn_returnFormattedInt(time10) + '</td><td>' + case when averageValue = 0 then '100' else convert(varchar(20), convert(decimal(10,0), 100 * convert(decimal(20,4), time10) / averageValue)) end + '% of average' + '</td></tr>' +
+					'</table><hr>'
+					, 7800)
+					from #serverResults a
+					where ukey > @nUkeyCounter
+						and ukey <= @nUkeyCounter + 3
+					order by ukey
+
+				set @cMessage = replace(@cMessage, 'Time01', (select top 1 right(dbo.fn_runstampToString(runStamp), 11) from #runstamps where ukey = 1))
+				set @cMessage = replace(@cMessage, 'Time02', (select top 1 right(dbo.fn_runstampToString(runStamp), 11) from #runstamps where ukey = 2))
+				set @cMessage = replace(@cMessage, 'Time03', (select top 1 right(dbo.fn_runstampToString(runStamp), 11) from #runstamps where ukey = 3))
+				set @cMessage = replace(@cMessage, 'Time04', (select top 1 right(dbo.fn_runstampToString(runStamp), 11) from #runstamps where ukey = 4))
+				set @cMessage = replace(@cMessage, 'Time05', (select top 1 right(dbo.fn_runstampToString(runStamp), 11) from #runstamps where ukey = 5))
+				set @cMessage = replace(@cMessage, 'Time06', (select top 1 right(dbo.fn_runstampToString(runStamp), 11) from #runstamps where ukey = 6))
+				set @cMessage = replace(@cMessage, 'Time07', (select top 1 right(dbo.fn_runstampToString(runStamp), 11) from #runstamps where ukey = 7))
+				set @cMessage = replace(@cMessage, 'Time08', (select top 1 right(dbo.fn_runstampToString(runStamp), 11) from #runstamps where ukey = 8))
+				set @cMessage = replace(@cMessage, 'Time09', (select top 1 right(dbo.fn_runstampToString(runStamp), 11) from #runstamps where ukey = 9))
+				set @cMessage = replace(@cMessage, 'Time10', (select top 1 right(dbo.fn_runstampToString(runStamp), 11) from #runstamps where ukey = 10))
+
+				print @cSubject
+				print @cMessage
+
+				insert into notificationLog_stage (serverName, subject, message, severity) values (@cServerName, @cSubject, @cMessage, 2)
+
+				set @nPage = @nPage + 1
+				set @nUkeyCounter = @nUkeyCounter + 3
+			end
 		end
 	end
 
