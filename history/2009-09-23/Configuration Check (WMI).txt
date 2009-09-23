@@ -1,0 +1,475 @@
+Function Main()
+	dim nNumEvents
+	dim nInstance
+	dim cErrorString
+	Dim cSQLString
+	Dim nNumErrors
+	Dim oContext
+	Dim bSkipNext
+	Dim cLastCounter
+
+	Const wbemFlagReturnImmediately = &h10
+	Const wbemFlagForwardOnly = &h20
+	Const wbemConnectFlagUseMaxWait = 128
+
+	On error resume next
+
+	Set oConnection = CreateObject("ADODB.Connection")
+
+	Set rsEventLogHistory = CreateObject("ADODB.Recordset")
+	Set rsServerList = CreateObject("ADODB.Recordset")
+	Set rsCounterList = CreateObject("ADODB.Recordset")
+	Set rsStage = CreateObject("ADODB.Recordset")
+
+	oConnection.commandtimeout = 10
+	'oConnection.Open = "Provider=SQLNCLI;Data Source=(local);Initial Catalog=Configuration;user id='sqlnotification';password='REDACTED'"
+	oConnection.Open = "Provider=SQLNCLI;Server=LOCAL;Database=Configuration;Uid=sqlnotification;Pwd=REDACTED;pooling=true"
+
+	rsEventLogHistory.CursorLocation = 3
+	rsEventLogHistory.Open "select top 0 * from runs_log", oConnection, 3, 3
+
+	' open a static read only cursor
+	rsServerList.Open _
+		"Select top 20 " + _
+			"a.serverName, a.wmiUserName, a.wmiPassword, a.architecture, " + _
+			"a.ukey as ukey_server, b.ukey as ukey_serverCounter, c.ukey as ukey_counter, " + _
+			"c.counterName, c.objectName " + _
+			"from notification.dbo.dm_servers a " + _
+			"join configuration.dbo.dm_serverCounters b on a.ukey = b.ukey_server " + _
+				"and b.isEnabled = 1" + _
+			"join configuration.dbo.dm_counters c on b.ukey_counter = c.ukey " + _
+				"and c.isEnabled = 1" + _
+			"where a.isEnabled = 1 " + _
+				"and a.configurationCheck = 1 " + _
+				"and a.isServerPingable = 1 " + _
+				"and a.ukey_group = " + CStr(DTSGlobalVariables("ukey_group").value) + " " + _
+				"and (a.configurationCheckSleepUntil is null or getDate() > configurationCheckSleepUntil) " + _
+				"and dateDiff(minute, isnull(b.lastCheck, '1900-01-01'), getDate()) > isnull(b.checkMinuteInterval, isnull(c.checkMinuteInterval, 60))" + _
+			"order by ((dateDiff(minute, isnull(b.lastCheck, '1900-01-01'), getDate()) - isnull(b.checkMinuteInterval, isnull(c.checkMinuteInterval, 60)))/10) * 10 desc, a.serverName", _
+		oConnection, 3, 1
+
+	if err.number <> 0 then
+		rsEventLogHistory.AddNew
+		rsEventLogHistory("message") = "Error : " + err.description & ". " & err.source
+		rsEventLogHistory("ukey_group") = DTSGlobalVariables("ukey_group").value
+		rsEventLogHistory.Update
+		err.clear
+	end if
+
+	rsStage.CursorLocation = 3
+	rsStage.Open "select top 0 * from runs_stage", oConnection, 3, 3
+
+	nNumEvents = rsServerList.RecordCount
+
+	if isnull(nNumEvents) = true then
+		nNumEvents = 0
+	end If
+
+	' Now, let's get started
+	rsEventLogHistory.AddNew
+	rsEventLogHistory("message") = "----- Monitoring Started, processing " & CStr(nNumEvents) & " objects ----"
+	rsEventLogHistory("ukey_group") = DTSGlobalVariables("ukey_group").value
+	rsEventLogHistory.Update
+
+	cObjectName = ""
+	cServerName = ""
+	cCounterName = ""
+	nNumErrors = 0
+	bSkipNext = 0
+
+	Do While (not rsServerList.EOF)
+		err.clear
+
+		cLastObject = cObjectName
+		cLastServer = cServerName
+		cLastCounter = cCounterName
+		bSkipNext = 0
+
+		cServerName = rsServerList("serverName")
+		cObjectName = rsServerList("objectname")
+		cCounterName = rsServerList("counterName")
+		nUkeyServer = rsServerList("ukey_server")
+		nUkeyCounter = rsServerList("ukey_counter")
+
+		rsEventLogHistory.AddNew
+		rsEventLogHistory("serverName") = cServerName
+		rsEventLogHistory("message") = "Processing counter : " & cCounterName
+		rsEventLogHistory("ukey_group") = DTSGlobalVariables("ukey_group").value
+		rsEventLogHistory.Update
+		err.clear
+
+		if err.number <> 0 then
+			cErrorString = err.description & ". " & err.source & ". "
+			if isnull(cErrorString) = true then
+				cErrorString = ""
+			end If
+
+			If IsNull(cObjectName & "." & cCounterName) = false Then
+				cErrorString = cErrorString & cObjectName & "." & cCounterName
+			End If
+
+			rsEventLogHistory.AddNew
+			rsEventLogHistory("serverName") = cServerName
+			rsEventLogHistory("message") = "Error getting counter name (" + CStr(nNumErrors) + ") : " & cErrorString
+			rsEventLogHistory("ukey_group") = DTSGlobalVariables("ukey_group").value
+			rsEventLogHistory.Update
+			err.clear
+
+			nNumErrors = nNumErrors + 1
+		End If
+
+		If cServerName = "" Then
+			rsEventLogHistory.AddNew
+			rsEventLogHistory("serverName") = cServerName
+			rsEventLogHistory("message") = "Empty server name found (" + CStr(nNumErrors) + ") : " & cErrorString
+			rsEventLogHistory("ukey_group") = DTSGlobalVariables("ukey_group").value
+			rsEventLogHistory.Update
+
+			nNumErrors = nNumErrors + 1
+			exit do
+		End If
+
+		If cLastServer <> cServerName and cLastServer <> "" Then
+			cSQLString = "update notification.dbo.dm_servers set lastConfigurationCheck = getDate() where ukey = " & CStr(nUkeyServer)
+			rsCounterList.Open cSQLString, oConnection, 1, 1
+		End If
+
+		If err.number <> 0 then
+			cErrorString = err.description & ". " & err.source
+			if isnull(cErrorString) = true then
+				cErrorString = ""
+			end if
+
+			rsEventLogHistory.AddNew
+			rsEventLogHistory("serverName") = cServerName
+			rsEventLogHistory("message") = "Error updating dm_servers (" + CStr(nNumErrors) + ") : " & cErrorString
+			rsEventLogHistory("ukey_group") = DTSGlobalVariables("ukey_group").value
+			rsEventLogHistory.Update
+			err.clear
+
+			nNumErrors = nNumErrors + 1
+		End If
+
+		if cObjectName <> cLastObject or isObject(oWMI) = False or cLastServer <> cServerName then
+			cWMIUserName = rsServerList("wmiUserName")
+			cWMIPassword = rsServerList("wmiPassword")
+			nArchitecture = rsServerList("architecture")
+
+			If cLastServer <> "" Then
+				rsEventLogHistory.AddNew
+				rsEventLogHistory("serverName") = cLastServer
+				rsEventLogHistory("message") = "END"
+				rsEventLogHistory("ukey_group") = DTSGlobalVariables("ukey_group").value
+				rsEventLogHistory.Update
+			End If
+
+			rsEventLogHistory.AddNew
+			rsEventLogHistory("serverName") = cServerName
+			rsEventLogHistory("message") = "BEGIN"
+			rsEventLogHistory("ukey_group") = DTSGlobalVariables("ukey_group").value
+			rsEventLogHistory.Update
+
+			Set oContext = nothing
+			Set objSWbemLocator = nothing
+			Set oWMI = nothing
+
+			err.clear
+			Set oContext = CreateObject("WbemScripting.SWbemNamedValueSet")
+			oContext.Add "__ProviderArchitecture", nArchitecture
+			oContext.Add "__RequiredArchitecture", TRUE
+
+			Set objSWbemLocator = CreateObject("WbemScripting.SWbemLocator")
+			Set oWMI = objSWbemLocator.ConnectServer(cServerName, "/root/cimv2", cWMIUserName, cWMIPassword,,, wbemConnectFlagUseMaxWait, oContext)
+			If isObject(oWMI) = True then
+				oWMI.Security_.ImpersonationLevel = 3
+			end If
+
+			If isObject(oWMI) = False or err.number <> 0 Then
+				cErrorString = err.description & ". " & err.source
+				if isnull(cErrorString) = true then
+					cErrorString = ""
+				end if
+
+				rsEventLogHistory.AddNew
+				rsEventLogHistory("serverName") = cServerName
+				rsEventLogHistory("message") = "Error #" + CStr(err.number) + " (" + CStr(nNumErrors) + ") connecting to WMI: " & cErrorString & err.source
+				rsEventLogHistory("ukey_group") = DTSGlobalVariables("ukey_group").value
+				rsEventLogHistory.Update
+				err.clear
+
+				nNumErrors = nNumErrors + 1
+
+				bSkipNext = 1
+			End If
+		End If
+
+		rsEventLogHistory.AddNew
+		rsEventLogHistory("serverName") = cServerName
+		rsEventLogHistory("message") = "This Object: " & cObjectName
+		rsEventLogHistory("ukey_group") = DTSGlobalVariables("ukey_group").value
+		rsEventLogHistory.Update
+		err.clear
+
+		rsEventLogHistory.AddNew
+		rsEventLogHistory("serverName") = cServerName
+		rsEventLogHistory("message") = "This counter:" & cCounterName
+		rsEventLogHistory("ukey_group") = DTSGlobalVariables("ukey_group").value
+		rsEventLogHistory.Update
+		err.clear
+
+
+		rsEventLogHistory.AddNew
+		rsEventLogHistory("serverName") = cServerName
+		rsEventLogHistory("message") = "Last server:" & cLastServer
+		rsEventLogHistory("ukey_group") = DTSGlobalVariables("ukey_group").value
+		rsEventLogHistory.Update
+		err.clear
+
+		rsEventLogHistory.AddNew
+		rsEventLogHistory("serverName") = cServerName
+		rsEventLogHistory("message") = "Last object:" & cLastObject
+		rsEventLogHistory("ukey_group") = DTSGlobalVariables("ukey_group").value
+		rsEventLogHistory.Update
+		err.clear
+
+		rsEventLogHistory.AddNew
+		rsEventLogHistory("serverName") = cServerName
+		rsEventLogHistory("message") = "Last counter:" & cLastCounter
+		rsEventLogHistory("ukey_group") = DTSGlobalVariables("ukey_group").value
+		rsEventLogHistory.Update
+		err.clear
+
+		if bSkipNext <> 1 and not (cObjectName = cLastObject and cLastServer = cServerName and cCounterName = cLastCounter) then
+
+			if isObject(oWMI) = False or err.number <> 0 then
+				cErrorString = err.description & ". " & err.source
+				if isnull(cErrorString) = true then
+					cErrorString = ""
+				end if
+
+				rsEventLogHistory.AddNew
+				rsEventLogHistory("serverName") = cServerName
+				rsEventLogHistory("message") = "Error getting next counter (" + CStr(nNumErrors) + ") : " & cErrorString
+				rsEventLogHistory("ukey_group") = DTSGlobalVariables("ukey_group").value
+				rsEventLogHistory.Update
+				err.clear
+
+				nNumErrors = nNumErrors + 1
+			else
+				'**********************************************************************************************************
+				'**********************************************************************************************************
+				' loop through the known performance counter objects
+				'**********************************************************************************************************
+				'**********************************************************************************************************
+
+				cSQLString = "select * from " & cCounterName
+
+				rsEventLogHistory.AddNew
+				rsEventLogHistory("serverName") = cServerName
+				rsEventLogHistory("message") = "Processing " & cCounterName & ", " & cSQLString
+				rsEventLogHistory("ukey_group") = DTSGlobalVariables("ukey_group").value
+				rsEventLogHistory.Update
+
+				err.clear
+
+				set rsResults = oWMI.ExecQuery(cSQLString)
+
+				if err.number <> 0 or isObject(rsResults) = False then
+					cErrorString = err.description & ". " & err.source
+					if isnull(cErrorString) = true then
+						cErrorString = ""
+					end if
+
+					rsEventLogHistory.AddNew
+					rsEventLogHistory("serverName") = cServerName
+					rsEventLogHistory("message") = "Error retrieving counter values: " & cErrorString
+					rsEventLogHistory("ukey_group") = DTSGlobalVariables("ukey_group").value
+					rsEventLogHistory.Update
+
+					cSQLString = "update dm_serverCounters with (rowlock) set isEnabled = 0, lastCheck = getDate() where ukey_server = " & CStr(nUkeyServer) & " and ukey_counter = " & CStr(nUkeyCounter)
+					rsCounterList.Open cSQLString, oConnection, 1, 1
+
+					err.clear
+					nNumErrors = nNumErrors + 1
+
+				else
+					nNumEvents = rsResults.Count
+
+					if isnull(nNumEvents) = true then
+						nNumEvents = 0
+					end If
+
+					if err.number <> 0 then
+						cErrorString = err.description & ". " & err.source
+						if isnull(cErrorString) = true then
+							cErrorString = ""
+						end if
+
+						rsEventLogHistory.AddNew
+						rsEventLogHistory("serverName") = cServerName
+						rsEventLogHistory("message") = "ERROR: WMI query (" & TypeName(rsResults) & ") does not have a COUNT property : " & cErrorString
+						rsEventLogHistory("ukey_group") = DTSGlobalVariables("ukey_group").value
+						rsEventLogHistory.Update
+						err.clear
+
+						'cSQLString = "update dm_serverCounters with (rowlock) set isEnabled = 0, lastCheck = getDate() where ukey_server = " & CStr(nUkeyServer) & " and ukey_counter = " & CStr(nUkeyCounter)
+						'rsCounterList.Open cSQLString, oConnection, 1, 1
+
+						' nNumErrors = nNumErrors + 1  ' this one doesn't really count
+					End if
+
+					rsEventLogHistory.AddNew
+					rsEventLogHistory("serverName") = cServerName
+					rsEventLogHistory("message") = "Found " + cstr(nNumEvents) + " events."
+					rsEventLogHistory("ukey_group") = DTSGlobalVariables("ukey_group").value
+					rsEventLogHistory.Update
+					err.clear
+
+					cSQLString = "update dm_serverCounters with (rowlock) set lastCheck = getDate() where ukey_server = " & CStr(nUkeyServer) & " and ukey_counter = " & CStr(nUkeyCounter)
+					rsCounterList.Open cSQLString, oConnection, 1, 1
+
+					nInstance = 1
+
+					For Each oEvent in rsResults
+						err.clear
+						if isObject(oEvent.Properties_) Then
+								nNumEvents = 0
+								nNumEvents = oEvent.Properties_.Count
+								if isnull(nNumEvents) = true then
+									nNumEvents = 0
+								end If
+
+								if err.number <> 0 then
+									cErrorString = err.description & ". " & err.source
+									if isnull(cErrorString) = true then
+										cErrorString = ""
+									end if
+
+									rsEventLogHistory.AddNew
+									rsEventLogHistory("serverName") = cServerName
+									rsEventLogHistory("message") = "ERROR: Object does not have a COUNT property : " & cErrorString
+									rsEventLogHistory("ukey_group") = DTSGlobalVariables("ukey_group").value
+									rsEventLogHistory.Update
+									err.clear
+								End If
+
+								rsEventLogHistory.AddNew
+								rsEventLogHistory("serverName") = cServerName
+								rsEventLogHistory("message") = "Found " + cstr(nNumEvents) + " event properties."
+								rsEventLogHistory("ukey_group") = DTSGlobalVariables("ukey_group").value
+								rsEventLogHistory.Update
+								err.clear
+
+								For Each oProperty in oEvent.Properties_
+									'*************************************************************
+									' here we've found an array of variants to process
+									'*************************************************************
+									If VarType(oProperty) = 8204 Then
+										'Array of variants
+
+										nNumEvents = 0
+										nNumEvents = UBound(oProperty)
+										if isnull(nNumEvents) = true then
+											nNumEvents = 0
+										end If
+
+										If nNumEvents > 0 Then
+
+											rsEventLogHistory.AddNew
+											rsEventLogHistory("serverName") = cServerName
+											rsEventLogHistory("message") = "Found " & CStr(nNumEvents) & " element array in " & cCounterName & "." & oProperty.Name
+											rsEventLogHistory("ukey_group") = DTSGlobalVariables("ukey_group").value
+											rsEventLogHistory.Update
+
+											For nCounter = 0 to nNumEvents
+												rsStage.AddNew
+												rsStage("serverName") = cServerName
+												rsStage("counterName") = Left(cObjectName & "." & cCounterName, 200)
+												rsStage("keyName") = Left(oProperty.Name, 200)
+												rsStage("keyValue") = Left(oProperty(nCounter), 1000)
+												rsStage("instance") = nInstance
+												rsStage("ukey_group") = DTSGlobalVariables("ukey_group").value
+												rsStage.Update
+											Next
+										End If
+
+									Else
+
+										rsStage.AddNew
+										rsStage("serverName") = cServerName
+										rsStage("counterName") = Left(cObjectName & "." & cCounterName, 200)
+										rsStage("keyName") = Left(oProperty.name, 200)
+										rsStage("keyValue") = Left(oProperty.value, 1000)
+										rsStage("instance") = nInstance
+										rsStage("ukey_group") = DTSGlobalVariables("ukey_group").value
+										rsStage.Update
+
+									End If
+									If err.number <> 0 Then
+										cErrorString = err.description & ". " & err.source & ". " & oProperty.name
+										if isnull(cErrorString) = true then
+											cErrorString = ""
+										end if
+
+										rsEventLogHistory.AddNew
+										rsEventLogHistory("serverName") = cServerName
+										rsEventLogHistory("message") = "Error writing event property values: " & Left(cErrorString, 200)
+										rsEventLogHistory("ukey_group") = DTSGlobalVariables("ukey_group").value
+										rsEventLogHistory.Update
+										err.clear
+										nNumErrors = nNumErrors + 1
+									End If
+								Next
+								Set oProperty = nothing
+						End If
+
+						if err.number <> 0 then
+							cErrorString = err.description & ". " & err.source
+							if isnull(cErrorString) = true then
+								cErrorString = ""
+							end if
+
+							rsEventLogHistory.AddNew
+							rsEventLogHistory("serverName") = cServerName
+							rsEventLogHistory("message") = "Error examining event properties: " & cErrorString
+							rsEventLogHistory("ukey_group") = DTSGlobalVariables("ukey_group").value
+							rsEventLogHistory.Update
+							err.clear
+							nNumErrors = nNumErrors + 1
+						End If
+
+						nInstance = nInstance + 1
+						err.clear
+					Next
+
+					Set oEvent = nothing
+
+					cSQLString = "update notification.dbo.dm_servers with (rowlock) set lastConfigurationCheck = getDate() where ukey = " & CStr(nUkeyServer)
+					rsCounterList.Open cSQLString, oConnection, 1, 1
+				End If
+			End If
+
+			Set rsResults = nothing
+			err.clear
+
+		End if
+
+		err.clear
+
+		rsServerList.movenext
+	Loop
+
+	If cLastServer <> "" Then
+		rsEventLogHistory.AddNew
+		rsEventLogHistory("serverName") = cLastServer
+		rsEventLogHistory("message") = "END"
+		rsEventLogHistory("ukey_group") = DTSGlobalVariables("ukey_group").value
+		rsEventLogHistory.Update
+	End If
+
+	Set rsServerList = nothing
+
+	oConnection.close
+
+	Main = DTSTaskExecResult_Success
+End Function
