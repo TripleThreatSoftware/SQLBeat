@@ -520,11 +520,11 @@ begin
 
 		declare @dLastJobData dateTime
 
-		set @dLastJobData = (select max(ymd) from jobHistory (nolock) where ukey_server = @nUkeyServer)
+--		set @dLastJobData = (select max(ymd) from jobHistory (nolock) where ukey_server = @nUkeyServer)
 
 		-- if we have no job data, just look at today
-		if isnull(@dLastJobData, '') = ''
-			set @dLastJobData = convert(varchar(10), getDate(), 120)
+--		if isnull(@dLastJobData, '') = ''
+			set @dLastJobData = convert(varchar(10), dateAdd(day, -1, getDate()), 120)
 
 		set @cSQLString = '
 			create procedure ' + @cProcedureName + '
@@ -2053,6 +2053,7 @@ begin
 					select 1,
 						''Replication error #'' + isnull(convert(varchar(20), error_id), ''N/A'') + '' occured at '' + convert(varchar(20), [time], 120) as subject,
 						''Replication error #'' + isnull(convert(varchar(20), error_id), ''N/A'') + '' occured at '' + convert(varchar(20), [time], 120) + '': '' + char(13) +
+							''Name  : '' + b.[name] + char(13) +
 							''Publication  : '' + b.publication + char(13) +
 							''Publisher DB : '' + b.publisher_db + char(13) +
 							''Subscrber DB : '' + b.subscriber_db + char(13) +

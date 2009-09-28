@@ -1,6 +1,12 @@
-alter procedure pr_compareDatabases (@cSourceServer varchar(500), @cSourceDatabase varchar(500),
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+ALTER procedure [dbo].[pr_compareDatabases] (@cSourceServer varchar(500), @cSourceDatabase varchar(500),
 	@cTargetServer varchar(500), @cTargetDatabase varchar(500),
-	@bEmailResults bit = 0)
+	@bEmailResults bit = 0, @bTargetIsSubscriber bit = 0)
 as
 begin
 --	declare @cSourceServer varchar(500)
@@ -52,6 +58,10 @@ begin
 				where a.serverName = @cSourceServer
 					and a.databaseName = @cSourceDatabase
 					and a.isCurrent = 1
+					and (
+						@bTargetIsSubscriber = 0
+						or (@bTargetIsSubscriber = 1 and a.xtype <> 'TR')
+						)
 			) a, (
 			select count(distinct objectName) as numObjects
 				from auditData_objectText a (nolock)
@@ -137,6 +147,10 @@ begin
 			and a.databaseName = @cSourceDatabase
 			and a.isCurrent = 1
 			and b.ukey is null
+			and (
+				@bTargetIsSubscriber = 0
+				or (@bTargetIsSubscriber = 1 and a.xtype <> 'TR')
+				)
 
 	insert into #results (categoryName, messageText)
 	select distinct 'Unexpected objects at Target', a.objectName

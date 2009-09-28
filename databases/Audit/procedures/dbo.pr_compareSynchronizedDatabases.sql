@@ -1,4 +1,9 @@
-alter procedure pr_compareSynchronizedDatabases
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+ALTER procedure [dbo].[pr_compareSynchronizedDatabases]
 as
 begin
 	declare @cSourceServer varchar(500)
@@ -23,9 +28,8 @@ begin
 			where ukey > @nUkey
 			order by ukey
 
-		exec pr_compareDatabases @cSourceServer, @cSourceDatabase, @cTargetServer, @cTargetDatabase, 1
+		exec pr_compareDatabases @cSourceServer, @cSourceDatabase, @cTargetServer, @cTargetDatabase, 1, 1
 
 		update synchronizedDatabases set lastCheck = getDate() where ukey = @nUkey
 	end
 end
-GO

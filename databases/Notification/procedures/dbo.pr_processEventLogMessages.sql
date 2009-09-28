@@ -80,6 +80,13 @@ begin
 			and message not like '%backup%'
 			and message not like '%restore%'
 			and message not like '%dtc%'
+
+			and message not like '%unloaded user%registry%'
+			and message not like '%perfmon%'
+			and message not like '%performance logs and alerts service%'
+			and message not like '%virtual disk service%'
+			and message not like '%logical disk manager administrative service%'
+
 			and message not like '%stale counters are being used%'
 			and message not like '%print spool%'
 			and message not like '%lsa%'
