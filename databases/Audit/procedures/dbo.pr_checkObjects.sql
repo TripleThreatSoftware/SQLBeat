@@ -1,7 +1,9 @@
 SET ANSI_NULLS ON
 GO
+
 SET QUOTED_IDENTIFIER ON
 GO
+
 ALTER procedure [dbo].[pr_checkObjects]
 as
 begin
@@ -13,13 +15,7 @@ begin
 	declare @nUkeyAuditRun bigint
 	declare @nUkeyServer int
 
-	declare @bRunDuringMaintenanceWindow bit
-
 	set @cServerName = ''
-	set @bRunDuringMaintenanceWindow = 1
-
-	if exists (select top 1 ukey from [notification]..dm_settings where settingName = 'Run object audit outside of maintenance window' and settingValue = '1')
-		set @bRunDuringMaintenanceWindow = 0
 
 	create table #objectText (databaseName varchar(500), objectName varchar(500), id bigint,
 		xtype varchar(2), objectText varchar(8000), ukey int identity, isChanged bit default 0)
@@ -44,13 +40,8 @@ begin
 				and (lastObjectCheck is null or dateDiff(minute, lastObjectCheck, getDate()) > isnull(objectCheckMinuteInterval, 5))
 				and isServerPingable = 1
 				and skipNextRun <> 1
-				and (
-					@bRunDuringMaintenanceWindow = 1
-					or (
-						right(convert(varchar(20), getDate(), 120), 8) >= right(convert(varchar(20), maintenanceWindowStart, 120), 8)
-						and right(convert(varchar(20), getDate(), 120), 8) <= right(convert(varchar(20), maintenanceWindowStop, 120), 8)
-						)
-					)
+				and right(convert(varchar(20), getDate(), 120), 8) >= right(convert(varchar(20), maintenanceWindowStart, 120), 8)
+				and right(convert(varchar(20), getDate(), 120), 8) <= right(convert(varchar(20), maintenanceWindowStop, 120), 8)
 		)
 	begin
 		truncate table #objectText
@@ -69,13 +60,8 @@ begin
 				and (lastObjectCheck is null or dateDiff(minute, lastObjectCheck, getDate()) > isnull(objectCheckMinuteInterval, 5))
 				and isServerPingable = 1
 				and skipNextRun <> 1
-				and (
-					@bRunDuringMaintenanceWindow = 1
-					or (
-						right(convert(varchar(20), getDate(), 120), 8) >= right(convert(varchar(20), maintenanceWindowStart, 120), 8)
-						and right(convert(varchar(20), getDate(), 120), 8) <= right(convert(varchar(20), maintenanceWindowStop, 120), 8)
-						)
-					)
+				and right(convert(varchar(20), getDate(), 120), 8) >= right(convert(varchar(20), maintenanceWindowStart, 120), 8)
+				and right(convert(varchar(20), getDate(), 120), 8) <= right(convert(varchar(20), maintenanceWindowStop, 120), 8)
 			order by servername
 
 		print 'Processing ' + @cServerName
@@ -425,3 +411,5 @@ begin
 	drop table #indexes
 	drop table #foreignKeys
 end
+
+GO

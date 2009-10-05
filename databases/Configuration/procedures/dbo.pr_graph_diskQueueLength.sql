@@ -1,4 +1,8 @@
-create procedure pr_graph_diskQueueLength (@nUkeyServer int, @nNumHours int = 48)
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER procedure [dbo].[pr_graph_diskQueueLength] (@nUkeyServer int, @nNumHours int = 48)
 as
 begin
 
@@ -17,6 +21,7 @@ begin
 			and not d.counterName like '%raw%'
 		join runs e (nolock) on a.ukey_run = e.ukey
 			and e.ymd >= dateAdd(hour, -48, getDate())
+		where a.ukey_server = @nUkeyServer
 		group by a.instance, e.ymd
 
 		create table #dataValues (setName varchar(200), seriesName varchar(100), axis_x varchar(100), axis_y decimal(20,4), sortOrder int identity)

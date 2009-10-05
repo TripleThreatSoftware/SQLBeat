@@ -315,6 +315,13 @@ begin
 				)
 			and isAlert = 0
 
+	-- the last two polls need to be heading abruptly in a particular direction
+	delete from #results
+		where delta9 > 1
+			and delta10 > 1
+			and not (time10 > historicalAverage and time9 > historicalAverage)
+
+
 	-- if it's going down, we need to be below the lowest observed value
 	-- if it's going up, we need to be above the highest observed value
 	delete from #results
@@ -371,6 +378,8 @@ begin
 						or (rtrim(ltrim(counterName)) in ('Memory Pages Allocated') and time10 < 20)
 						or (rtrim(ltrim(counterName)) in ('Cursor Memory Usage') and delta10 < 1)
 						or rtrim(ltrim(counterName)) in ('Cache Entries Count')
+						or counterName like '%trans/sec%'
+						or counterName like '%cmds/sec%'
 						then 1
 						else 0 end) as numBad,
 				count(*) as numTotal
