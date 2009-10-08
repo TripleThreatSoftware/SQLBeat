@@ -1,10 +1,5 @@
-/****** Object:  StoredProcedure [dbo].[pr_partitionTableDaily]    Script Date: 05/19/2009 13:59:45 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
 -- The keyFieldList variable should not contain ymd_id or ymd fields
-CREATE   procedure [dbo].[pr_partitionTableDaily] (@cTableName varchar(100), @cDateField varchar(100), @cKeyfieldList varchar(100), @lMakeUkey bit)
+ALTER   procedure [dbo].[pr_partitionTableDaily] (@cTableName varchar(100), @cDateField varchar(100), @cKeyfieldList varchar(100), @lMakeUkey bit)
 as
 begin
 	set noCount on
@@ -17,7 +12,8 @@ begin
 	declare @cToday varchar(8)
 	declare @cSQLString nvarchar(4000)
 	declare @cThisMonth varchar(6)
-	declare @cOldestDatabasePath varchar(255)
+	declare @cOldestDataPath varchar(1000)
+	declare @cOldestLogPath varchar(1000)
 	declare @cDatabaseName varchar(100)
 	declare @cFieldName varchar(50)
 	declare @dFirstDate dateTime
@@ -259,22 +255,34 @@ begin
 
 		set @cDatabaseName = @cArchiveDBName + @cThisMonth
 
+		set @cOldestDataPath = (select top 1 settingValue from notification..dm_settings where settingName = 'Partition Data Path')
+		set @cOldestLogPath = (select top 1 settingValue from notification..dm_settings where settingName = 'Partition Log Path')
+
 		if (select count(*) from master.dbo.sysdatabases where [name] = @cDatabaseName) = 0
 		begin
 --			print 'Database ' + @cDatabaseName + ' does not exist'
 
-			select top 1 @cOldestDatabasePath = left(fileName, len(fileName) - charindex('\', reverse(fileName)) + 1)
-				from master.dbo.sysdatabases
-				where left(name, len(@cArchiveDBName)) = @cArchiveDBName
-					and dbo.fn_returnDigits(name, 0) > 0
-				order by dbo.fn_returnDigits(name, 0) desc
-
-			if @cOldestDatabasePath is null
+			if isnull(@cOldestDataPath, '') = ''
 			begin
-				select top 1 @cOldestDatabasePath = left(fileName, len(fileName) - charindex('\', reverse(fileName)) + 1)
+				select top 1 @cOldestDataPath = left(fileName, len(fileName) - charindex('\', reverse(fileName)) + 1)
+					from master.dbo.sysdatabases
+					where left(name, len(@cArchiveDBName)) = @cArchiveDBName
+						and dbo.fn_returnDigits(name, 0) > 0
+					order by dbo.fn_returnDigits(name, 0) desc
+			end
+
+			if isnull(@cOldestDataPath, '') = ''
+			begin
+				select top 1 @cOldestDataPath = left(fileName, len(fileName) - charindex('\', reverse(fileName)) + 1)
 					from master.dbo.sysdatabases
 					where left(name, len(@cArchiveDBName)) = @cArchiveDBName
 					order by dbo.fn_returnDigits(name, 0) desc
+			end
+
+			if not exists (select top 1 settingValue from notification..dm_settings where settingName = 'Partition Data Path')
+			begin
+				insert into dm_settings (settingName, settingValue) values ('Partition Data Path', @cOldestDataPath)
+				insert into dm_settings (settingName, settingValue) values ('Partition Log Path', @cOldestDataPath)
 			end
 
 --			print 'Creating new database, storing files in: ' + isnull(@cOldestDatabasePath, 'BAD PATH')
@@ -283,10 +291,10 @@ begin
 			set @cSQLString =
 				'CREATE DATABASE [' + @cDatabaseName + '] ' +
 					'ON (NAME = N''' + @cDatabaseName + ''', ' +
-						'FILENAME = N''' + @cOldestDatabasePath + @cDatabaseName + '_data.mdf'' , ' +
+						'FILENAME = N''' + @cOldestDataPath + @cDatabaseName + '_data.mdf'' , ' +
 						'SIZE = 50, FILEGROWTH = 50) ' +
 					'LOG ON (NAME = N''' + @cDatabaseName + '_log'', ' +
-						'FILENAME = N''' + @cOldestDatabasePath + @cDatabaseName + '_log.ldf'' , ' +
+						'FILENAME = N''' + @cOldestLogPath + @cDatabaseName + '_log.ldf'' , ' +
 						'SIZE = 25, FILEGROWTH = 25)'
 --			print @cSQLString
 			exec sp_executesql @cSQLString
@@ -574,7 +582,13 @@ create table [' + @cArchiveTableName + '_' + @cToday + '] (' + @cTableStructure 
 						and a.' + @cDateField + ' < ''' + convert(varchar(10), dateAdd(day, 1, @dEndDate), 120) + ''''
 
 				print @cSQLString
-				exec sp_executeSQL @cSQLString
+
+				begin try
+					exec sp_executeSQL @cSQLString
+				end try
+				begin catch
+					insert into hist_partitionTableDaily (stepName) values ('Failed to delete records. ' + isnull(error_message(), 'N/A'))
+				end catch
 
 				insert into hist_partitionTableDaily (stepName) values
 					('Inserting ' + convert(varchar(10), @dStartDate, 120) + ' - ' + convert(varchar(10), @dEndDate, 120) + ' into ' + @cDestinationTableName)
@@ -586,7 +600,12 @@ create table [' + @cArchiveTableName + '_' + @cToday + '] (' + @cTableStructure 
 						and ' + @cDateField + ' < ''' + convert(varchar(10), dateAdd(day, 1, @dEndDate), 120) + ''''
 
 				print @cSQLString
-				exec sp_executeSQL @cSQLString
+				begin try
+					exec sp_executeSQL @cSQLString
+				end try
+				begin catch
+					insert into hist_partitionTableDaily (stepName) values ('Failed to insert records. ' + isnull(error_message(), 'N/A'))
+				end catch
 
 				insert into hist_partitionTableDaily (stepName) values ('Rows inserted for this week')
 

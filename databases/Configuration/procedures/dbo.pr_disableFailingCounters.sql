@@ -1,6 +1,6 @@
 USE [Configuration]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_disableFailingCounters]    Script Date: 09/24/2008 10:53:38 ******/
+/****** Object:  StoredProcedure [dbo].[pr_disableFailingCounters]    Script Date: 10/08/2009 19:40:14 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -19,18 +19,6 @@ begin
 --			eventLogCheck = 1,
 --			installedSoftwareCheck = 1
 --		where wmiStatus = 'SUCCESS'
-
-	insert into configuration..dm_serverCounters (ukey_server, ukey_counter)
-	select a.ukey, b.ukey
-		from notification..dm_servers a, configuration..dm_counters b
-		where a.serverName in (
-			select a.serverName
-				from notification..dm_servers a
-				left outer join configuration..dm_serverCounters b on a.ukey = b.ukey_server
-				where b.ukey is null
-					and a.isEnabled = 1
-					and a.configurationCheck = 1
-			)
 
 	select ymd, servername, message
 		into #failures
