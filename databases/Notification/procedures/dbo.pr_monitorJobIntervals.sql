@@ -1,9 +1,11 @@
-/****** Object:  StoredProcedure [dbo].[pr_monitorJobIntervals]    Script Date: 05/19/2009 13:59:45 ******/
+USE [Notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_monitorJobIntervals]    Script Date: 10/11/2009 11:01:32 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE procedure [dbo].[pr_monitorJobIntervals]
+ALTER procedure [dbo].[pr_monitorJobIntervals]
 as
 begin
 	declare @cSQLString nvarchar(4000)
@@ -25,12 +27,14 @@ begin
 					) b on a.groupName = b.groupName
 				left outer join dm_servers c (nolock) on a.ukey = c.ukey_group
 					and c.detailedCheck = 1
+					and c.isSQLBox = 1
+					and c.isEnabled = 1
 				group by a.groupName, b.job_id, jobName
 				having count(distinct c.ukey) = 0
 			) a
 
 	insert into #commands (commandText)
-	select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @enabled = 1'
+	select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @isEnabled = 1'
 		from (
 			select a.groupName, b.job_id, jobName, count(distinct c.ukey) as numServers
 				from dm_serverGroups a (nolock)
@@ -42,6 +46,8 @@ begin
 					) b on a.groupName = b.groupName
 				left outer join dm_servers c (nolock) on a.ukey = c.ukey_group
 					and c.detailedCheck = 1
+					and c.isSQLBox = 1
+					and c.isEnabled = 1
 				group by a.groupName, b.job_id, jobName
 				having count(distinct c.ukey) > 0
 			) a
@@ -62,12 +68,14 @@ begin
 					) b on a.groupName = b.groupName
 				left outer join dm_servers c (nolock) on a.ukey = c.ukey_group
 					and c.fragmentationCheck = 1
+					and c.isSQLBox = 1
+					and c.isEnabled = 1
 				group by a.groupName, b.job_id, jobName
 				having count(distinct c.ukey) = 0
 			) a
 
 	insert into #commands (commandText)
-	select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @enabled = 1'
+	select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @isEnabled = 1'
 		from (
 			select a.groupName, b.job_id, jobName, count(distinct c.ukey) as numServers
 				from dm_serverGroups a (nolock)
@@ -79,6 +87,8 @@ begin
 					) b on a.groupName = b.groupName
 				left outer join dm_servers c (nolock) on a.ukey = c.ukey_group
 					and c.fragmentationCheck = 1
+					and c.isSQLBox = 1
+					and c.isEnabled = 1
 				group by a.groupName, b.job_id, jobName
 				having count(distinct c.ukey) > 0
 			) a
@@ -99,12 +109,14 @@ begin
 					) b on a.groupName = b.groupName
 				left outer join dm_servers c (nolock) on a.ukey = c.ukey_group
 					and c.integrityCheck = 1
+					and c.isSQLBox = 1
+					and c.isEnabled = 1
 				group by a.groupName, b.job_id, jobName
 				having count(distinct c.ukey) = 0
 			) a
 
 	insert into #commands (commandText)
-	select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @enabled = 1'
+	select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @isEnabled = 1'
 		from (
 			select a.groupName, b.job_id, jobName, count(distinct c.ukey) as numServers
 				from dm_serverGroups a (nolock)
@@ -116,6 +128,8 @@ begin
 					) b on a.groupName = b.groupName
 				left outer join dm_servers c (nolock) on a.ukey = c.ukey_group
 					and c.integrityCheck = 1
+					and c.isSQLBox = 1
+					and c.isEnabled = 1
 				group by a.groupName, b.job_id, jobName
 				having count(distinct c.ukey) > 0
 			) a
@@ -136,12 +150,14 @@ begin
 					) b on a.groupName = b.groupName
 				left outer join dm_servers c (nolock) on a.ukey = c.ukey_group
 					and c.serviceCheck = 1
+					and c.isSQLBox = 1
+					and c.isEnabled = 1
 				group by a.groupName, b.job_id, jobName
 				having count(distinct c.ukey) = 0
 			) a
 
 	insert into #commands (commandText)
-	select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @enabled = 1'
+	select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @isEnabled = 1'
 		from (
 			select a.groupName, b.job_id, jobName, count(distinct c.ukey) as numServers
 				from dm_serverGroups a (nolock)
@@ -153,6 +169,8 @@ begin
 					) b on a.groupName = b.groupName
 				left outer join dm_servers c (nolock) on a.ukey = c.ukey_group
 					and c.serviceCheck = 1
+					and c.isSQLBox = 1
+					and c.isEnabled = 1
 				group by a.groupName, b.job_id, jobName
 				having count(distinct c.ukey) > 0
 			) a
@@ -173,12 +191,13 @@ begin
 					) b on a.groupName = b.groupName
 				left outer join dm_servers c (nolock) on a.ukey = c.ukey_group
 					and c.configurationCheck = 1
+					and c.isEnabled = 1
 				group by a.groupName, b.job_id, jobName
 				having count(distinct c.ukey) = 0
 			) a
 
 	insert into #commands (commandText)
-	select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @enabled = 1'
+	select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @isEnabled = 1'
 		from (
 			select a.groupName, b.job_id, jobName, count(distinct c.ukey) as numServers
 				from dm_serverGroups a (nolock)
@@ -190,6 +209,7 @@ begin
 					) b on a.groupName = b.groupName
 				left outer join dm_servers c (nolock) on a.ukey = c.ukey_group
 					and c.configurationCheck = 1
+					and c.isEnabled = 1
 				group by a.groupName, b.job_id, jobName
 				having count(distinct c.ukey) > 0
 			) a
@@ -210,12 +230,13 @@ begin
 					) b on a.groupName = b.groupName
 				left outer join dm_servers c (nolock) on a.ukey = c.ukey_group
 					and c.eventLogCheck = 1
+					and c.isEnabled = 1
 				group by a.groupName, b.job_id, jobName
 				having count(distinct c.ukey) = 0
 			) a
 
 	insert into #commands (commandText)
-	select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @enabled = 1'
+	select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @isEnabled = 1'
 		from (
 			select a.groupName, b.job_id, jobName, count(distinct c.ukey) as numServers
 				from dm_serverGroups a (nolock)
@@ -227,6 +248,7 @@ begin
 					) b on a.groupName = b.groupName
 				left outer join dm_servers c (nolock) on a.ukey = c.ukey_group
 					and c.eventLogCheck = 1
+					and c.isEnabled = 1
 				group by a.groupName, b.job_id, jobName
 				having count(distinct c.ukey) > 0
 			) a
@@ -243,4 +265,3 @@ begin
 	end
 
 end
-GO
