@@ -3,6 +3,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
+
 -- update dm_servers set serviceCheck = 1 where isSQLBox = 1 and detailedCheck = 1
 
 -- select top 100 * from messagesSent order by ymd desc
@@ -44,7 +45,7 @@ begin
 	set @nUkeyServer = -1
 
 	-- if we need to watch this server, flip this bit on
-	set @bMonitorProcesses = 0
+	set @bMonitorProcesses = 1
 
 	-- insert into hist_monitorBigBrother (stepName) values ('Starting')
 
@@ -521,7 +522,7 @@ begin
 	insert into jobHistory (ymd, ukey_job, ukey_server, jobOutcome, runningSeconds, isSuccess)
 	select distinct a.ymd, b.ukey, @nUkeyServer, a.jobOutcome, a.runningSeconds, a.isSuccess
 		from #jobHistory a
-		join dm_serverJobs b on a.job_id = b.job_id
+		join dm_serverJobs b (nolock) on a.job_id = b.job_id
 			and a.jobName = b.jobName
 			and b.ukey_server = @nUkeyServer
 		left outer join jobHistory c (nolock) on b.ukey = c.ukey_job
@@ -746,6 +747,7 @@ begin
 			or jobName like '%monitor sql statistics%'
 			or jobName like '%monitor table sizes%'
 			or jobName like '%monitor indexing%'
+			or jobName like '%monitor installed%'
 			or jobName like '%monitor myself%'
 			or jobName like 'maintenance%'
 			or jobName like '%mart%'
@@ -761,11 +763,7 @@ begin
 			'Current step text: ' + char(13) + a.currentStepText, 2000) as message,
 		-- if runtime > 2x, then it's a critical alert
 		-- otherwise, sit on it
-		case
-			when @bIsOffHours = 1 then 2
-			when minutesRunning > expectedRunningSeconds * 2 then 1
-			else 2
-			end as severity,
+		3 as severity,
 		'Job [' + isnull(rtrim(ltrim(jobName)), '') + '] running for ' + convert(varchar(20), convert(int, (minutesRunning/10)) * 10) + ' minutes.' as subject,
 		1 as isLongRunningJob
 		from #runningJobs a
@@ -788,10 +786,7 @@ begin
 			'Current step text: ' + char(13) + a.currentStepText, 2000) as message,
 		-- if runtime > 2x, then it's a critical alert
 		-- otherwise, sit on it
-		case
-			when @bIsOffHours = 1 then 2
-			else 2
-			end as severity,
+		3 as severity,
 		'Job [' + isnull(rtrim(ltrim(jobName)), '') + '] running for ' + convert(varchar(20), convert(int, (minutesRunning/10)) * 10) + ' minutes.' as subject,
 		1 as isLongRunningJob
 		from #runningJobs a
@@ -818,7 +813,7 @@ begin
 							secondsRunning > expectedRunningSeconds * 5
 							and secondsRunning > 60
 							-- should be at least 90% of the longest runtime we've observed
-							and secondsRunning > maxRunningSeconds * 0.9
+--							and secondsRunning > maxRunningSeconds * 0.9
 							and expectedRunningSeconds <> 0
 						)
 					)
@@ -835,7 +830,7 @@ begin
 							secondsRunning > expectedRunningSeconds * 5
 							and secondsRunning > 60
 							-- should be at least 90% of the longest runtime we've observed
-							and secondsRunning > maxRunningSeconds * 0.9
+--							and secondsRunning > maxRunningSeconds * 0.9
 							and expectedRunningSeconds <> 0
 						)
 					)
@@ -848,7 +843,7 @@ begin
 
 				insert into #results (message, severity, subject, isLongRunningJob) values (
 					'Job [' + @cThisJob + '] running as SPID ' + convert(varchar(20), @nThisSPID) + ' killed at ' + convert(varchar(19), getDate(), 120) + '.',
-					2,
+					3,
 					'Job [' + @cThisJob + '] running as SPID ' + convert(varchar(20), @nThisSPID) + ' killed.',
 					1)
 			end
@@ -858,7 +853,7 @@ begin
 
 				insert into #results (message, severity, subject, isLongRunningJob) values (
 					'Job [' + @cThisJob + '] sent a STOP command.',
-					2,
+					3,
 					'Job [' + @cThisJob + '] sent a STOP command at ' + convert(varchar(19), getDate(), 120) + '.',
 					1)
 			end
@@ -874,13 +869,17 @@ begin
 	declare @dJobFailure dateTime
 	set @nThisUkey = 0
 
+	select ukey, ukey_job, ymd, jobOutcome, runningSeconds
+		into #failures
+		from jobHistory (nolock)
+		where ukey_server = @nUkeyServer
+			and isSuccess = 0
+			and ymd >= dateAdd(minute, -@nMinutesBackToLook, getDate())
+
 	while exists (
 		select top 1 ukey
-			from jobHistory (nolock)
-			where ukey_server = @nUkeyServer
-				and isSuccess = 0
-				and ymd >= dateAdd(minute, -@nMinutesBackToLook, getDate())
-				and ukey > @nThisUkey
+			from #failures
+			where ukey > @nThisUkey
 		)
 	begin
 		set @cThisSubject = ''
@@ -894,13 +893,10 @@ begin
 				'Runtime: ' + convert(varchar(20), isnull(runningSeconds, 0)) + 's<br>',
 			@cThisSubject = left('Job ' + b.jobName + ' failed at ' + convert(varchar(20), a.ymd, 120) + '.', 300),
 			@cJobName = b.jobName
-			from jobHistory a (nolock)
+			from #failures a
 			join dm_serverJobs b (nolock) on a.ukey_job = b.ukey
 				and b.ukey_server = @nUkeyServer
-			where a.ukey_server = @nUkeyServer
-				and a.isSuccess = 0
-				and a.ymd >= dateAdd(minute, -@nMinutesBackToLook, getDate())
-				and a.ukey > @nThisUkey
+			where a.ukey > @nThisUkey
 
 		select
 			@nNumSuccess = sum(case when a.isSuccess = 1 then 1 else 0 end),
@@ -933,31 +929,45 @@ begin
 						and a.ymd >= dateAdd(day, -1, getDate())
 				)
 
-			set @cThisSubject = 'Job ' + @cJobName + ' failing at ' + convert(varchar(20), dbo.fn_returnTimeBlock(@dJobFailure), 120)
-			set @cThisMessage = 'Job ' + @cJobName + ' is failing. <br>' +
-				'Failures: ' + convert(varchar(20), @nNumFailure) + '<br>' +
-				'Successes: ' + convert(varchar(20), @nNumSuccess) + '<br>' +
-				'Last Failure: ' + convert(varchar(20), @dLastFailure, 120) + '<br>' +
-				'Last Success: ' + convert(varchar(20), @dLastSuccess, 120) + '<br>' +
-				replicate('=', 20) + '<br>'
+			if @dLastFailure > @dLastSuccess
+			begin
+				set @cThisSubject = 'Job ' + @cJobName + ' failing at ' + convert(varchar(20), dbo.fn_returnTimeBlock(@dJobFailure), 120)
+				set @cThisMessage = 'Job ' + @cJobName + ' is failing. <br>' +
+					'Failures: ' + convert(varchar(20), @nNumFailure) + '<br>' +
+					'Successes: ' + convert(varchar(20), @nNumSuccess) + '<br>' +
+					'Last Failure: ' + convert(varchar(20), @dLastFailure, 120) + '<br>' +
+					'Last Success: ' + convert(varchar(20), @dLastSuccess, 120) + '<br>' +
+					replicate('=', 20) + '<br>'
 
-			select @cThisMessage = @cThisMessage +
-				'==<b>' + isnull(b.stepName, 'N/A') + '</b> @ ' + convert(varchar(20), a.ymd, 120) + ' <br>' +
-					'Runtime: ' + convert(varchar(20), isnull(a.runningSeconds, 0)) + 's<br>' +
-					'Outcome: ' + case when a.isSuccess = 1 then 'OK' else isnull(a.stepOutcome, 'N/A') end + '<br>' +
-					case when a.isSuccess = 1 then '' else 'Step Text:' + isnull(b.stepCommand, 'N/A') end + '<br>'
-				from jobStepHistory a (nolock)
-				join dm_serverJobSteps b (nolock) on a.ukey_jobStep = b.ukey
-					and b.ukey_server = @nUkeyServer
-					and b.ukey_job = @nUkeyJob
-				where a.ukey_server = @nUkeyServer
-					and a.ukey_jobHistory = @nThisUkey
-					and a.ukey_job = @nUkeyJob
-				order by a.ymd
+				select @cThisMessage = @cThisMessage +
+					'==<b>' + isnull(b.stepName, 'N/A') + '</b> @ ' + convert(varchar(20), a.ymd, 120) + ' <br>' +
+						'Runtime: ' + convert(varchar(20), isnull(a.runningSeconds, 0)) + 's<br>' +
+						'Outcome: ' + case when a.isSuccess = 1 then 'OK' else isnull(a.stepOutcome, 'N/A') end + '<br>' +
+						case when a.isSuccess = 1 then '' else 'Step Text:' + isnull(b.stepCommand, 'N/A') end + '<br>'
+					from jobStepHistory a (nolock)
+					join dm_serverJobSteps b (nolock) on a.ukey_jobStep = b.ukey
+						and b.ukey_server = @nUkeyServer
+						and b.ukey_job = @nUkeyJob
+					where a.ukey_server = @nUkeyServer
+						and a.ukey_jobHistory = @nThisUkey
+						and a.ukey_job = @nUkeyJob
+					order by a.ymd
 
-			-- don't send a message for this time block
-			if dbo.fn_returnTimeBlock(@dJobFailure) < dbo.fn_returnTimeBlock(getDate())
-				insert into #results (ymd, subject, message, severity, isJobFailure) values (@dJobFailure, @cThisSubject, @cThisMessage, 1, 1)
+				if (@cThisMessage like '%eventlog check%' and @cThisMessage like '%timeout expired%')
+					or (@cThisMessage like '%configuration check%' and @cThisMessage like '%timeout expired%')
+					or (@cThisMessage like '%monitor websites%' and @cThisMessage like '%timeout expired%')
+				begin
+					-- in these cases, we've had a glitch on the SQLBeat side and the server is unavailable.
+					continue
+				end
+
+				-- don't send a message for this time block
+				if dbo.fn_returnTimeBlock(@dJobFailure) < dbo.fn_returnTimeBlock(getDate())
+					insert into #results (ymd, subject, message, severity, isJobFailure) values (@dJobFailure, @cThisSubject, @cThisMessage, 3, 1)
+
+				-- since we've sent out a wrapup email, remove any other mentions of this job
+				delete from #failures where ukey_job = @nUkeyJob
+			end
 		end
 		else
 		begin
@@ -976,11 +986,21 @@ begin
 					and a.ukey_job = @nUkeyJob
 				order by a.ymd
 
+			if (@cThisMessage like '%eventlog check%' and @cThisMessage like '%timeout expired%')
+				or (@cThisMessage like '%configuration check%' and @cThisMessage like '%timeout expired%')
+				or (@cThisMessage like '%monitor websites%' and @cThisMessage like '%timeout expired%')
+			begin
+				-- in these cases, we've had a glitch on the SQLBeat side and the server is unavailable.
+				continue
+			end
+
 			-- silence permanently any job failure messages due to a database restore
 			if @cThisMessage not like '%in the middle of a restore%' and @cThisMessage not like '%has changed since it was compiled%'
-				insert into #results (ymd, subject, message, severity, isJobFailure) values (@dJobFailure, @cThisSubject, @cThisMessage, 1, 1)
+				insert into #results (ymd, subject, message, severity, isJobFailure) values (@dJobFailure, @cThisSubject, @cThisMessage, 3, 1)
 		end
 	end
+
+	drop table #failures
 
 	-- then, identify failures of steps where the job succeeded
 	set @nThisUkey = 0
@@ -1030,11 +1050,11 @@ begin
 							and ymd >= dateAdd(minute, -@nMinutesBackToLook, getDate())
 					)
 
-		insert into #results (ymd, subject, message, severity, isJobFailure) values (@dJobFailure, @cThisSubject, @cThisMessage, 1, 1)
+		insert into #results (ymd, subject, message, severity, isJobFailure) values (@dJobFailure, @cThisSubject, @cThisMessage, 3, 1)
 	end
 
 	insert into #results (ymd, serverName, subject, message, severity, isJobFailure)
-	select min(ymd) as ymd, serverName, 'SQLAgent service does not appear to be running', max(message), 1, 0
+	select min(ymd) as ymd, serverName, 'SQLAgent service does not appear to be running', max(message), 2, 0
 		from #results
 		where isJobFailure = 1
 			and message like '%xp_sqlagent_enum_jobs%'
@@ -1139,7 +1159,7 @@ begin
 	set @nNumFailure = @@rowcount
 
 	-- disable further checks of any server that consistently fails
-	if @nNumFailure > 1
+	if @nNumFailure > 0
 	begin
 		set @cThisSubject = 'SQL Detailed checks disabled for ' + convert(varchar(20), @nNumFailure) + ' failing servers.'
 		set @cThisMessage = ''
@@ -1147,7 +1167,7 @@ begin
 		select @cThisMessage = @cThisMessage + serverName + ': ' + convert(varchar(20), numFailures) + ' failures.<br>'
 			from #failingServers
 
-		insert into #results (serverName, subject, message, severity) values (@@serverName, @cThisSubject, @cThisMessage, 1)
+		insert into #results (serverName, subject, message, severity) values (@@serverName, @cThisSubject, @cThisMessage, 2)
 
 		update dm_servers
 			set detailedCheck = 0
@@ -1161,15 +1181,16 @@ begin
 
 	-- no need to build buffer history for these
 	-- what remains will either be running, or failed
-	delete from #detailedChecks where isSuccess = 0
+--	delete from #detailedChecks where isSuccess = 0
 
 	-- get rid of any running checks that have not exceeded historical runtimes
 	delete #detailedChecks
 		from #detailedChecks a
 		join #runtimeHistory b on a.serverName = b.serverName
 			and a.ukey_group = b.ukey_group
-		where a.runningSeconds < b.avgRuntime * 4
-			or a.runningSeconds < 60*5
+		where a.isRunning = 1
+			and (a.runningSeconds < b.avgRuntime * 4
+				or a.runningSeconds < 60*5)
 
 	set @cBuffer = ''
 	set @nUkey = 0
@@ -1217,7 +1238,7 @@ begin
 					and dateAdd(second, c.runningSeconds+15, c.ymd) >= @dEndTime
 				join dm_serverGroups d (nolock) on rtrim(ltrim(substring(a.jobName, charindex('-', a.jobName) + 1, 99))) = d.groupName
 					and d.ukey = @nUkeyGroup
-				join jobStepHistory e on a.ukey = e.ukey_job
+				join jobStepHistory e (nolock) on a.ukey = e.ukey_job
 					and c.ukey = e.ukey_jobHistory
 				where a.ukey_server = @nUkeyServer
 					and a.jobName like '%sql detailed check%'
@@ -1237,9 +1258,8 @@ begin
 				)
 
 			update #detailedChecks
-				set jobHistory = @cBuffer,
-					isFailure = case when @bSuccess = 0 then 1 else 0 end
-					where ukey = @nUkey
+				set jobHistory = @cBuffer
+				where ukey = @nUkey
 		end
 	end
 
@@ -1250,7 +1270,7 @@ begin
 		'Detailed check ' +
 			'of ' + a.serverName + ' ' +
 			'@ ' + right(convert(varchar(20), a.startTime, 120), 8) + ' ' +
-			case when a.isSuccess = 0
+			case when a.isSuccess = 0 and a.isRunning = 0
 				then 'FAILED.'
 				else 'running ' + convert(varchar(20), dateDiff(second, a.startTime, getDate())) + 's.'
 				end
@@ -1259,7 +1279,7 @@ begin
 			'Detailed check ' +
 				'of ' + a.serverName + ' ' +
 				'@ ' + right(convert(varchar(20), a.startTime, 120), 8) + ' ' +
-				case when a.isSuccess = 0
+				case when a.isSuccess = 0 and a.isRunning = 0
 					then 'FAILED.'
 					else 'running ' + convert(varchar(20), dateDiff(second, a.startTime, getDate())) + 's.'
 					end +
@@ -1270,7 +1290,7 @@ begin
 				'Job Status: ' + char(13) +
 				isnull(a.jobHistory, 'N/A'),
 			8000) as message,
-		1 as severity
+		3 as severity
 		from #detailedChecks a
 		left outer join #runtimeHistory b on a.ukey_group = b.ukey_group
 			and a.serverName = b.serverName
@@ -1304,7 +1324,7 @@ begin
 
 	insert into #results (message, severity, subject, isDriveSpace)
 	select 'Drive ' + driveLetter + ' is down to ' + convert(varchar(100), freeSpace) + 'mb free.',
-		1 as severity,
+		3 as severity,
 		'Drive ' + driveLetter + ' is down to ' + convert(varchar(100), freeSpace) + 'mb free.' as subject,
 		1 as isDriveSpace
 		from #drives
@@ -1357,7 +1377,7 @@ begin
 	select 'Database ' + isnull(rtrim(dbName), '' ) + ' ' +
 			'size (' + convert(varchar(20), totalSize) + 'mb) ' +
 			'is about to reach the MSDE cap of 2000mb.',
-		1 as severity,
+		3 as severity,
 		'Database ' + isnull(rtrim(dbName), '' ) + ' is about to reach MSDE limits.',
 		1 as isLogSize
 		from (
@@ -1381,9 +1401,9 @@ begin
 	select 'Error checking services on ' + isnull(serverName, 'N/A') + '.' + char(13) + char(13) +
 			isnull(serviceName, 'N/A') + char(13) + char(13) +
 			'Further service checks DISABLED.' as message,
-		1 as severity,
+		3 as severity,
 		'Service check error for ' + isnull(serverName, 'N/A') + ' at ' + right(convert(varchar(20), ymd, 120), 8) as subject
-		from serviceLog
+		from serviceLog (nolock)
 		where ymd >= dateAdd(minute, -@nMinutesBackToLook, getDate())
 			and (
 				(serviceName like '%SQL Native Client%'
@@ -1398,7 +1418,7 @@ begin
 		from dm_servers a
 		join (
 			select isnull(serverName, '') as serverName
-				from serviceLog
+				from serviceLog  (nolock)
 				where ymd >= dateAdd(minute, -@nMinutesBackToLook, getDate())
 					and (
 						(serviceName like '%SQL Native Client%'
@@ -1449,7 +1469,7 @@ begin
 				'Step       : ' + notes + char(13) +
 				'Last Check : ' + convert(varchar(19), lastConfigurationCheck, 120)-- + char(13) +
 				as message,
-			2 as severity, serverName
+			3 as severity, serverName
 			from #stuckConfigCheck
 
 		-- set the server to sleep that stuck us
@@ -1560,13 +1580,7 @@ begin
 		isJobFailure, isLogShippingJobFailure, isLongRunningJob, isBlocking, isLongRunningProcess,
 		isDriveSpace, isLogSize, isEventLog, serverName, ymd)
 	select message,
-		case
-			when message like '%test%'
-				or message like '%stby%'
-				or message like '%deploy%'
-				or message like '%newsql%'
-				then 2
-			else severity end as severity,
+		3 as severity,
 		subject,
 		isJobFailure, isLogShippingJobFailure, isLongRunningJob, isBlocking, isLongRunningProcess,
 		isDriveSpace, isLogSize, isEventLog, isnull(serverName, @@serverName), ymd
