@@ -14,7 +14,7 @@
 -- select top 500 * from notificationLog_history (nolock) where runGUID = 'CFCB992F-12E5-47C9-95CD-C36B133A0640' order by ymd
 -- select top 100 * from notificationLog_history (nolock) order by ymd desc
 -- select top 100 * from processLog (nolock) where serverName = 'sqlcluster01' and command <> 'awaiting command' order by ymd desc
--- exec pr_examineServer 'devmssql02', 600
+-- exec pr_examineServer 'sql-primary', 600
 -- exec pr_examineServer '10.3.10.197', 600
 ALTER procedure [dbo].[pr_examineServer] (@cServerName varchar(100), @nMinutesBackToLook int)
 as
@@ -927,9 +927,8 @@ begin
 			-- if runtime > 2x, then it's a critical alert
 			-- otherwise, sit on it
 			case
-				when @bIsOffHours = 1 then 2
-				when minutesRunning > expectedRunningSeconds * 2 then 1
-				else 2
+				when minutesRunning > expectedRunningSeconds * 5 then 2
+				else 3
 				end as severity,
 			'Job [' + isnull(rtrim(ltrim(jobName)), '') + '] has been running for more than ' + convert(varchar(20), convert(int, (minutesRunning/10)) * 10) + ' minutes.' as subject,
 			1 as isLongRunningJob
@@ -953,10 +952,7 @@ begin
 				'Current step text: ' + char(13) + a.currentStepText, 2000) as message,
 			-- if runtime > 2x, then it's a critical alert
 			-- otherwise, sit on it
-			case
-				when @bIsOffHours = 1 then 2
-				else 2
-				end as severity,
+			2 as severity,
 			'Job [' + isnull(rtrim(ltrim(jobName)), '') + '] has been running for more than ' + convert(varchar(20), convert(int, (minutesRunning/10)) * 10) + ' minutes.' as subject,
 			1 as isLongRunningJob
 			from #runningJobs a
@@ -1066,6 +1062,8 @@ begin
 						and a.ukey_jobHistory = @nThisUkey
 						and a.ukey_job = @nUkeyJob
 					order by a.ymd
+
+				insert into #results (ymd, subject, message, severity, isJobFailure) values (@dJobFailure, @cThisSubject, @cThisMessage, 2, 1)
 			end
 			else
 			begin
@@ -1084,7 +1082,7 @@ begin
 						and a.ukey_job = @nUkeyJob
 					order by a.ymd
 
-				insert into #results (ymd, subject, message, severity, isJobFailure) values (@dJobFailure, @cThisSubject, @cThisMessage, 1, 1)
+				insert into #results (ymd, subject, message, severity, isJobFailure) values (@dJobFailure, @cThisSubject, @cThisMessage, 2, 1)
 			end
 		end
 
@@ -1136,7 +1134,7 @@ begin
 								and ymd >= dateAdd(minute, -@nMinutesBackToLook, getDate())
 						)
 
-			insert into #results (ymd, subject, message, severity, isJobFailure) values (@dJobFailure, @cThisSubject, @cThisMessage, 1, 1)
+			insert into #results (ymd, subject, message, severity, isJobFailure) values (@dJobFailure, @cThisSubject, @cThisMessage, 2, 1)
 		end
 
 --		-- now, set in the better failure description for MP failures
@@ -1210,7 +1208,7 @@ begin
 	insert into #results (message, severity, subject)
 	select
 		'User ' + isnull(userName, 'N/A') + ' is orphaned within [' + isnull(dbName, 'N/A') + '].' as message,
-		2 as severity,
+		3 as severity,
 		'User ' + isnull(userName, 'N/A') + ' is orphaned within [' + isnull(dbName, 'N/A') + '].' as subject
 		from #orphanedUsers
 
@@ -1218,7 +1216,7 @@ begin
 	-- SQL Error Log
 	--*********************************************************************************************************************
 
-	if @cVersion like '%2005%'
+	if @cVersion like '%2005%' or @cVersion like '%2008%'
 	begin
 		create table #sqlErrors (ymd dateTime, processInfo varchar(100), logMessage varchar(8000), nastyLine varchar(max), ukey int identity)
 
@@ -1751,7 +1749,7 @@ begin
 				'and ' + convert(varchar(20), count(*)) + ' threads ' +
 				'blocked ' +
 				'at ' + convert(varchar(20), getDate(), 120) + '.' as message,
-			2 as severity,
+			3 as severity,
 			convert(varchar(20), count(distinct spid)) + ' Replication SPIDs ' +
 				'blocked.' as subject,
 			1 as isBlocking
@@ -1840,7 +1838,7 @@ begin
 				'********************************************' + char(13) +
 					isnull(b.locks, '')
 				, 2000),
-				2 as severity,
+				1 as severity,
 				'User ' + isnull(b.login, '') + ' (' + isnull(convert(varchar(20), b.spid), 'B') + ') ' +
 					'began blocking in ' + isnull(a.dbName, '') + ' ' +
 					'at ' + right(convert(varchar(20), isnull(b.lastBatchTime, ''), 120), 8) + '. ' as subject,
@@ -1938,7 +1936,7 @@ begin
 				'User ' + isnull(blockingUser, 'N/A') + ' (' + convert(varchar(20), isnull(blockingSPID, '')) + ') ' +
 				'has been blocking in the last (' + convert(varchar(20), count(distinct ymd)) + ') polls.'
 				, 2000) as message,
-			case when @nOffHoursPriority = 1 then 1 else 2 end as severity,
+			2 as severity,
 			'SPID ' + convert(varchar(20), isnull(blockingSPID, '')) + ' ' +
 			'is blocking ' + convert(varchar(20), count(distinct blockedSPID)) + ' SPIDs ' +
 			'in ' + isnull(databaseName, 'N/A') + ' ' +
@@ -2194,29 +2192,52 @@ begin
 		select @cServername, dbName, objectName, [fileName], [size], isLog
 			from #fileSizes
 
-		insert into #results (message, severity, subject, isLogSize)
-		select 'Database ' + isnull(rtrim(dbName), '' ) + ' ' +
-				'log file size (' + convert(varchar(20), logSize) + 'mb) ' +
-				'has grown beyond the data file size (' + convert(varchar(20), dataSize) + 'mb)',
-			2 as severity,
-			'Log file size in ' + isnull(rtrim(dbName), '' ) + '.',
-			1 as isLogSize
+		insert into #results (message, severity, subject)
+		select 'TEMPDB is currently ' + convert(varchar(20), tempdbSize) + 'mb. <br>' +
+				'The largest user database is ' +  convert(varchar(20), maxSize) + 'mb. <br>' +
+				'Total user database size is ' +  convert(varchar(20), otherSize) + 'mb. <br>',
+			3 as severity,
+			'TEMPDB is currently ' + convert(varchar(20), tempdbSize) + 'mb.'
 			from (
-				select isnull(dbName, 'N/A') as dbName,
-					convert(decimal(10,2), sum(case when isLog = 0 then size else 0 end)) as dataSize,
-					convert(decimal(10,2), sum(case when isLog = 1 then size else 0 end)) as logSize
-					from #fileSizes
-					group by dbName
+				select
+					convert(decimal(10,2), sum(case when dbName = 'tempdb' then size else 0 end)) as tempdbSize,
+					convert(decimal(10,2), max(case when dbName not in ('tempdb', 'master', 'model', 'msdb') then size else 0 end)) as maxSize,
+					convert(decimal(10,2), sum(case when dbName not in ('tempdb', 'master', 'model', 'msdb') then size else 0 end)) as otherSize
+					from (
+						select dbName, sum(size) as size
+							from #fileSizes
+							where dbname is not null
+							group by dbName
+						) a
 				) a
-			where logSize > (dataSize * 0.5)
-				and logSize > 5000
+			where tempdbSize > maxSize
+
+		if (select isnull(checkLogFileSize, 0) from dm_servers (nolock) where ukey = @nUkeyServer) = 1
+		begin
+			insert into #results (message, severity, subject, isLogSize)
+			select 'Database ' + isnull(rtrim(dbName), '' ) + ' ' +
+					'log file size (' + convert(varchar(20), logSize) + 'mb) ' +
+					'has grown beyond the data file size (' + convert(varchar(20), dataSize) + 'mb)',
+				3 as severity,
+				'Log file size in ' + isnull(rtrim(dbName), '' ) + '.',
+				1 as isLogSize
+				from (
+					select isnull(dbName, 'N/A') as dbName,
+						convert(decimal(10,2), sum(case when isLog = 0 then size else 0 end)) as dataSize,
+						convert(decimal(10,2), sum(case when isLog = 1 then size else 0 end)) as logSize
+						from #fileSizes
+						group by dbName
+					) a
+				where logSize > (dataSize * 0.5)
+					and logSize > 5000
+		end
 
 		-- for MSDE, watch the 2gb file size limit
 		insert into #results (message, severity, subject, isLogSize)
 		select 'Database ' + isnull(rtrim(dbName), '' ) + ' ' +
 				'size (' + convert(varchar(20), totalSize) + 'mb) ' +
 				'is about to reach the MSDE cap of 2000mb.',
-			1 as severity,
+			2 as severity,
 			'Database ' + isnull(rtrim(dbName), '' ) + ' is about to reach MSDE limits.',
 			1 as isLogSize
 			from (
@@ -2244,7 +2265,7 @@ begin
 		serverName)
 	select isnull(ymd, getDate()), message,
 		case
-			when @bIsOffHours = 1 and @nOffHoursPriority <> 1 then 2
+			when @bIsOffHours = 1 and @nOffHoursPriority <> 1 and isnull(severity, 3) = 1 then 2
 			else severity
 			end,
 		subject,
