@@ -14,7 +14,7 @@
 -- select top 500 * from notificationLog_history (nolock) where runGUID = 'CFCB992F-12E5-47C9-95CD-C36B133A0640' order by ymd
 -- select top 100 * from notificationLog_history (nolock) order by ymd desc
 -- select top 100 * from processLog (nolock) where serverName = 'sqlcluster01' and command <> 'awaiting command' order by ymd desc
--- exec pr_examineServer 'sql-primary', 600
+-- exec pr_examineServer 'devmssql02', 600
 -- exec pr_examineServer '10.3.10.197', 600
 ALTER procedure [dbo].[pr_examineServer] (@cServerName varchar(100), @nMinutesBackToLook int)
 as
@@ -203,7 +203,7 @@ begin
 
 	create table #databaseNames (dbname varchar(100), dbID int)
 
-	create table #fileSizes (dbname varchar(100), objectname varchar(100), fileName varchar(100), size bigint, isLog bit default 0)
+	create table #fileSizes (dbname varchar(100), objectname varchar(100), fileName varchar(100), size bigint, isLog bit default 0, fileID int)
 
 	create table #userActivity (spid int, macAddress varchar(50), bufferContents varchar(3000), nastyLine varchar(3000), ukey int identity)
 
@@ -272,216 +272,7 @@ begin
 		print @cSQLString
 	EXECUTE(@cProcedureName)
 
-	--*********************************************************************************************************************
-	-- Performance counters
-	--*********************************************************************************************************************
 
-	set @cSQLString = '
-		create procedure ' + @cProcedureName + '
-		as
-		begin
-			insert into performanceLog_stage (serverName, [objectName], [counterName], [instanceName], counterValue, counterType, runStamp)
-			select
-				''' + @cServerName + ''' as serverName,
-				a.object_name,
-				a.counter_name,
-				a.instance_name,
-				case
-					when b.counter_name is not null and b.cntr_value <> 0
-						then convert(decimal(30,4), 100 * convert(decimal(30,4), a.cntr_value) / convert(decimal(30,4), b.cntr_value))
-						else convert(decimal(30,4), a.cntr_value)
-						end as cntr_value,
-				a.cntr_type,
-				' + convert(varchar(20), @nRunStamp) + ' as runStamp
-				from [' + @cServerName + '].master.dbo.sysperfinfo a
-				left outer join [' + @cServerName + '].master.dbo.sysperfinfo b on a.object_name = b.object_name
-					and a.instance_name = b.instance_name
-					and b.cntr_type in (1073939458, 1107494144, 1073939712, 1073939459, 1073939457)
-					and replace(replace(b.counter_name, ''ratio'', ''''), ''base'', '''') like rtrim(ltrim(replace(replace(a.counter_name, ''ratio'', ''''), ''base'', ''''))) + ''%''
-					and a.cntr_type in (537003264, 549585920, 4260864, 805438464, 591463680, 575735040, 592512256)
-				where a.cntr_type not in (1073939458, 1107494144, 1073939712, 1073939459, 1073939457)
-		 end'
-
-	if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
-		execute('drop procedure ' + @cProcedureName)
-
-	insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Performance counters', @cSQLString, @nUkeyGroup)
-	exec sp_executeSQL @cSQLString
-
-	if @bTesting = 1
-		print @cSQLString
-	EXECUTE(@cProcedureName)
-
-	if @cVersion like '%2005%' or @cVersion like '%2008%'
-	begin
-
-		create table #memory ([size] bigint, [base] bigint)
-
-		set @cSQLString = '
-			insert into #memory (size, base)
-			select size, base
-				from openQuery([' + @cServerName + '], ''
-				SELECT
-					CONVERT(VARBINARY, SUM(region_size_in_bytes)) AS Size,
-					region_allocation_base_address AS Base
-					FROM sys.dm_os_virtual_address_dump
-					WHERE region_allocation_base_address <> 0x0
-					GROUP BY region_allocation_base_address
-				UNION
-				SELECT
-					CONVERT(VARBINARY, region_size_in_bytes),
-					region_allocation_base_address
-					FROM sys.dm_os_virtual_address_dump
-					WHERE region_allocation_base_address  = 0x0 '')'
-
-		insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'SQL 2005 Performance Counters', @cSQLString, @nUkeyGroup)
-
-		if @bTesting = 1
-			print @cSQLString
-
-		exec sp_executeSQL @cSQLString
---select * from performanceLog_stage where objectName like '%sqlbeat%'
-
-		insert into performanceLog_stage (serverName, [objectName], [counterName], [instanceName], counterValue, counterType, runStamp)
-		select @cServerName, 'SQLBeat Statistics', 'Total Available Memory (kb)', '', SUM(Size*Free)/1024, '', @nRunStamp
-			from (
-				SELECT
-					Size =
-						Size,
-						Reserved =  SUM(
-							CASE(Base^0)
-								WHEN 0 THEN 0
-								ELSE 1
-								END
-							),
-						Free = SUM(
-							CASE(Base^0)
-								WHEN 0 THEN 1
-								ELSE 0
-								END
-							)
-					from #memory
-					group by [size]
-				) a
-			WHERE Free <> 0
-
-		insert into performanceLog_stage (serverName, [objectName], [counterName], [instanceName], counterValue, counterType, runStamp)
-		select @cServerName, 'SQLBeat Statistics', 'Maximum Free Memory (kb)', '', MAX(Size)/1024, '', @nRunStamp
-			from (
-				SELECT
-					Size =
-						Size,
-						Reserved =  SUM(
-							CASE(Base^0)
-								WHEN 0 THEN 0
-								ELSE 1
-								END
-							),
-						Free = SUM(
-							CASE(Base^0)
-								WHEN 0 THEN 1
-								ELSE 0
-								END
-							)
-					from #memory
-					group by [size]
-				) a
-			WHERE Free <> 0
-
-		drop table #memory
-
-		--***********************************************************************************
-		--***********************************************************************************
-		-- clerk consumers of memory
-		create table #clerks (clerkType varchar(500), clerkName varchar(800), singlePages bigint, multiPages bigint, virtualMemoryReserved bigint,
-			virtualMemoryCommitted  bigint, aweAllocated bigint, sharedMemoryReserved bigint, sharedMemoryCommitted bigint)
-
-		set @cSQLString = '
-			insert into #clerks
-			select *
-				from openQuery([' + @cServerName + '], ''
-					SELECT [type], [name], single_pages_kb, multi_pages_kb, virtual_memory_reserved_kb, virtual_memory_committed_kb, awe_allocated_kb, shared_memory_reserved_kb, shared_memory_committed_kb
-					FROM sys.dm_os_memory_clerks
-					WHERE (single_pages_kb + multi_pages_kb + virtual_memory_reserved_kb + virtual_memory_committed_kb + awe_allocated_kb + shared_memory_reserved_kb + shared_memory_committed_kb) > 0 '')'
-
-		insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'SQL 2005 Memory Clerks', @cSQLString, @nUkeyGroup)
-
-		if @bTesting = 1
-			print @cSQLString
-
-		exec sp_executeSQL @cSQLString
-
-		insert into performanceLog_stage (serverName, [objectName], [counterName], [instanceName], counterValue, counterType, runStamp)
-		select @cServerName, 'Memory Clerks:' + rtrim(ltrim(clerkType)), clerkName, 'Single Pages (kb)', singlePages, '', @nRunStamp from #clerks
-		union
-		select @cServerName, 'Memory Clerks:' + rtrim(ltrim(clerkType)), clerkName, 'Multiple Pages (kb)', multiPages, '', @nRunStamp from #clerks
-		union
-		select @cServerName, 'Memory Clerks:' + rtrim(ltrim(clerkType)), clerkName, 'Virtual Memory Reserved (kb)', virtualMemoryReserved, '', @nRunStamp from #clerks
-		union
-		select @cServerName, 'Memory Clerks:' + rtrim(ltrim(clerkType)), clerkName, 'Virtual Memory Committed (kb)', virtualMemoryCommitted, '', @nRunStamp from #clerks
-		union
-		select @cServerName, 'Memory Clerks:' + rtrim(ltrim(clerkType)), clerkName, 'AWE Allocated (kb)', aweAllocated, '', @nRunStamp from #clerks
-		union
-		select @cServerName, 'Memory Clerks:' + rtrim(ltrim(clerkType)), clerkName, 'Shared Memory Reserved (kb)', sharedMemoryReserved, '', @nRunStamp from #clerks
-		union
-		select @cServerName, 'Memory Clerks:' + rtrim(ltrim(clerkType)), clerkName, 'Shared Memory Committed (kb)', sharedMemoryCommitted, '', @nRunStamp from #clerks
-
-		drop table #clerks
-
-		--***********************************************************************************
-		--***********************************************************************************
-		-- buffer pool status
-		create table #memorySummary (physicalMemory bigint, virtualMemory bigint, bpoolBuffers bigint, bpoolBuffersNeeded bigint, accessibleBPoolBuffers bigint)
-
-		set @cSQLString = '
-			insert into #memorySummary
-			select *
-				from openQuery([' + @cServerName + '], ''
-					SELECT physical_memory_in_bytes / 1024 as physicalMemory, virtual_memory_in_bytes / 1024 as virtualMemory,	bpool_committed, bpool_commit_target, bpool_visible
-						FROM sys.dm_os_sys_info  '')'
-
-		insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'SQL 2005 BPool Statistics', @cSQLString, @nUkeyGroup)
-
-		if @bTesting = 1
-			print @cSQLString
-
-		exec sp_executeSQL @cSQLString
-
-		insert into performanceLog_stage (serverName, [objectName], [counterName], [instanceName], counterValue, counterType, runStamp)
-		select @cServerName, 'SQLBeat Statistics', 'Buffer Pool', 'Physical Memory (kb)', physicalMemory, '', @nRunStamp from #memorySummary
-		union
-		select @cServerName, 'SQLBeat Statistics', 'Buffer Pool', 'Virtual Memory (kb)', virtualMemory, '', @nRunStamp from #memorySummary
-		union
-		select @cServerName, 'SQLBeat Statistics', 'Buffer Pool', '8kb Buffers In Pool', bpoolBuffers, '', @nRunStamp from #memorySummary
-		union
-		select @cServerName, 'SQLBeat Statistics', 'Buffer Pool', '8kb Buffers Needed', bpoolBuffersNeeded, '', @nRunStamp from #memorySummary
-		union
-		select @cServerName, 'SQLBeat Statistics', 'Buffer Pool', '8kb Buffers Accessible', accessibleBPoolBuffers, '', @nRunStamp from #memorySummary
-
-		drop table #memorySummary
-
-		--***********************************************************************************
-		--***********************************************************************************
-		-- pages of memory consumed
-		create table #memoryConsumed (type varchar(500), pagesAllocated bigint)
-
-		set @cSQLString = '
-			insert into #memoryConsumed
-			select *
-				from openQuery([' + @cServerName + '], ''select [type], sum(PAGES_ALLOCATED_COUNT) as pagesAllocated from SYS.DM_OS_MEMORY_OBJECTS group by [type]'')'
-
-		insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'SQL 2005 Memory Pages Consumed', @cSQLString, @nUkeyGroup)
-
-		if @bTesting = 1
-			print @cSQLString
-
-		exec sp_executeSQL @cSQLString
-
-		insert into performanceLog_stage (serverName, [objectName], [counterName], [instanceName], counterValue, counterType, runStamp)
-		select @cServerName, 'SQLBeat Statistics', 'Memory Pages Allocated', [type], pagesAllocated, '', @nRunStamp from #memoryConsumed
-
-		drop table #memoryConsumed
-	end
 
 	--*********************************************************************************************************************
 	--*********************************************************************************************************************
@@ -610,6 +401,8 @@ begin
 		--*********************************************************************************************************************
 		-- Add job data to local mart tables
 		--*********************************************************************************************************************
+
+		insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Adding to local job tables', '', @nUkeyGroup)
 
 		insert into dm_serverJobs (ukey_server, jobName, job_id, isEnabled)
 		select distinct @nUkeyServer, a.jobName, a.job_id, a.isEnabled
@@ -813,6 +606,8 @@ begin
 		--********************************************************************************************************
 		--********************************************************************************************************
 		-- Now, let's find any jobs that are running now and running longer than they should
+
+		insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Setting job properties', '', @nUkeyGroup)
 
 		-- first, look at last weeks at exactly this time
 		update #runningJobs
@@ -1307,8 +1102,8 @@ begin
 					substring( convert(varchar,a.last_batch,111) ,6  ,5 ) + space(1) + substring( convert(varchar,a.last_batch,113) ,13 ,8 ) as LastBatch,
 					a.program_name, a.lastWaitType, a.login_time, a.net_address, a.last_batch, a.waitType, a.waitTime, a.waitResource,
 					getDate() as ymd
-					from master.dbo.sysprocesses a
-					left outer join master.dbo.sysdatabases b on a.dbid = b.dbid
+					from master.dbo.sysprocesses a (nolock)
+					left outer join master.dbo.sysdatabases b (nolock) on a.dbid = b.dbid
 					where a.spid > 50'')'
 
 		insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Running processes', @cSQLString, @nUkeyGroup)
@@ -1597,25 +1392,27 @@ begin
 						group by spid, dbid, objid, type, mode
 
 					insert into #lockSummary
-					select
-						isnull(req_spid, 0) as spid,
-						isnull(rsc_dbid, 0) as rsc_dbid,
-						isnull(rsc_objid, 0) as rsc_objid,
-						case when isnull(req_status, 0) = 1 then ''Granted''
-							when isnull(req_status, 0) = 2 then ''Converting''
-							when isnull(req_status, 0) = 3 then ''Waiting''
-							else ''Unknown''
-							end as type,
-						'''' as mode,
-						count(*)
-						from [' + @cServerName + '].master.dbo.syslockinfo
-						where rsc_objid <> 0
-						group by req_spid, rsc_dbid, rsc_objid,
-							case when isnull(req_status, 0) = 1 then ''Granted''
-								when isnull(req_status, 0) = 2 then ''Converting''
-								when isnull(req_status, 0) = 3 then ''Waiting''
-								else ''Unknown''
-								end
+					select *
+						from openquery([' + @cServerName + '],''
+							select
+								isnull(req_spid, 0) as spid,
+								isnull(rsc_dbid, 0) as rsc_dbid,
+								isnull(rsc_objid, 0) as rsc_objid,
+								case when isnull(req_status, 0) = 1 then ''''Granted''''
+									when isnull(req_status, 0) = 2 then ''''Converting''''
+									when isnull(req_status, 0) = 3 then ''''Waiting''''
+									else ''''Unknown''''
+									end as type,
+								'''''''' as mode,
+								count(*)
+								from master.dbo.syslockinfo (nolock)
+								where rsc_objid <> 0
+								group by req_spid, rsc_dbid, rsc_objid,
+									case when isnull(req_status, 0) = 1 then ''''Granted''''
+										when isnull(req_status, 0) = 2 then ''''Converting''''
+										when isnull(req_status, 0) = 3 then ''''Waiting''''
+										else ''''Unknown''''
+										end'')
 				end'
 
 			if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
@@ -2101,7 +1898,7 @@ begin
 				create procedure ' + @cProcedureName + '
 				as
 				begin
-						insert into #fileSizes (dbname, objectName, fileName, size)
+						insert into #fileSizes (dbname, objectName, fileName, size, fileID)
 				'
 
 		-- at times, especially on LS destination servers we hit a "in the middle of a restore" error, but there doesn't
@@ -2120,11 +1917,11 @@ begin
 						create procedure ' + @cProcedureName + '
 						as
 						begin
-								insert into #fileSizes (dbname, objectName, fileName, size)
+								insert into #fileSizes (dbname, objectName, fileName, size, fileID)
 						'
 
 			set @cSQLString = @cSQLString + '
-	SELECT ''' + @cThisDatabase + ''', left(name, 100) collate SQL_Latin1_General_CP1_CI_AS , left(fileName, 100) collate SQL_Latin1_General_CP1_CI_AS , ([size]*8)/1024
+	SELECT ''' + @cThisDatabase + ''', left(name, 100) collate SQL_Latin1_General_CP1_CI_AS , left(fileName, 100) collate SQL_Latin1_General_CP1_CI_AS , ([size]*8)/1024, fileID
 	FROM [' + @cServerName + '].[' + @cThisDatabase + '].dbo.sysfiles
 	union'
 
@@ -2188,8 +1985,8 @@ begin
 			set isLog = 1
 			where objectName like '%.ldf%' or fileName like '%.ldf%'
 
-		insert into databaseFileSizeLog (serverName, dbname, objectname, [fileName], [size], isLog)
-		select @cServername, dbName, objectName, [fileName], [size], isLog
+		insert into databaseFileSizeLog (serverName, dbname, objectname, [fileName], [size], isLog, fileID)
+		select @cServername, dbName, objectName, [fileName], [size], isLog, fileID
 			from #fileSizes
 
 		insert into #results (message, severity, subject)
@@ -2250,6 +2047,103 @@ begin
 			where totalSize >= 1800
 				and @cVersion like '%desktop engine%'
 
+	end
+
+	--*********************************************************************************************************************
+	-- CPU and Disk queues
+	--*********************************************************************************************************************
+
+	if (@cVersion like '%server 2005%' or @cVersion like '%server 2008%')
+	begin
+		create table #cpuTasks (cpuNumber varchar(20), currentTasks int, waitingTasks int)
+
+ 		set @cSQLString = '
+			create procedure ' + @cProcedureName + '
+			as
+			begin
+				select * from openquery([' + @cServerName + '], ''select scheduler_id as cpuNumber, current_tasks_count as currentTasks, runnable_tasks_count as waitingTasks	from sys.dm_os_schedulers where scheduler_id < 255'')
+			end'
+
+		if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
+			execute('drop procedure ' + @cProcedureName)
+
+		insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'CPU task queue', @cSQLString, @nUkeyGroup)
+
+		exec sp_executeSQL @cSQLString
+
+		if @bTesting = 1
+			print @cSQLString
+
+		insert into #cpuTasks (cpuNumber, currentTasks, waitingTasks)
+		EXECUTE(@cProcedureName)
+
+		insert into #results (severity, subject, message)
+		select
+			2,
+			'CPU ' + convert(varchar(20), cpuNumber) + ' has ' + convert(varchar(20), waitingTasks) + ' tasks waiting.',
+			'CPU ' + convert(varchar(20), cpuNumber) + ' has ' + convert(varchar(20), currentTasks) + ' tasks running and ' + convert(varchar(20), waitingTasks) + ' tasks waiting.'
+			from #cpuTasks
+			where waitingTasks > 0
+
+		drop table #cpuTasks
+
+		--***************************************************************************************************
+		-- Disk IO Waiting to complete
+
+		create table #waitingIO (ukey int identity, databaseName varchar(500), fileID int, numRequests int, msWaiting bigint)
+
+ 		set @cSQLString = '
+			create procedure ' + @cProcedureName + '
+			as
+			begin
+				select * from openquery([' + @cServerName + '], ''
+		select
+			a.[name] as databaseName,
+			b.file_id as fileID,
+			count(*) as numRequests,
+			sum(io_pending_ms_ticks) as msWaiting
+			from master..sysdatabases a (nolock)
+			join (
+				select
+					database_id, file_id, io_stall, io_pending_ms_ticks, scheduler_address
+					from sys.dm_io_virtual_file_stats(NULL, NULL) t1
+					join sys.dm_io_pending_io_requests as t2 on t1.file_handle = t2.io_handle
+				) b on a.dbid = b.database_id
+			group by a.[name], b.file_id
+			order by a.[name], b.file_id
+				'')
+			end'
+
+		if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
+			execute('drop procedure ' + @cProcedureName)
+
+		insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Disk IO queue', @cSQLString, @nUkeyGroup)
+
+		exec sp_executeSQL @cSQLString
+
+		if @bTesting = 1
+			print @cSQLString
+
+		insert into #waitingIO (databaseName, fileID, numRequests, msWaiting)
+		EXECUTE(@cProcedureName)
+
+		insert into #results (severity, subject, message)
+		select
+			2,
+			convert(varchar(20), a.numRequests) + ' requests waiting for ' + convert(varchar(20), a.msWaiting) + 'ms on "' + left(b.filePath, 3) + '"' as subject,
+			'Database ' + a.databaseName + ' has ' + convert(varchar(20), a.numRequests) + ' requests waiting for ' + convert(varchar(20), a.msWaiting) + 'ms on "' + b.filePath + '"' as message
+			from #waitingIO a
+			left outer join (
+				select
+					distinct dbName as databaseName, fileID, fileName as filePath
+					from databaseFileSizeLog (nolock)
+					where serverName = @cServerName
+						and ymd >= dateAdd(hour, -3, getDate())
+				) b on a.databaseName = b.databaseName
+					and a.fileID = b.fileID
+			where a.msWaiting >= 500 or a.numRequests >= 2
+
+		drop table #waitingIO
 	end
 
 	--*********************************************************************************************************************

@@ -1,3 +1,7 @@
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 ALTER    procedure [dbo].[pr_examineAllServers] (@nServerGroup int)
 as
 begin
@@ -42,6 +46,7 @@ begin
 		if isnull(@bSkipNextRun, 0) = 0
 		begin
 			set @dMinutesSinceLastCheck = dateDiff(minute, @dLastCheck, getDate()) + 30
+			set @dLastCheck = getDate()
 
 			-- This way, if one fails with a recoverable error the rest will continue
 			-- Plus, we pass in the runtime of the last call so it'll know to look further back
@@ -55,11 +60,11 @@ begin
 				set @cMessage = 'SQLBeat failed to make contact with ' + @cServerName
 
 				insert into notificationLog_stage (subject, message, serverName, severity) values (
-					@cSubject, @cMessage, @cServerName, 1)
+					@cSubject, @cMessage, @cServerName, 2)
 			end
 
 			update dm_servers
-				set lastDetailedCheck = getDate()
+				set lastDetailedCheck = @dLastCheck
 				where serverName = @cServerName
 					and isEnabled = 1
 					and detailedCheck = 1
@@ -76,8 +81,3 @@ begin
 	insert into notificationLog_history (stepName, ukey_group) values ('END All', @nServerGroup)
 
 end
-GO
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
