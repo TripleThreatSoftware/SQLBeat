@@ -7,34 +7,75 @@ begin
 	declare @nMinRunstamp bigint
 	declare @nMaxRunstamp bigint
 
+	declare @nSixHours bigint
+	set @nSixHours = dbo.fn_returnRunStamp(dateAdd(hour, -6, getDate()))
+
+	if exists (select top 1 [name] from sysobjects where [name] = 'performanceLog_stageNew')
+		drop table performanceLog_stageNew
+
+	CREATE TABLE [dbo].[performanceLog_stageNew](
+		[ukey] [bigint] IDENTITY(1,1) NOT NULL,
+		[ymd] [datetime] NULL CONSTRAINT [DF_performanceLog_stageNew_ymd]  DEFAULT (getdate()),
+		[serverName] [varchar](200) NULL,
+		[objectName] [varchar](255) NULL,
+		[counterName] [varchar](255) NULL,
+		[instanceName] [varchar](255) NULL,
+		[counterValue] [decimal](30, 4) NULL,
+		[counterType] [bigint] NULL,
+		[runStamp] [bigint] NULL,
+		[originalValue] [decimal](30, 4) NULL
+		)
+
+	CREATE CLUSTERED INDEX [ix_performanceLogStageNew_ukey] ON [dbo].[performanceLog_stageNew] (ukey) with fillfactor = 50
+	CREATE INDEX [ix_performanceLogStageNew_runstamp_server_object_counter_ukey] ON [dbo].[performanceLog_stageNew] ([runStamp] ASC,[serverName] ASC,[objectName] ASC,[counterName] ASC,[ukey] ASC) with fillfactor = 50
+	create index ix_performanceLogStageNew_counterType_ukey on performanceLog_stageNew (counterType, ukey) with fillfactor = 50
+
+	begin transaction swapStagingTable
+
+		exec sp_rename 'performanceLog_stage', 'performanceLog_stageOld'
+		exec sp_rename 'performanceLog_stageNew', 'performanceLog_stage'
+
+		set @nMaxUkey = (select max(ukey) from performanceLog_stageOld)
+		if isnull(@nMaxUkey, 0) = 0
+			set @nMaxUkey = (select max(ukey) from performanceLog)
+		if isnull(@nMaxUkey, 0) = 0
+			set @nMaxUkey = 1
+
+		dbcc checkident('performanceLog_stage', reseed, @nMaxUkey)
+
+		exec sp_rename 'performanceLog_stage.ix_performanceLogStageNew_runstamp_server_object_counter_ukey', 'ix_performanceLogStage_runstamp_server_object_counter_ukey', 'index'
+		exec sp_rename 'performanceLog_stage.ix_performanceLogStageNew_ukey', 'ix_performanceLogStage_ukey', 'index'
+		exec sp_rename 'performanceLog_stage.ix_performanceLogStageNew_counterType_ukey', 'ix_performanceLogStage_counterType_ukey', 'index'
+
+		exec sp_rename 'DF_performanceLog_stage_ymd', 'DF_performanceLog_stageOld_ymd', 'object'
+		exec sp_rename 'DF_performanceLog_stageNew_ymd', 'DF_performanceLog_stage_ymd', 'object'
+
+	commit transaction swapStagingTable
+
 	select
-		@nMaxUkey = max(ukey),
-		@nMinUkey = min(ukey),
 		@nMinRunstamp = min(runstamp),
 		@nMaxRunstamp = max(runstamp)
-		from performanceLog_stage (nolock)
+		from performanceLog_stageOld (nolock)
 
 	insert into dm_performanceObjects (objectName)
 	select a.objectName
-		from (select distinct objectName from performanceLog_stage (nolock) where ukey <= @nMaxUkey) a
+		from (select distinct objectName from performanceLog_stageOld (nolock)) a
 		left outer join dm_performanceObjects b (nolock) on a.objectName = b.objectName
 		where b.ukey is null
 
 	insert into dm_performanceCounters (counterName)
 	select a.counterName
-		from (select distinct counterName from performanceLog_stage (nolock) where ukey <= @nMaxUkey) a
+		from (select distinct counterName from performanceLog_stageOld (nolock)) a
 		left outer join dm_performanceCounters b (nolock) on a.counterName = b.counterName
 		where b.ukey is null
 
-	update performanceLog_stage with (rowlock)
+	update performanceLog_stageOld with (tablock)
 		set originalValue = counterValue
-		where ukey <= @nMaxUkey
-			and counterType in (272696576, 1073874176)
+		where counterType in (272696576, 1073874176)
 
-	update performanceLog_stage with (rowlock)
+	update performanceLog_stageOld with (tablock)
 		set counterValue = null
-		where ukey <= @nMaxUkey
-			and counterType in (272696576, 1073874176)
+		where counterType in (272696576, 1073874176)
 
 	select
 		a.runStamp,
@@ -50,16 +91,14 @@ begin
 
 		into #newRecords
 
-		from performanceLog_stage a (nolock)
+		from performanceLog_stageOld a (nolock)
 		join dm_servers b (nolock) on a.serverName = b.serverName
 		join dm_performanceObjects c (nolock) on a.objectName = c.objectName
 		join dm_performanceCounters d (nolock) on a.counterName = d.counterName
 
-		where a.runstamp <= @nMaxRunstamp
-
 	create clustered index ix_tmp_newRecords on #newRecords (runStamp, ukey_server, ukey_object, ukey_counter, ukey) with fillfactor = 100
 
-	delete from performanceLog_stage with (tablock) where runstamp <= @nMaxRunstamp
+	drop table performanceLog_stageOld
 
 	-- get rid of duplicates
 	delete #newRecords
@@ -85,7 +124,8 @@ begin
 					and a.ukey_counter = b.ukey_counter
 					and a.instanceName = b.instanceName
 					and b.runStamp < a.runStamp
-					and b.runStamp >= dbo.fn_returnRunStamp(dateAdd(hour, -12, getDate()))
+					and b.runStamp >= @nSixHours
+					and b.counterType in (272696576, 1073874176)
 				where a.counterType in (272696576, 1073874176)
 					and a.counterValue is null
 					and a.runStamp >= @nMinRunstamp
@@ -119,3 +159,4 @@ end
 --			dbo.fn_padl(convert(varchar(3), datePart(millisecond, ymd)), 3, '0')
 --		)
 --	where runStamp = 20071012101303660
+GO
