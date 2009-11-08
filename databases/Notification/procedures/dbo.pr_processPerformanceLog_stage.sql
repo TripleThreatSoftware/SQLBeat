@@ -12,6 +12,8 @@ begin
 
 	if exists (select top 1 [name] from sysobjects where [name] = 'performanceLog_stageNew')
 		drop table performanceLog_stageNew
+	if exists (select top 1 [name] from sysobjects where [name] = 'performanceLog_stageOld')
+		drop table performanceLog_stageOld
 
 	CREATE TABLE [dbo].[performanceLog_stageNew](
 		[ukey] [bigint] IDENTITY(1,1) NOT NULL,
