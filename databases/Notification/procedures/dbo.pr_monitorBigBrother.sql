@@ -82,7 +82,7 @@ begin
 		expectedRunningSeconds int default 0, maxRunningSeconds int default 0, isSystemJob bit default 0, spid int)
 
 
-	create table #results (ukey int identity, subject varchar(300), message varchar(8000), severity int default 1,
+	create table #results (ukey int identity, subject varchar(300), message varchar(8000), severity int default 3,
 			isJobFailure bit default 0, isLogShippingJobFailure bit default 0, isLongRunningJob bit default 0,
 			isBlocking bit default 0, isLongRunningProcess bit default 0, isDriveSpace bit default 0,
 			isLogSize bit default 0, isEventLog bit default 0, serverName varchar(100) default @@serverName,
@@ -1101,6 +1101,7 @@ begin
 	--declare @cThisMessage varchar(8000)
 	--declare @cThisSubject varchar(8000)
 	--declare @nUkeyServer int
+	--declare @bSuccess bit
 
 	--set @nUkeyServer = -1
 
@@ -1135,6 +1136,7 @@ begin
 	delete from #detailedChecks where runGUID is null
 
 	update #detailedChecks set isRunning = 1 where isSuccess = 0 and isFailure = 0
+	update #detailedChecks set isRunning = 0 where isSuccess = 1 or isFailure = 1
 
 	-- get average runtimes
 	select ukey_group, serverName, avg(convert(decimal(10,2), runningSeconds)) as avgRuntime
@@ -1260,6 +1262,10 @@ begin
 			update #detailedChecks
 				set jobHistory = @cBuffer
 				where ukey = @nUkey
+
+			-- this message won't be very helpful, so don't bother sending it
+			if isnull(@cBuffer, '') = ''
+				delete from #detailedChecks where ukey = @nUkey and isFailure = 1
 		end
 	end
 
@@ -1285,17 +1291,23 @@ begin
 					end +
 				char(13) + char(13) +
 				'Average Server Runtime: ' + isnull(convert(varchar(20), convert(decimal(10,2), b.avgRuntime)), 'N/A') + char(13) +
-				'Run History: ' + char(13) +
-				isnull(a.runHistory, 'N/A') + char(13) + char(13) +
 				'Job Status: ' + char(13) +
-				isnull(a.jobHistory, 'N/A'),
+				isnull(a.jobHistory, 'N/A') + char(13) + char(13) +
+				'Run History: ' + char(13) +
+				isnull(a.runHistory, 'N/A'),
 			8000) as message,
 		3 as severity
 		from #detailedChecks a
 		left outer join #runtimeHistory b on a.ukey_group = b.ukey_group
 			and a.serverName = b.serverName
+		join dm_servers c (nolock) on a.serverName = c.serverName
+			and isnull(c.ignoreTimeouts, 1) = 0
 		where a.isFailure = 1
-			or b.serverName is not null
+			or (
+				-- it's long running
+				b.serverName is not null
+				and dateDiff(second, a.startTime, getDate()) > 500
+				)
 
 	-- only send the alert once every 10 minutes
 	delete #results
@@ -1347,6 +1359,11 @@ begin
 	select [name]
 		from master.dbo.sysdatabases (nolock)
 		where [name] not in ('master', 'model', 'msdb', 'northwind')
+			and (status & 32) <> 32 -- loading
+			and (status & 64) <> 64 -- prerecovery
+			and (status & 128) <> 128 -- recovery
+			and (status & 512) <> 512 -- offline
+			and (status & 4096) <> 4096 -- single user
 
 	while exists (select top 1 * from #databaseNames)
 	begin

@@ -1,10 +1,11 @@
-USE [Notification]
+USE [notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_monitorJobIntervals]    Script Date: 10/11/2009 11:01:32 ******/
+/****** Object:  StoredProcedure [dbo].[pr_monitorJobIntervals]    Script Date: 11/09/2009 17:46:44 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 ALTER procedure [dbo].[pr_monitorJobIntervals]
 as
 begin
@@ -34,7 +35,7 @@ begin
 			) a
 
 	insert into #commands (commandText)
-	select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @isEnabled = 1'
+	select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @Enabled = 1'
 		from (
 			select a.groupName, b.job_id, jobName, count(distinct c.ukey) as numServers
 				from dm_serverGroups a (nolock)
@@ -75,7 +76,7 @@ begin
 			) a
 
 	insert into #commands (commandText)
-	select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @isEnabled = 1'
+	select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @Enabled = 1'
 		from (
 			select a.groupName, b.job_id, jobName, count(distinct c.ukey) as numServers
 				from dm_serverGroups a (nolock)
@@ -116,7 +117,7 @@ begin
 			) a
 
 	insert into #commands (commandText)
-	select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @isEnabled = 1'
+	select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @Enabled = 1'
 		from (
 			select a.groupName, b.job_id, jobName, count(distinct c.ukey) as numServers
 				from dm_serverGroups a (nolock)
@@ -157,7 +158,7 @@ begin
 			) a
 
 	insert into #commands (commandText)
-	select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @isEnabled = 1'
+	select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @Enabled = 1'
 		from (
 			select a.groupName, b.job_id, jobName, count(distinct c.ukey) as numServers
 				from dm_serverGroups a (nolock)
@@ -197,7 +198,7 @@ begin
 			) a
 
 	insert into #commands (commandText)
-	select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @isEnabled = 1'
+	select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @Enabled = 1'
 		from (
 			select a.groupName, b.job_id, jobName, count(distinct c.ukey) as numServers
 				from dm_serverGroups a (nolock)
@@ -236,7 +237,7 @@ begin
 			) a
 
 	insert into #commands (commandText)
-	select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @isEnabled = 1'
+	select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @Enabled = 1'
 		from (
 			select a.groupName, b.job_id, jobName, count(distinct c.ukey) as numServers
 				from dm_serverGroups a (nolock)

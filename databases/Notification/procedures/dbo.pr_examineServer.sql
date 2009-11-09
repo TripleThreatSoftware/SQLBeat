@@ -237,6 +237,7 @@ begin
 
 	declare @cVersion varchar(500)
 	set @cVersion = (select top 1 results from #junkString)
+	set @cVersion = left(@cVersion, 50)
 
 	update dm_servers set serverVersion = @cVersion where ukey = @nUkeyServer and isnull(serverVersion, '') <> @cVersion
 
@@ -2081,9 +2082,10 @@ begin
 		select
 			2,
 			'CPU ' + convert(varchar(20), cpuNumber) + ' has ' + convert(varchar(20), waitingTasks) + ' tasks waiting.',
-			'CPU ' + convert(varchar(20), cpuNumber) + ' has ' + convert(varchar(20), currentTasks) + ' tasks running and ' + convert(varchar(20), waitingTasks) + ' tasks waiting.'
+			'Time: ' + convert(varchar(20), getDate(), 120) + ' <br>' +
+				'CPU ' + convert(varchar(20), cpuNumber) + ' has ' + convert(varchar(20), currentTasks) + ' tasks running and ' + convert(varchar(20), waitingTasks) + ' tasks waiting.'
 			from #cpuTasks
-			where waitingTasks > 0
+			where waitingTasks > 1
 
 		drop table #cpuTasks
 
@@ -2131,7 +2133,8 @@ begin
 		select
 			2,
 			convert(varchar(20), a.numRequests) + ' requests waiting for ' + convert(varchar(20), a.msWaiting) + 'ms on "' + left(b.filePath, 3) + '"' as subject,
-			'Database ' + a.databaseName + ' has ' + convert(varchar(20), a.numRequests) + ' requests waiting for ' + convert(varchar(20), a.msWaiting) + 'ms on "' + b.filePath + '"' as message
+			'Time: ' + convert(varchar(20), getDate(), 120) + '<br>' +
+				'Database ' + a.databaseName + ' has ' + convert(varchar(20), a.numRequests) + ' requests waiting for ' + convert(varchar(20), a.msWaiting) + 'ms on "' + b.filePath + '"' as message
 			from #waitingIO a
 			left outer join (
 				select
@@ -2141,7 +2144,7 @@ begin
 						and ymd >= dateAdd(hour, -3, getDate())
 				) b on a.databaseName = b.databaseName
 					and a.fileID = b.fileID
-			where a.msWaiting >= 500 or a.numRequests >= 2
+			where a.msWaiting >= 250 -- or a.numRequests >= 2
 
 		drop table #waitingIO
 	end
