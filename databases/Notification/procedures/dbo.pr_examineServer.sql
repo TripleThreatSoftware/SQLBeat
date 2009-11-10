@@ -1119,11 +1119,18 @@ begin
 		begin
 			create table #processActivity (spid int, cpuTime bigint, pagesInMemory bigint, reads bigint, writes bigint, logicalReads bigint)
 
+			-- this is sql2005 SP3 specific
 			set @cSQLString = 'select * from openQuery([' + @cServerName + '], ''select session_id, cpu_time, memory_usage, reads, writes, logical_reads from SYS.DM_EXEC_SESSIONS'')'
 			insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Running processes', @cSQLString, @nUkeyGroup)
 
-			insert into #processActivity
-			exec sp_executeSQL @cSQLString
+
+			begin try
+				insert into #processActivity
+				exec sp_executeSQL @cSQLString
+			end try
+			begin catch
+				insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Error determining running processes', @cSQLString, @nUkeyGroup)
+			end catch
 
 			update #processes
 				set cpuTime = b.cpuTime,
