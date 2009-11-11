@@ -1,3 +1,8 @@
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
 ALTER procedure [dbo].[pr_monitorDatabaseBackups]
 as
 begin
@@ -6,6 +11,7 @@ begin
 
 	declare @cSQLString nvarchar(4000)
 	declare @cServerName varchar(500)
+	declare @bCheckBackups bit
 	set @cServerName = ''
 
 	create table #results (serverName varchar(200), dbName varchar(200), backupDate dateTime, backupLocation varchar(500), backupSize bigint)
@@ -13,22 +19,20 @@ begin
 	while exists (
 		select top 1 serverName
 			from dm_servers a
-			join dm_serverGroups b on a.ukey_group = b.ukey
-				and b.isProduction = 1
+--			join dm_serverGroups b on a.ukey_group = b.ukey
+--				and b.isProduction = 1
 			where detailedCheck = 1
 				and isenabled = 1
 				and serverName > @cServerName
-				and checkDatabaseBackups = 1
 		)
 	begin
-		select top 1 @cServerName = serverName
+		select top 1 @cServerName = serverName, @bCheckBackups = checkDatabaseBackups
 			from dm_servers a
-			join dm_serverGroups b on a.ukey_group = b.ukey
-				and b.isProduction = 1
+--			join dm_serverGroups b on a.ukey_group = b.ukey
+--				and b.isProduction = 1
 			where detailedCheck = 1
 				and isenabled = 1
 				and serverName > @cServerName
-				and checkDatabaseBackups = 1
 			order by serverName
 
 		set @cSQLString = '
@@ -37,67 +41,89 @@ begin
 
 	select
 		''' + @cServerName + ''' as serverName,
-		isnull(a.[name], '''') as dbName ,
+		isnull(b.database_name, '''') as dbName ,
 		backup_finish_date as backupDate,
 		isnull(d.physical_device_name, '''') as backupLocation,
-		c.backup_size as backupSize
+		b.backup_size as backupSize
 
-		from [' + @cServerName + '].master.dbo.sysdatabases a
-		left outer join (
-			select database_name, max(backup_set_id) as backup_set_id
-				from [' + @cServerName + '].msdb.dbo.backupset
-				where type = ''D''
-					and backup_start_date >= @dStartDate
-				group by database_name
-			) b on a.[name] = b.database_name
-		left outer join [' + @cServerName + '].msdb.dbo.backupset c on a.[name] = c.database_name
-			and b.backup_set_id = c.backup_set_id
-			and c.type = ''D''
-		left outer join [' + @cServerName + '].msdb.dbo.backupmediafamily d on c.media_set_id = d.media_set_id
-		where a.name not in (''master'', ''model'', ''msdb'', ''tempdb'', ''distribution'')'
+		from [' + @cServerName + '].msdb.dbo.backupset b
+		join [' + @cServerName + '].msdb.dbo.backupmediafamily d on b.media_set_id = d.media_set_id
+		where b.database_name not in (''master'', ''model'', ''msdb'', ''tempdb'', ''distribution'')
+			and b.type = ''D''
+			and b.backup_start_date >= @dStartDate'
 
 		insert into #results
 		exec sp_executeSQL @cSQLString
 	end
 
-	delete
+	delete #results
+		from #results a
+		join databaseBackupLog b (nolock) on a.serverName = b.serverName
+			and a.dbName = b.dbName
+			and isnull(a.backupDate, '') = isnull(b.ymd, '')
+
+	insert into databaseBackupLog (serverName, dbName, ymd, backupLocation, backupSize)
+	select serverName, dbName, backupDate, backupLocation, backupSize
 		from #results
-		where isnull(backupDate, '') >= dateAdd(day, -7, getDate())
+
+	select distinct a.serverName, a.dbName
+		into #allDatabases
+		from databaseFileSizeLog a (nolock)
+		join (
+			select serverName, max(ymd) as ymd from databaseFileSizeLog (nolock) group by serverName
+			) b on a.serverName = b.serverName
+			and a.ymd = b.ymd
+		where a.dbName not in ('master', 'model', 'msdb', 'tempdb', 'distribution')
+
+	delete #allDatabases
+		from #allDatabases a
+		left outer join dm_servers b (nolock) on a.serverName = b.serverName
+		where isnull(b.checkDatabaseBackups, 0) = 0
+
+	select a.serverName, a.dbName, b.ymd as backupDate
+		into #alertResults
+		from #allDatabases a
+		left outer join (
+			select serverName, dbName, max(ymd) as ymd
+				from databaseBackupLog (nolock)
+				group by serverName, dbName
+			) b on a.serverName = b.serverName
+			and a.dbName = b.dbName
+		where dateDiff(day, b.ymd, getDate()) > 7
+			or b.serverName is null
 
 	declare @cSubject varchar(500)
 	declare @cMessage varchar(8000)
 	declare @nNumDatabases int
 	set @cServerName = ''
 
-	while exists (select top 1 serverName from #results where serverName > @cServerName)
+	while exists (
+		select top 1 a.serverName
+			from #alertResults a
+			where a.serverName > @cServerName
+		)
 	begin
-		select top 1 @cServerName = serverName
-			from #results
-			where serverName > @cServerName
-			order by serverName
+		select top 1 @cServerName = a.serverName
+			from #alertResults a
+			where a.serverName > @cServerName
+			order by a.serverName
 
-		set @nNumDatabases = (select count(*) from #results where serverName = @cServerName)
+		set @nNumDatabases = (select count(*) from #alertResults where serverName = @cServerName)
 
 		set @cSubject = convert(varchar(20), @nNumDatabases) + ' databases on ' + @cServerName + ' have not been backed up.'
-		set @cMessage =
-			left('Server' + space(20), 20) + space(1) +
-			left('Database' + space(25), 25) + space(1) +
-			left('Last Backup' + space(20), 20) + char(13) +
-			replicate('=', 20) + space(1) +
-			replicate('=', 25) + space(1) +
-			replicate('=', 20) + char(13)
+		set @cMessage = '<table><tr><th>Server</th><th>Database</th><th>Last Backup</th></tr>'
 
 		select @cMessage = @cMessage +
-			left(serverName + space(20), 20) + space(1) +
-			left(dbName + space(25), 25) + space(1) +
-			left(isnull(convert(varchar(20), backupDate, 120), 'N/A') + space(20), 20) + char(13)
-			from #results
+			'<tr><td>' + serverName + '</td><td>' + dbName + '</td><td>' + isnull(convert(varchar(20), backupDate, 120), 'N/A') + '</td></tr>'
+			from #alertResults
 			where serverName = @cServerName
 			order by dbName
 
-		insert into notificationLog_stage (serverName, severity, subject, message) values (@cServerName, 2, @cSubject, @cMessage)
+		set @cMessage = @cMessage + '</table>'
+
+		insert into notificationLog_stage (serverName, severity, subject, message) values (@cServerName, 3, @cSubject, @cMessage)
 	end
 
 	drop table #results
+	drop table #alertResults
 end
-GO
