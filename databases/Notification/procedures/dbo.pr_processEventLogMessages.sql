@@ -23,7 +23,7 @@ begin
 	select *,
 		convert(varchar(8000), '') as emailMessage,
 		convert(varchar(8000), '') as emailSubject,
-		convert(int, 2) as severity,
+		convert(int, 3) as severity,
 		convert(bit, 1) as isInformational
 		into #eventLog
 		from eventLog_stage a (nolock)
@@ -80,7 +80,12 @@ begin
 			and message not like '%backup%'
 			and message not like '%restore%'
 			and message not like '%dtc%'
+			and message not like '%cachestore flush%'
+			and message not like '%setting database option%'
+			and message not like '%is marked restoring%'
+			and message not like '%starting up database%'
 
+			and message not like '%autoreconnect failed%'
 			and message not like '%unloaded user%registry%'
 			and message not like '%perfmon%'
 			and message not like '%performance logs and alerts service%'
@@ -155,22 +160,26 @@ begin
 	update #eventLog
 		set emailMessage = isnull(computerName, 'BAD COMPUTER NAME') + ' @ ' + convert(varchar(20), convert(dateTime, timeWritten), 120) + char(13) + char(13) + isnull(message, 'BAD MESSAGE'),
 			severity = case when
-				message like '%temperature%'
-				or message like '%thermal%'
-				or message like '%shutdown%'
-				or message like '%eaas%'
-				or message like '%degraded%'
-				or message like '%lost communication%'
-				or message like '%network adapter%'
-				or message like '%cluster node%'
-				or message like '%sensor%'
-				or message like '%drive array%'
-				or message like '%power supply%'
-				or message like '%connectivity has been lost%'
-				or message like '%network link is down%'
-				or message like '%The Event log service was stopped%'
-				or message like '%The Event log service was started%'
-				or ((sourceName like '%clussvc%' or sourceName like '%mssqlserver%') and type = 'Error')
+				message not like '%sspi%'
+				and (
+					message like '%temperature%'
+					or message like '%thermal%'
+					or message like '%shutdown%'
+					or message like '%eaas%'
+					or message like '%degraded%'
+					or message like '%lost communication%'
+					or message like '%network adapter%'
+					or message like '%cluster node%'
+					or message like '%sensor%'
+					or message like '%sqsrvres%'
+					or message like '%drive array%'
+					or message like '%power supply%'
+					or message like '%connectivity has been lost%'
+					or message like '%network link is down%'
+					or message like '%The Event log service was stopped%'
+					or message like '%The Event log service was started%'
+					or ((sourceName like '%clussvc%' or sourceName like '%mssqlserver%') and type = 'Error')
+					)
 				then 1
 				else 2 end,
 			emailSubject = 'EventLog @ ' + left(right(convert(varchar(20), convert(dateTime, timeWritten), 120), 8), 5) + ' : ' + isnull(message, 'BAD MESSAGE')

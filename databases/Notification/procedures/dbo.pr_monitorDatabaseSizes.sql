@@ -1,25 +1,24 @@
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
 ALTER procedure [dbo].[pr_monitorDatabaseSizes]
 as
 begin
 
 	select
-		serverName, databaseName,
-		convert(varchar(10), ymd, 120) as ymd,
-		max(reserved) as reserved,
+		serverName,
+		dbName as databaseName,
+		ymd,
+		sum(convert(bigint, size)) as reserved,
 		convert(decimal(10,2), 0) as delta,
 		identity(int) as ukey
 		into #sizeHistory
-		from (
-			select
-				serverName,
-				dbName as databaseName,
-				ymd,
-				sum(convert(bigint, size)) as reserved
-				from databaseFileSizeLog (nolock)
-				where ymd >= dateAdd(week, -1, getDate())
-				group by serverName, dbName, ymd
-			) a
-		group by serverName, databaseName, convert(varchar(10), ymd, 120)
+		from databaseFileSizeLog (nolock)
+		where ymd >= dateAdd(day, -2, getDate())
+		group by serverName, dbName, ymd
 		order by serverName, databaseName, ymd
 
 	update a
@@ -33,13 +32,14 @@ begin
 			and a.databaseName = b.databaseName
 			and a.ukey = b.ukey + 1
 
-	insert into notificationLog_stage (serverName, severity, subject, message)
+	insert into notificationLog_stage (serverName, severity, subject, message, ymd)
 	select
 		a.serverName, 3 as severity,
-		'Database ' + a.databaseName + ' increased in size by ' + convert(varchar(20), delta) + '% on ' + convert(varchar(10), getDate(), 120) + '.' as subject,
-		'Database ' + a.databaseName + ' increased in size from ' + dbo.fn_returnFormattedInt(sizeBefore) + ' to ' + dbo.fn_returnFormattedInt(sizeNow) + ' (' + convert(varchar(20), delta) + '%) as of ' + convert(varchar(20), getDate(), 120) + '.' as message
+		'Database ' + a.databaseName + ' increased in size by ' + convert(varchar(20), delta) + '% on ' + convert(varchar(20), a.ymd, 120) + '.' as subject,
+		'Database ' + a.databaseName + ' increased in size from ' + dbo.fn_returnFormattedInt(sizeBefore) + ' to ' + dbo.fn_returnFormattedInt(sizeNow) + ' (' + convert(varchar(20), delta) + '%) as of ' + convert(varchar(20), a.ymd, 120) + '.' as message,
+		a.ymd
 		from (
-			select a.serverName, a.databaseName, a.reserved as sizeNow, b.reserved as sizeBefore, a.delta
+			select a.serverName, a.databaseName, a.reserved as sizeNow, b.reserved as sizeBefore, a.delta, a.ymd
 				from #sizeHistory a
 				join #sizeHistory b on a.servername = b.serverName
 					and a.databaseName = b.databaseName
