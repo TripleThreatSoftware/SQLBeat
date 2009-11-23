@@ -158,6 +158,10 @@ begin
 			and isnull(message, '') <> ''
 
 	update #eventLog
+		set isInformational = 1
+		where [type] = 'Information'
+
+	update #eventLog
 		set emailMessage = isnull(computerName, 'BAD COMPUTER NAME') + ' @ ' + convert(varchar(20), convert(dateTime, timeWritten), 120) + char(13) + char(13) + isnull(message, 'BAD MESSAGE'),
 			severity = case when
 				message not like '%sspi%'

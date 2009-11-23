@@ -189,7 +189,8 @@ begin
 		lastWaitType varchar(32), login_time dateTime, net_address varchar(12),
 		waitType binary(2), waitTime bigint, waitResource varchar(256), ymd dateTime default getDate(),
 		lastCPU bigint default 0, lastDisk bigint default 0, lastData dateTime,
-		pagesInMemory bigint, diskReads bigint, diskWrites bigint, logicalReads bigint)
+		pagesInMemory bigint, diskReads bigint, diskWrites bigint, logicalReads bigint,
+		numLocks bigint)
 
 	create table #locks (spid int, dbid int, objid int, indid int, type varchar(100), resource varchar(100), mode varchar(100), status varchar(100))
 
@@ -1118,19 +1119,32 @@ begin
 		if @cVersion like '%2005%' or @cVersion like '%2008%'
 		begin
 			create table #processActivity (spid int, cpuTime bigint, pagesInMemory bigint, reads bigint, writes bigint, logicalReads bigint)
+			create table #processLocks (spid int, numLocks bigint)
 
 			-- this is sql2005 SP3 specific
 			set @cSQLString = 'select * from openQuery([' + @cServerName + '], ''select session_id, cpu_time, memory_usage, reads, writes, logical_reads from SYS.DM_EXEC_SESSIONS'')'
-			insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Running processes', @cSQLString, @nUkeyGroup)
-
+			insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Running processes resource utilization', @cSQLString, @nUkeyGroup)
 
 			begin try
 				insert into #processActivity
 				exec sp_executeSQL @cSQLString
 			end try
 			begin catch
-				insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Error determining running processes', @cSQLString, @nUkeyGroup)
+				insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Error determining running processes resource utilization', @cSQLString, @nUkeyGroup)
 			end catch
+
+			-- this is sql2005 specific
+			set @cSQLString = 'select * from openQuery([' + @cServerName + '], ''select request_session_id, count(*) as numLocks from sys.dm_tran_locks group by request_session_id'')'
+			insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Number of locks', @cSQLString, @nUkeyGroup)
+
+			begin try
+				insert into #processLocks
+				exec sp_executeSQL @cSQLString
+			end try
+			begin catch
+				insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Error determining number of locks', @cSQLString, @nUkeyGroup)
+			end catch
+
 
 			update #processes
 				set cpuTime = b.cpuTime,
@@ -1141,7 +1155,13 @@ begin
 				from #processes a
 				join #processActivity b on a.spid = b.spid
 
+			update #processes
+				set numLocks = b.numLocks
+				from #processes a
+				join #processLocks b on a.spid = b.spid
+
 			drop table #processActivity
+			drop table #processLocks
 		end
 
 		declare @dLastProcessCheck dateTime
@@ -1539,11 +1559,11 @@ begin
 		insert into processLog(serverName, spid, status, login, hostname, blockedBy, dbName, command, cputime, diskio,
 			lastbatch, programName,	buffercontents, lastBatchTime, locks, isBlocked, isBlocker, isWild, sql_handle,
 			lastWaitType, login_time, net_address, waitType, waitTime, waitResource, ymd,
-			pagesInMemory, diskReads, diskWrites, logicalReads)
+			pagesInMemory, diskReads, diskWrites, logicalReads, numLocks)
 		select @cServerName, spid, status, login, hostname, blockedBy, dbName, command, cputime, diskio,
 			lastbatch, programName,	buffercontents, lastBatchTime, locks, isBlocked, isBlocker, isWild, sql_handle,
 			lastWaitType, login_time, net_address, waitType, waitTime, waitResource, ymd,
-			pagesInMemory, diskReads, diskWrites, logicalReads
+			pagesInMemory, diskReads, diskWrites, logicalReads, numLocks
 
 			from #processes
 
@@ -1714,7 +1734,10 @@ begin
 				'********************************************' + char(13) +
 					isnull(buffercontents, '')
 				, 2000) as message,
-			2 as severity,
+
+			-- weight the severity based on how long it's been running
+			case when convert(decimal(10,2), convert(decimal(10,2), dateDiff(second, isnull(lastBatchTime, getDate()), getDate())) / 60) > 15 then 1 else 2 end as severity,
+
 			'User ' + isnull(login, 'N/A') + ' ' +
 				'(' + convert(varchar(20), isnull(SPID, 0)) + ') ' +
 				'started a wild process ' +
@@ -2138,7 +2161,8 @@ begin
 
 		insert into #results (severity, subject, message)
 		select
-			2,
+			-- weight based on how long
+			case when msWaiting > 20000 then 1 else 2 end as severity,
 			convert(varchar(20), a.numRequests) + ' requests waiting for ' + convert(varchar(20), a.msWaiting) + 'ms on "' + left(b.filePath, 3) + '"' as subject,
 			'Time: ' + convert(varchar(20), getDate(), 120) + '<br>' +
 				'Database ' + a.databaseName + ' has ' + convert(varchar(20), a.numRequests) + ' requests waiting for ' + convert(varchar(20), a.msWaiting) + 'ms on "' + b.filePath + '"' as message

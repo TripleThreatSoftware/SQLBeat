@@ -413,11 +413,13 @@ begin
 
 	declare @dLastJobData dateTime
 
-	set @dLastJobData = (select max(ymd) from jobHistory (nolock) where ukey_server = @nUkeyServer)
+--	set @dLastJobData = (select max(ymd) from jobHistory (nolock) where ukey_server = @nUkeyServer)
 
-	-- if we have no job data, just look at today
-	if isnull(@dLastJobData, '') = ''
-		set @dLastJobData = convert(varchar(10), getDate(), 120)
+	set @dLastJobData = dateAdd(hour, -12, getDate())
+
+	---- if we have no job data, just look at today
+	--if isnull(@dLastJobData, '') = ''
+	--	set @dLastJobData = convert(varchar(10), getDate(), 120)
 
 	-- jobs
 	insert into #jobHistory (job_id, jobName, jobOutcome, runningSeconds, ymd, isSuccess, isEnabled)
@@ -752,6 +754,10 @@ begin
 			or jobName like 'maintenance%'
 			or jobName like '%mart%'
 
+			or jobName like '%LSBackup%'
+			or jobName like '%LSRestore%'
+			or jobName like '%LSAlert%'
+
 	-- jobs that we have a history for
 	insert into #results (message, severity, subject, isLongRunningJob)
 	select distinct left(
@@ -1071,7 +1077,7 @@ begin
 						and subject = 'SQLAgent service does not appear to be running'
 				)
 
-	update dm_servers
+	update dm_servers with (rowlock)
 		set isSQLAgentServiceRunning = 0
 		where serverName in (
 			select distinct serverName
@@ -1151,7 +1157,7 @@ begin
 		sum(case when isSuccess = 0 then 1 else 0 end) as numFailures
 		into #failingServers
 		from #detailedChecks a
-		join dm_servers b on a.serverName = b.serverName
+		join dm_servers b (nolock) on a.serverName = b.serverName
 			and b.detailedCheck = 1
 		where startTime >= dateAdd(minute, -60, getDate())
 		group by a.serverName
@@ -1171,7 +1177,7 @@ begin
 
 		insert into #results (serverName, subject, message, severity) values (@@serverName, @cThisSubject, @cThisMessage, 2)
 
-		update dm_servers
+		update dm_servers with (rowlock)
 			set detailedCheck = 0
 			from dm_servers a
 			join #failingServers b on a.serverName = b.serverName
@@ -1430,7 +1436,7 @@ begin
 				)
 			)
 
-	update dm_servers
+	update dm_servers with (rowlock)
 		set serviceCheck = 0
 		from dm_servers a
 		join (
@@ -1472,7 +1478,7 @@ begin
 			join msdb..sysjobs e on e.[name] = 'Configuration Check - ' + c.groupName
 			join #runningJobs f on e.job_id = f.job_id
 
-			join dm_servers g on a.serverName = g.serverName
+			join dm_servers g (nolock) on a.serverName = g.serverName
 
 			where a.serverName is not null
 				and isnull(a.message, '') <> 'END'
@@ -1490,7 +1496,7 @@ begin
 			from #stuckConfigCheck
 
 		-- set the server to sleep that stuck us
-		update dm_servers
+		update dm_servers with (rowlock)
 			set configurationCheckSleepUntil = dateAdd(hour, 2, getDate())
 			from dm_servers a
 			join #stuckConfigCheck b on a.serverName = b.serverName
@@ -1542,7 +1548,7 @@ begin
 		join msdb..sysjobs e on e.[name] = 'EventLog Check - ' + c.groupName
 		join #runningJobs f on e.job_id = f.job_id
 
-		join dm_servers g on a.serverName = g.serverName
+		join dm_servers g (nolock) on a.serverName = g.serverName
 
 		where a.serverName is not null
 			and isnull(a.notes, '') not like '%Examination Completed%'
@@ -1560,7 +1566,7 @@ begin
 --		from #stuckEventLogCheck
 
 	-- set the server to sleep that stuck us
-	update dm_servers
+	update dm_servers with (rowlock)
 		set eventLogCheckSleepUntil = dateAdd(hour, 1, getDate()),
 			lastEventLogCheck = case when dateDiff(day, a.lastEventLogCheck, getDate()) > 7 then dateAdd(week, -1, getDate()) else a.lastEventLogCheck end
 		from dm_servers a
