@@ -48,7 +48,7 @@ begin
 
 		from [' + @cServerName + '].msdb.dbo.backupset b
 		join [' + @cServerName + '].msdb.dbo.backupmediafamily d on b.media_set_id = d.media_set_id
-		where b.database_name not in (''master'', ''model'', ''msdb'', ''tempdb'', ''distribution'')
+		where b.database_name not in (''master'', ''model'', ''msdb'', ''tempdb'', ''distribution'', ''aspstate'', ''reportServerTempDB'')
 			and b.type = ''D''
 			and b.backup_start_date >= @dStartDate'
 
