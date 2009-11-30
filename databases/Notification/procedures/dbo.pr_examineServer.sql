@@ -203,6 +203,7 @@ begin
 	CREATE TABLE #drives (ukey int identity, driveLetter varchar(1), freeSpace int NULL)
 
 	create table #databaseNames (dbname varchar(100), dbID int)
+	create table #suspectDatabases (dbname varchar(200))
 
 	create table #fileSizes (dbname varchar(100), objectname varchar(100), fileName varchar(100), size bigint, isLog bit default 0, fileID int)
 
@@ -275,6 +276,37 @@ begin
 	EXECUTE(@cProcedureName)
 
 
+	--*********************************************************************************************************************
+	-- Identify any suspect remote databases
+	--*********************************************************************************************************************
+
+	set @cSQLString = '
+		create procedure ' + @cProcedureName + '
+		as
+		begin
+			insert into #suspectDatabases (dbName)
+			select [name]
+				from [' + @cServerName + '].master.dbo.sysdatabases
+				where databaseproperty([name], ''IsSuspect'') = 1
+					or databasepropertyex([name], ''Status'') = ''SUSPECT''
+		end'
+
+	if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
+		execute('drop procedure ' + @cProcedureName)
+
+	insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Identifying suspect databases', @cSQLString, @nUkeyGroup)
+	exec sp_executeSQL @cSQLString
+
+	if @bTesting = 1
+		print @cSQLString
+	EXECUTE(@cProcedureName)
+
+	insert into #results (message, severity, subject)
+	select 'Database ' + dbName + ' is SUSPECT', 1, 'Database ' + dbName + ' is SUSPECT'
+		from #suspectDatabases
+		where dbName is not null
+
+	drop table #suspectDatabases
 
 	--*********************************************************************************************************************
 	--*********************************************************************************************************************

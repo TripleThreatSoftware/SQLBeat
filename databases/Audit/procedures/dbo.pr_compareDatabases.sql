@@ -1,9 +1,3 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-
-
 ALTER procedure [dbo].[pr_compareDatabases] (@cSourceServer varchar(500), @cSourceDatabase varchar(500),
 	@cTargetServer varchar(500), @cTargetDatabase varchar(500),
 	@bEmailResults bit = 0, @bTargetIsSubscriber bit = 0)
@@ -41,7 +35,9 @@ begin
 	insert into #results (categoryName, messageText, isAlert)
 	select
 		'Summary',
-		'Last scan date. Source: ' + isnull(convert(varchar(20), @dSourceLastScan, 120), 'N/A') + '. Target: ' + isnull(convert(varchar(20), @dTargetLastScan, 120), 'N/A') + '.',
+		'Last scan date. ' +
+			'Source: ' + isnull(convert(varchar(20), @dSourceLastScan, 120), 'N/A') + '. ' +
+			'Target: ' + isnull(convert(varchar(20), @dTargetLastScan, 120), 'N/A') + '.',
 		case when abs(dateDiff(hour, @dSourceLastScan, @dTargetLastScan)) > 24 or @dSourceLastScan is null or @dTargetLastScan is null then 1 else 0 end
 
 	--***************************************************************************************
@@ -50,7 +46,9 @@ begin
 	insert into #results (categoryName, messageText, isAlert)
 	select
 		'Summary',
-		'Number of Objects. Source: ' + convert(varchar(20), a.numObjects) + '. Target: ' + convert(varchar(20), b.numObjects) + '.',
+		'Number of Objects. ' +
+			'Source: ' + convert(varchar(20), isnull(a.numObjects, 0)) + '. ' +
+			'Target: ' + convert(varchar(20), isnull(b.numObjects, 0)) + '.',
 		case when a.numObjects <> b.numObjects then 1 else 0 end
 		from (
 			select count(distinct objectName) as numObjects
@@ -477,28 +475,34 @@ begin
 			set @cCategoryName = ''
 			set @nNumDifferences = (select count(*) from #results where isAlert = 1 and categoryName <> 'Summary')
 
-			set @cSubject = 'Database ' + @cTargetDatabase + ' out of synch (' + convert(varchar(20), @nNumDifferences) + ') at ' +
-				case when @dSourceLastScan >= @dTargetLastScan then convert(varchar(20), @dSourceLastScan, 120) else convert(varchar(20), @dTargetLastScan, 120) end + '.'
-
-			while exists (select top 1 categoryName from #results where categoryName > @cCategoryName)
+			-- assume something has gone wrong otherwise
+			if @nNumDifferences < 200
 			begin
-				select top 1 @cCategoryName = categoryName
-					from #results
-					where categoryName > @cCategoryName
-					order by categoryName
 
-				set @cMessage = @cMessage + '<tr><td colspan="2"><b>' + @cCategoryName + '</b></td></tr>'
+				set @cSubject = 'Database ' + @cTargetDatabase + ' out of synch (' + convert(varchar(20), @nNumDifferences) + ') at ' +
+					case when @dSourceLastScan >= @dTargetLastScan then convert(varchar(20), @dSourceLastScan, 120) else convert(varchar(20), @dTargetLastScan, 120) end + '.'
 
-				select @cMessage = @cMessage + '<tr><td></td><td>' + messageText + '</td></tr>'
-					from #results
-					where categoryName = @cCategoryName
-					order by messageText
+				while exists (select top 1 categoryName from #results where categoryName > @cCategoryName)
+				begin
+					select top 1 @cCategoryName = categoryName
+						from #results
+						where categoryName > @cCategoryName
+						order by categoryName
+
+					set @cMessage = @cMessage + '<tr><td colspan="2"><b>' + @cCategoryName + '</b></td></tr>'
+
+					select @cMessage = @cMessage + '<tr><td></td><td>' + messageText + '</td></tr>'
+						from #results
+						where categoryName = @cCategoryName
+						order by messageText
+				end
+
+				set @cMessage = @cMessage + '</table>'
+
+				print @cMessage
+				insert into notification..notificationLog_stage (serverName, subject, message, severity) values (@cTargetServer, @cSubject, @cMessage, 3)
+
 			end
-
-			set @cMessage = @cMessage + '</table>'
-
-			print @cMessage
-			insert into notification..notificationLog_stage (serverName, subject, message, severity) values (@cTargetServer, @cSubject, @cMessage, 2)
 		end
 		else
 			select * from #results

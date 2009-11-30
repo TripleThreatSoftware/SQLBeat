@@ -1,8 +1,3 @@
-/****** Object:  StoredProcedure [dbo].[pr_alert_replicationSynchronization]    Script Date: 09/21/2009 12:00:21 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
 -- exec pr_alert_replicationSynchronization 'mssql-ny', 'mssql_slv-ny', 'transactions_ap'
 -- exec pr_alert_replicationSynchronization 'mssql-ny', 'mssql_slv-ny', 'transactions_hk'
 
@@ -54,6 +49,19 @@ begin
 	insert into #results
 	exec pr_checkTransactionCount_temp
 
+	if exists (select [name] from mart.dbo.sysobjects where [name] = 'mart_replicationStatus')
+	begin
+		insert into mart.dbo.mart_replicationStatus (serverName, databaseName, tableName, numRecords, maxDate)
+		select
+			@cServerName_Publisher as serverName,
+			@cDatabaseName as databaseName,
+			@cTableName as tableName,
+			numTransactions as numRows,
+			latestData as maxDate
+			from #results
+			where location = 'publisher'
+	end
+
 	--**************************
 	-- Now, check the subscriber
 
@@ -74,10 +82,29 @@ begin
 			order by convert(varchar(10), [' + @cDateField + '], 120)'')
 	end'
 
-	exec sp_executeSQL @cSQLString
+	begin try
+		exec sp_executeSQL @cSQLString
 
-	insert into #results
-	exec pr_checkTransactionCount_temp
+		insert into #results
+		exec pr_checkTransactionCount_temp
+	end try
+	begin catch
+		if error_message() like '%connection may have been terminated%' or error_message() like '%in the middle of a restore%'
+			return
+	end catch
+
+	if exists (select [name] from mart.dbo.sysobjects where [name] = 'mart_replicationStatus')
+	begin
+		insert into mart.dbo.mart_replicationStatus (serverName, databaseName, tableName, numRecords, maxDate)
+		select
+			@cServerName_Subscriber as serverName,
+			@cDatabaseName as databaseName,
+			@cTableName as tableName,
+			numTransactions as numRows,
+			latestData as maxDate
+			from #results
+			where location = 'subscriber'
+	end
 
 	if exists (select [name] from sysobjects where [name] = 'pr_checkTransactionCount_temp')
 		drop procedure pr_checkTransactionCount_temp
@@ -102,7 +129,7 @@ begin
 		'<b>Subscriber [' + @cServerName_Subscriber + '].[' + @cDatabaseName + ']</b><br> ' +
 			'  Rows: ' + isnull(convert(varchar(20), b.numTransactions), '0') + '<br>' +
 			'  Data Timestamp: ' + isnull(convert(varchar(20), b.latestData, 120), '(No Data)'),
-		1 as severity
+		2 as severity
 		from ( select ymd, numTransactions, latestData from #results where location = 'publisher' ) a
 		left outer join ( select ymd, numTransactions, latestData from #results where location = 'subscriber' ) b on a.ymd = b.ymd
 		where abs(isnull(a.numTransactions, 0) - isnull(b.numTransactions, 0)) >= 15
@@ -110,29 +137,6 @@ begin
 			and not datePart(hour, getDate()) in (14, 15, 20, 21)
 			and dateDiff(minute, b.latestData, getDate()) > 15
 		order by a.ymd
-
-	if exists (select [name] from mart.dbo.sysobjects where [name] = 'mart_replicationStatus')
-	begin
-		insert into mart.dbo.mart_replicationStatus (serverName, databaseName, tableName, numRecords, maxDate)
-		select
-			@cServerName_Publisher as serverName,
-			@cDatabaseName as databaseName,
-			@cTableName as tableName,
-			numTransactions as numRows,
-			latestData as maxDate
-			from #results
-			where location = 'publisher'
-
-		insert into mart.dbo.mart_replicationStatus (serverName, databaseName, tableName, numRecords, maxDate)
-		select
-			@cServerName_Subscriber as serverName,
-			@cDatabaseName as databaseName,
-			@cTableName as tableName,
-			numTransactions as numRows,
-			latestData as maxDate
-			from #results
-			where location = 'subscriber'
-	end
 
 	drop table #results
 end

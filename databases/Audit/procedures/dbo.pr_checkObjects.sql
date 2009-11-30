@@ -1,9 +1,7 @@
 SET ANSI_NULLS ON
 GO
-
 SET QUOTED_IDENTIFIER ON
 GO
-
 ALTER procedure [dbo].[pr_checkObjects]
 as
 begin
@@ -411,5 +409,3 @@ begin
 	drop table #indexes
 	drop table #foreignKeys
 end
-
-GO

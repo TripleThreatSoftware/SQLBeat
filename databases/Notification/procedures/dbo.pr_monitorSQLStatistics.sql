@@ -1,4 +1,8 @@
-alter procedure pr_monitorSQLStatistics
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER procedure [dbo].[pr_monitorSQLStatistics]
 as
 begin
 	set nocount on
@@ -161,7 +165,10 @@ begin
 					from openQuery([' + @cServerName + '], ''
 						SELECT [type], [name], single_pages_kb, multi_pages_kb, virtual_memory_reserved_kb, virtual_memory_committed_kb, awe_allocated_kb, shared_memory_reserved_kb, shared_memory_committed_kb
 						FROM sys.dm_os_memory_clerks
-						WHERE (single_pages_kb + multi_pages_kb + virtual_memory_reserved_kb + virtual_memory_committed_kb + awe_allocated_kb + shared_memory_reserved_kb + shared_memory_committed_kb) > 0 '')'
+						WHERE (single_pages_kb + multi_pages_kb + virtual_memory_reserved_kb + virtual_memory_committed_kb + awe_allocated_kb + shared_memory_reserved_kb + shared_memory_committed_kb) > 0
+						'')'
+
+			delete from #clerks where clerkName like '%acrUserStore%'
 
 			exec sp_executeSQL @cSQLString
 

@@ -365,7 +365,16 @@ begin
 
 				exec sp_executeSQL @cSQLString
 
-				EXECUTE(@cProcedureName)
+				begin try
+					EXECUTE(@cProcedureName)
+				end try
+				begin catch
+					if error_message() like '%in the middle of a restore%'
+					begin
+						delete from #lockSummary where isnull(dbid, 0) = isnull(@nDBID, 0) and isnull(objid, 0) = isnull(@nObjID, 0) and type = @cLockType
+						continue
+					end
+				end catch
 
 				set @cTableName = (select top 1 tableName from #lockResults)
 				truncate table #lockResults
@@ -882,6 +891,8 @@ begin
 			and isSuccess = 0
 			and ymd >= dateAdd(minute, -@nMinutesBackToLook, getDate())
 
+	delete from #failures where jobOutcome like '%in the middle of a restore%'
+
 	while exists (
 		select top 1 ukey
 			from #failures
@@ -962,6 +973,7 @@ begin
 				if (@cThisMessage like '%eventlog check%' and @cThisMessage like '%timeout expired%')
 					or (@cThisMessage like '%configuration check%' and @cThisMessage like '%timeout expired%')
 					or (@cThisMessage like '%monitor websites%' and @cThisMessage like '%timeout expired%')
+					or @cThisMessage like '%in the middle of a restore%'
 				begin
 					-- in these cases, we've had a glitch on the SQLBeat side and the server is unavailable.
 					continue
@@ -1381,8 +1393,17 @@ begin
 			'([size]*8)/1024 ' +
 			'FROM [' + @cThisDatabase + '].dbo.sysfiles '
 
-		insert into #fileSizes (dbname, objectName, fileName, size)
-		exec sp_executeSQL @cSQLString
+		begin try
+			insert into #fileSizes (dbname, objectName, fileName, size)
+			exec sp_executeSQL @cSQLString
+		end try
+		begin catch
+			if error_message() like '%in the middle of a restore%'
+			begin
+				delete from #databaseNames where dbName = @cThisDatabase
+				continue
+			end
+		end catch
 
 		delete from #databaseNames where dbName = @cThisDatabase
 	end
