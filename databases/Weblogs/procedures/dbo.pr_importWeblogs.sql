@@ -1,6 +1,4 @@
-USE [Weblogs]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_importWeblogs]    Script Date: 08/27/2008 09:14:46 ******/
+/****** Object:  StoredProcedure [dbo].[pr_importWeblogs]    Script Date: 12/04/2009 18:51:53 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -9,7 +7,7 @@ GO
 --
 --exec pr_importWeblogs 1
 
-ALTER  procedure [dbo].[pr_importWeblogs] (@nUkeySource int)
+CREATE  procedure [dbo].[pr_importWeblogs] (@nUkeySource int)
 as
 begin
 	set nocount on
@@ -672,3 +670,4 @@ begin
 		set lastCheck = getDate()
 		where ukey = @nUkeySource
 end
+GO

@@ -1,28 +1,23 @@
-/****** Object:  UserDefinedFunction [dbo].[fn_returnKeyValue]    Script Date: 05/19/2009 13:59:31 ******/
+/****** Object:  UserDefinedFunction [dbo].[fn_returnKeyValue]    Script Date: 12/04/2009 18:54:15 ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
-CREATE function [dbo].[fn_returnKeyValue] (@cString varchar(500), @cKey varchar(100))
-returns varchar(200)
+CREATE function [dbo].[fn_returnKeyValue] (@cString varchar(8000), @cKey varchar(500), @cDelimiter varchar(20))
+returns varchar(2000)
 as
 begin
-	if charindex(@cKey, @cString) = 0 or charindex('=', @cString) = 0 or charindex(';', @cString) = 0
+	if charindex(@cKey, @cString) = 0 or charindex(@cDelimiter, @cString) = 0
 		return ''
 
-	declare @cValue varchar(200)
+	declare @cValue varchar(2000)
 
-	if len(@cString) - charindex(@cKey, @cString) <= 0
-		return ''
-	set @cString = right(@cString, len(@cString) - charindex(@cKey, @cString) + 1)
+	set @cValue = substring(@cString, charindex(@cKey, @cString), 2000)
+	if charindex(@cDelimiter, @cValue) <> 0
+		set @cValue = left(@cValue, charindex(@cDelimiter, @cValue) - 1)
 
-	if len(@cString) - charindex('=', @cString) <= 0
-		return ''
-	set @cString = right(@cString, len(@cString) - charindex('=', @cString))
-
-	if charindex(';', @cString)-1 <= 0
-		return @cString
-	set @cValue = left(@cString, charindex(';', @cString)-1)
+	if charindex('=', @cValue) <> 0
+		set @cValue = substring(@cValue, charindex('=', @cValue) + 1, 2000)
 
 	return @cValue
 end

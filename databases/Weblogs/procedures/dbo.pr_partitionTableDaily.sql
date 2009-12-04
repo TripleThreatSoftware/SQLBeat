@@ -1,5 +1,10 @@
+/****** Object:  StoredProcedure [dbo].[pr_partitionTableDaily]    Script Date: 12/04/2009 18:51:57 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 -- The keyFieldList variable should not contain ymd_id or ymd fields
-ALTER   procedure [dbo].[pr_partitionTableDaily] (@cTableName varchar(100), @cDateField varchar(100), @cKeyfieldList varchar(100), @lMakeUkey bit)
+CREATE   procedure [dbo].[pr_partitionTableDaily] (@cTableName varchar(100), @cDateField varchar(100), @cKeyfieldList varchar(100), @lMakeUkey bit)
 as
 begin
 	set noCount on

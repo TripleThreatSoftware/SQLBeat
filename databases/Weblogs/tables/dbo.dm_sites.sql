@@ -1,0 +1,28 @@
+/****** Object:  Table [dbo].[dm_sites]    Script Date: 12/04/2009 18:52:21 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[dm_sites](
+	[ukey] [int] IDENTITY(1,1) NOT NULL,
+	[webServer] [varchar](50) NULL,
+	[webserverService] [varchar](50) NULL,
+	[friendlyName] [varchar](100) NULL
+) ON [PRIMARY]
+GO
+SET ANSI_PADDING OFF
+GO
+CREATE CLUSTERED INDEX [ix_dm_sites_ukey] ON [dbo].[dm_sites]
+(
+	[ukey] ASC,
+	[friendlyName] ASC
+)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
+GO
+CREATE NONCLUSTERED INDEX [ix_dmSites_friendlyName_ukey] ON [dbo].[dm_sites]
+(
+	[friendlyName] ASC,
+	[ukey] ASC
+)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 90) ON [PRIMARY]
+GO

@@ -1,4 +1,9 @@
-CREATE function [fn_capitalize] (@cString varchar(500))
+/****** Object:  UserDefinedFunction [dbo].[fn_capitalize]    Script Date: 12/04/2009 18:54:08 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE function [dbo].[fn_capitalize] (@cString varchar(500))
 returns varchar(500)
 as
 begin
@@ -26,7 +31,4 @@ begin
 
 	return @cReturnString
 end
-
-
-
 GO

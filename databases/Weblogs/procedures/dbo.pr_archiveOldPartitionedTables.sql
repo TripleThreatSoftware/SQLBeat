@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[pr_archiveOldPartitionedTables]    Script Date: 05/19/2009 13:59:45 ******/
+/****** Object:  StoredProcedure [dbo].[pr_archiveOldPartitionedTables]    Script Date: 12/04/2009 18:51:44 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER OFF
@@ -98,13 +98,13 @@ begin
 				)
 		order by [name] desc
 
---	print 'Last week table: ' + @cLastWeekTable
+	print 'Last week table: ' + @cLastWeekTable
 
 	while exists (select top 1 * from #databases)
 	begin
 		select top 1 @cThisDatabase = dbname from #databases
 
---		print 'Archiving old partitioned tables in ' + @cThisDatabase
+		print 'Archiving old partitioned tables in ' + @cThisDatabase
 
 		set @cThisMonth = right(@cThisDatabase, 6)
 
@@ -121,7 +121,7 @@ begin
 		begin
 			select top 1 @cThisTable = tableName from #tables order by tableName
 
---			print 'Working: ' + @cThisTable
+			print 'Working: ' + @cThisTable
 
 			if isnumeric(right(@cThisTable, 8)) = 0
 			begin
@@ -139,7 +139,7 @@ begin
 
 			set @cWeekTable = @cArchiveTableName + '_' + left(@cThisDay, 6) + '_week' + convert(varchar(2), @nWeek)
 
---			print 'Belongs in: ' + @cWeekTable
+			print 'Belongs in: ' + @cWeekTable
 
 			select @dStartDate = min(ymd), @dEndDate = max(ymd)
 				from #dm_ymd
@@ -149,12 +149,16 @@ begin
 
 			set @lMakeTable = 0
 
-			set @cSQLString = 'select name from ' + @cThisDatabase + '..sysobjects where xtype = ''U'' and name = ''' + @cWeekTable + ''''
---			print @cSQLString
+			set @cSQLString = 'select count(*) as numRows from ' + @cThisDatabase + '..sysobjects where xtype = ''U'' and name = ''' + @cWeekTable + ''''
+
+			truncate table #results
+			insert into #results (numRows)
 			exec sp_executeSQL @cSQLString
 
-			if @@rowcount > 0
+			if (select top 1 numRows from #results) > 0
 			begin
+				truncate table #results
+
 				-- the table does exists, lets see if it's empty. if so, drop it and make it again - just in case
 				set @cSQLString = 'select count(*) from ' + @cThisDatabase + '..[' + @cWeekTable + ']'
 --				print @cSQLString
@@ -176,10 +180,12 @@ begin
 			else
 				set @lMakeTable = 1
 
+			truncate table #results
+
 			if @lMakeTable = 1
 			begin
 
---				print 'Making week table: ' + @cWeekTable
+				print 'Making week table: ' + @cWeekTable
 
 				-- the archive table doesn't yet exist, so create it using an INSERT INTO from the day table
 				-- we're currently working
@@ -225,7 +231,7 @@ begin
 			end
 			else
 			begin
---				print 'Inserting into: ' + @cWeekTable
+				print 'Inserting into: ' + @cWeekTable
 
 				-- the archive table exists, so insert into it from the day table we're working
 				truncate table #fields

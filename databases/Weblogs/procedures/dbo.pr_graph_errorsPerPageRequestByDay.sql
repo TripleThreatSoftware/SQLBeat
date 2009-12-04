@@ -1,8 +1,10 @@
-USE [Weblogs]
+/****** Object:  StoredProcedure [dbo].[pr_graph_errorsPerPageRequestByDay]    Script Date: 12/04/2009 18:51:46 ******/
+SET ANSI_NULLS ON
 GO
-
+SET QUOTED_IDENTIFIER ON
+GO
 -- exec pr_graph_errorsPerPageRequestByDay 'PRO - DOEPublic', '2008-06-01', null
-alter procedure [dbo].[pr_graph_errorsPerPageRequestByDay] (@cSiteName varchar(100), @dStartDate dateTime, @dEndDate dateTime)
+CREATE procedure [dbo].[pr_graph_errorsPerPageRequestByDay] (@cSiteName varchar(100), @dStartDate dateTime, @dEndDate dateTime)
 as
 begin
 
@@ -41,3 +43,4 @@ begin
 
 	drop table #dataValues
 end
+GO

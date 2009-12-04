@@ -1,7 +1,7 @@
-/****** Object:  UserDefinedFunction [dbo].[fn_padr]    Script Date: 05/19/2009 13:59:31 ******/
+/****** Object:  UserDefinedFunction [dbo].[fn_padr]    Script Date: 12/04/2009 18:54:13 ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
 CREATE    function [dbo].[fn_padr] (@cString varchar(200), @nLength int, @cPadCharacter varchar(1))
 	returns varchar(200)

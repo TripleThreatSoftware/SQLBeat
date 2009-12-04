@@ -1,7 +1,7 @@
-/****** Object:  UserDefinedFunction [dbo].[fn_returnKeyValuePair]    Script Date: 05/19/2009 13:59:31 ******/
+/****** Object:  UserDefinedFunction [dbo].[fn_returnKeyValuePair]    Script Date: 12/04/2009 18:54:15 ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
 CREATE function [dbo].[fn_returnKeyValuePair] (@cString varchar(500), @nKeyNumber int, @cPairDelimiter varchar(10))
 returns varchar(200)

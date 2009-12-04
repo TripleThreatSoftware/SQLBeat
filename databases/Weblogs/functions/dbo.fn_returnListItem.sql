@@ -1,4 +1,4 @@
-/****** Object:  UserDefinedFunction [dbo].[fn_returnListItem]    Script Date: 05/19/2009 13:59:45 ******/
+/****** Object:  UserDefinedFunction [dbo].[fn_returnListItem]    Script Date: 12/04/2009 18:54:16 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -10,12 +10,6 @@ begin
 	declare @cString varchar(8000)
 	declare @nCurrentItem int
 	declare @cResults varchar(8000)
-
-	if @cDelimiter = space(1)
-	begin
-		set @cDelimiter = '**'
-		set @cList = replace(@cList, space(1), '**')
-	end
 
 	set @nCurrentItem = 0
 	set @cResults = ''
@@ -55,6 +49,8 @@ begin
 		end
 
 		set @nCurrentItem = @nCurrentItem + 1
+		set @cList = rtrim(ltrim(@cList))
+
 		if @nCurrentItem = @nItemNumber
 		begin
 			set @cResults = rtrim(ltrim(@cString))
@@ -64,4 +60,6 @@ begin
 
 	return @cResults
 end
+
+-- select dbo.fn_returnListItem('transactionSet periodID="1" periodname="SHIFT" longId="2006-10-21" shortId="039" site="RT053"', 6, ' ')
 GO
