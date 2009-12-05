@@ -1,4 +1,3 @@
-/****** Object:  StoredProcedure [dbo].[pr_importWeblogs]    Script Date: 12/04/2009 18:51:53 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -6,8 +5,9 @@ GO
 --select * from dm_sources
 --
 --exec pr_importWeblogs 1
+-- select * from fact_weblogs_stage_hist order by ukey
 
-CREATE  procedure [dbo].[pr_importWeblogs] (@nUkeySource int)
+ALTER  procedure [dbo].[pr_importWeblogs] (@nUkeySource int)
 as
 begin
 	set nocount on
@@ -65,7 +65,7 @@ begin
 	truncate table fact_weblogs_stage
 
 	if @bisIIS = 1
-		set @cSQLString = 'dir "' + @cWeblogPath + 'ex*.log" /s'
+		set @cSQLString = 'dir "' + @cWeblogPath + '*.log" /s'
 
 	if @bisApache = 1
 		set @cSQLString = 'dir "' + @cWeblogPath + 'access_log*" /s'
@@ -76,6 +76,10 @@ begin
 
 	insert into #filesToImport (dirString)
 	exec master..xp_cmdshell @cSQLString
+
+	print 'Found ' + convert(varchar(20), @@rowcount) + ' files to import'
+
+--select * from #filesToImport
 
 	if @@error <> 0 or (select count(*) from #filesToImport where dirString like '%access%denied%' or dirString like '%logon failure%') > 0
 	begin
@@ -306,6 +310,7 @@ begin
 					set @cTableField = case
 						when @cFieldName = 'date' then 'date'
 						when @cFieldName = 'time' then 'time'
+						when @cFieldName = 's-computername' then 'computerName'
 						when @cFieldName = 's-ip' then 'sourceIP'
 						when @cFieldName = 'cs-method' then 'method'
 						when @cFieldName = 'cs-uri-stem' then 'uriStem'
@@ -670,4 +675,3 @@ begin
 		set lastCheck = getDate()
 		where ukey = @nUkeySource
 end
-GO

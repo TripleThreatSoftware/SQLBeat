@@ -1,13 +1,12 @@
-/****** Object:  StoredProcedure [dbo].[pr_rpt_siteSummary]    Script Date: 12/04/2009 18:51:59 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
--- exec pr_rpt_siteSummary 'GAOSA - ScoreCard', null, null
-CREATE procedure [dbo].[pr_rpt_siteSummary] (@cSiteName varchar(100), @dStartDate dateTime, @dEndDate dateTime)
+-- exec pr_rpt_siteSummary 'AppDb', null, null
+ALTER procedure [dbo].[pr_rpt_siteSummary] (@cSiteName varchar(100), @dStartDate dateTime, @dEndDate dateTime)
 as
 begin
-	set @dStartDate = convert(varchar(10), isnull(@dStartDate, dateAdd(week, -2, getDate())), 120)
+	set @dStartDate = convert(varchar(10), isnull(@dStartDate, dateAdd(month, -3, getDate())), 120)
 	set @dEndDate = convert(varchar(10), isnull(@dEndDate, getDate()), 120)
 
 	select ymd,
@@ -27,7 +26,7 @@ begin
 --		sum(errorPageviews_human) as errorPageviews_human,
 --		sum(errorPageviews_nonHuman) as errorPageviews_nonHuman,
 		sum(pageNotFoundErrors) as pageNotFoundErrors
-		from mart_site_byday a
+		from mart_site_byday a (nolock)
 		join dm_sites b on a.ukey_site = b.ukey
 			and b.friendlyName = @cSiteName
 		where a.ymd >= @dStartDate
@@ -36,4 +35,3 @@ begin
 		order by a.ymd
 
 end
-GO

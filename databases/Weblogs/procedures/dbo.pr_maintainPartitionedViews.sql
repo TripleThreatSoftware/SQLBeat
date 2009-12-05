@@ -1,4 +1,3 @@
-/****** Object:  StoredProcedure [dbo].[pr_maintainPartitionedViews]    Script Date: 12/04/2009 18:51:54 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER OFF
@@ -8,7 +7,7 @@ GO
 -- to maintain the view which is used to access data from the daily
 -- partitions. This does not need to be run manually and will be called
 -- from other SPs as required.
-CREATE      procedure [dbo].[pr_maintainPartitionedViews]
+ALTER      procedure [dbo].[pr_maintainPartitionedViews]
 as
 begin
 	set nocount on
@@ -260,6 +259,7 @@ begin
 
 		-- and for these, build a list of fields they all have in common
 		set @cFieldList = '*'
+
 		insert into #fields
 		select fieldName, count(*), max(naturalOrder) as naturalOrder
 			from #allTableFields
@@ -427,7 +427,7 @@ begin
 				if @cDatabaseName = db_name()
 					set @nEndDate = 0
 
-				if @@version not like '%sql server 2005%'
+				if @@version not like '%sql server 2005%' and @@version not like '%sql server 2008%'
 					if (select count(*) from #allTableFields where dbname = @cDatabaseName and tableName = @cThisTableName and fieldName = 'ymd' and dataType = 'dateTime') > 0
 						and @dStartDate <> ''
 						set @cWhereClause = 'where ymd >= ''' + convert(varchar(20), @dStartDate) + '''' + case when @nEndDate <> 0 then ''' and ymd <= ''' + convert(varchar(20), @dEndDate) + '''' else '' end
@@ -569,6 +569,7 @@ begin
 				+ @cVeryLongString2
 				+ @cVeryLongString3
 				+ @cVeryLongString4
+
 				+ @cVeryLongString5
 				+ @cVeryLongString6
 				+ @cVeryLongString7
@@ -629,4 +630,3 @@ begin
 end
 
 -- exec pr_maintainPartitionedViews
-GO
