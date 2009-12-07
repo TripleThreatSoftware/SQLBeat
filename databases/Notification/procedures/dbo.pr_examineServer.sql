@@ -280,15 +280,12 @@ begin
 	-- Identify any suspect remote databases
 	--*********************************************************************************************************************
 
-	set @cSQLString = '
+ 	set @cSQLString = '
 		create procedure ' + @cProcedureName + '
 		as
 		begin
-			insert into #suspectDatabases (dbName)
-			select [name]
-				from [' + @cServerName + '].master.dbo.sysdatabases
-				where databaseproperty([name], ''IsSuspect'') = 1
-					or databasepropertyex([name], ''Status'') = ''SUSPECT''
+			insert into #junkString (results)
+			select * from openquery([' + @cServerName + '], ''select [name] from master.dbo.sysdatabases where databaseproperty([name], ''''IsSuspect'''') = 1 or databasepropertyex([name], ''''Status'''') = ''''SUSPECT'''''')
 		end'
 
 	if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
@@ -2207,7 +2204,7 @@ begin
 						and ymd >= dateAdd(hour, -3, getDate())
 				) b on a.databaseName = b.databaseName
 					and a.fileID = b.fileID
-			where a.msWaiting >= 250 -- or a.numRequests >= 2
+			where a.msWaiting >= 1000 -- or a.numRequests >= 2
 
 		drop table #waitingIO
 	end

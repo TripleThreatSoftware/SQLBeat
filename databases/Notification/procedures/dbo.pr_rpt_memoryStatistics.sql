@@ -1,29 +1,35 @@
 SET ANSI_NULLS ON
 GO
+
 SET QUOTED_IDENTIFIER ON
 GO
+
 -- exec pr_rpt_memoryStatistics 'web03'
 ALTER procedure [dbo].[pr_rpt_memoryStatistics] (@cServerName varchar(100))
 as
 begin
 	declare @nUkeyServer int
-	set @nUkeyServer = (select top 1 ukey from dm_servers (nolock) where serverName = @cServerName)
+	set @nUkeyServer = (select top 1 ukey from dm_servers where serverName = @cServerName)
 
 	select
 		convert(varchar(10), a.ymd, 120) as ymd,
 		rtrim(b.objectName) as objectName,
-		rtrim(c.counterName) as counterName,
+		a.ukey_counter,
+		convert(varchar(300), '') as counterName,
 		rtrim(a.instanceName) as instanceName,
 		minValue, maxValue, avgValue
 		into #memoryCounters
 		from mart_performanceLog_byday a (nolock)
 		join dm_performanceObjects b (nolock) on a.ukey_object = b.ukey
 			and (b.objectName like '%memory%' or b.objectName = 'SQLBeat Statistics')
-		join dm_performanceCounters c (nolock) on a.ukey_counter = c.ukey
-		where a.ymd >= dateAdd(week, -1, getDate())
+		where a.ymd >= dateAdd(week, -2, getDate())
 			and a.ukey_server = @nUkeyServer
-		order by b.objectName, a.instanceName, c.counterName
+		order by b.objectName, a.instanceName, a.ukey_counter
 
+	update #memoryCounters
+		set counterName = rtrim(b.counterName)
+		from #memoryCounters a
+		join dm_performanceCounters b (nolock) on a.ukey_counter = b.ukey
 
 	select a.*, convert(decimal(20,2), 100 * b.delta) as delta,
 		case
@@ -78,7 +84,7 @@ begin
 		queryExecution varchar(8000), storeEngine varchar(8000), utilities varchar(8000),
 		freeAndAvailable varchar(8000)
 		)
-	create table #dataValues (setName varchar(200), seriesName varchar(100), axis_x varchar(100), axis_y decimal(20,4), sortOrder int identity)
+	create table #dataValues (setName varchar(500), seriesName varchar(500), axis_x varchar(500), axis_y decimal(20,4), sortOrder int identity)
 	create table #returnValue (junkString varchar(8000))
 
 	insert into #results (ukey) values (1)
@@ -503,3 +509,4 @@ begin
 	drop table #counterOutput
 
 end
+GO

@@ -1,9 +1,3 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-
-
 -- update dm_servers set serviceCheck = 1 where isSQLBox = 1 and detailedCheck = 1
 
 -- select top 100 * from messagesSent order by ymd desc
@@ -1371,7 +1365,7 @@ begin
 	declare @cThisDatabase varchar(100)
 
 	create table #databaseNames (dbname varchar(100))
-	create table #fileSizes (dbname varchar(100), objectname varchar(100), fileName varchar(100), size bigint, isLog bit default 0)
+	create table #fileSizes (dbname varchar(100), objectname varchar(100), fileName varchar(100), size bigint, isLog bit default 0, fileID int)
 
 	insert into #databaseNames
 	select [name]
@@ -1390,11 +1384,11 @@ begin
 			'''' + @cThisDatabase + ''' as dbname, ' +
 			'left(name, 100) AS objectName, ' +
 			'left(fileName, 100) AS fileName, ' +
-			'([size]*8)/1024 ' +
+			'([size]*8)/1024, fileID ' +
 			'FROM [' + @cThisDatabase + '].dbo.sysfiles '
 
 		begin try
-			insert into #fileSizes (dbname, objectName, fileName, size)
+			insert into #fileSizes (dbname, objectName, fileName, size, fileID)
 			exec sp_executeSQL @cSQLString
 		end try
 		begin catch
@@ -1413,8 +1407,8 @@ begin
 		set isLog = 1
 		where objectName like '%log%' or fileName like '%log%'
 
-	insert into databaseFileSizeLog (serverName, dbname, objectname, [fileName], [size], isLog)
-	select @@serverName, dbName, objectName, [fileName], [size], isLog
+	insert into databaseFileSizeLog (serverName, dbname, objectname, [fileName], [size], isLog, fileID)
+	select @@serverName, dbName, objectName, [fileName], [size], isLog, fileID
 		from #fileSizes
 
 	insert into #results (message, severity, subject, isLogSize)
@@ -1614,6 +1608,72 @@ begin
 	drop table #stuckEventLogCheck
 
 	-- insert into hist_monitorBigBrother (stepName) values ('EventLog monitor checked')
+
+
+	--*********************************************************************************************************************
+	-- CPU and Disk queues
+	--*********************************************************************************************************************
+
+	if (@cVersion like '%server 2005%' or @cVersion like '%server 2008%')
+	begin
+		create table #cpuTasks (cpuNumber varchar(20), currentTasks int, waitingTasks int)
+
+		insert into #cpuTasks (cpuNumber, currentTasks, waitingTasks)
+		select scheduler_id as cpuNumber, current_tasks_count as currentTasks, runnable_tasks_count as waitingTasks	from sys.dm_os_schedulers where scheduler_id < 255
+
+		insert into #results (severity, subject, message)
+		select
+			2,
+			'CPU ' + convert(varchar(20), cpuNumber) + ' has ' + convert(varchar(20), waitingTasks) + ' tasks waiting.',
+			'Time: ' + convert(varchar(20), getDate(), 120) + ' <br>' +
+				'CPU ' + convert(varchar(20), cpuNumber) + ' has ' + convert(varchar(20), currentTasks) + ' tasks running and ' + convert(varchar(20), waitingTasks) + ' tasks waiting.'
+			from #cpuTasks
+			where waitingTasks > 1
+
+		drop table #cpuTasks
+
+		--***************************************************************************************************
+		-- Disk IO Waiting to complete
+
+		create table #waitingIO (ukey int identity, databaseName varchar(500), fileID int, numRequests int, msWaiting bigint)
+
+		insert into #waitingIO (databaseName, fileID, numRequests, msWaiting)
+		select
+			a.[name] as databaseName,
+			b.file_id as fileID,
+			count(*) as numRequests,
+			sum(io_pending_ms_ticks) as msWaiting
+			from master..sysdatabases a (nolock)
+			join (
+				select
+					database_id, file_id, io_stall, io_pending_ms_ticks, scheduler_address
+					from sys.dm_io_virtual_file_stats(NULL, NULL) t1
+					join sys.dm_io_pending_io_requests as t2 on t1.file_handle = t2.io_handle
+				) b on a.dbid = b.database_id
+			group by a.[name], b.file_id
+			order by a.[name], b.file_id
+
+		insert into #results (severity, subject, message)
+		select
+			-- weight based on how long
+			case when msWaiting > 20000 then 1 else 2 end as severity,
+			convert(varchar(20), a.numRequests) + ' requests waiting for ' + convert(varchar(20), a.msWaiting) + 'ms on "' + isnull(left(b.filePath, 3), 'N/A') + '"' as subject,
+			'Time: ' + convert(varchar(20), getDate(), 120) + '<br>' +
+				'Database ' + a.databaseName + ' has ' + convert(varchar(20), a.numRequests) + ' requests waiting for ' + convert(varchar(20), a.msWaiting) + 'ms on "' + isnull(b.filePath, 'N/A') + '"' as message
+			from #waitingIO a
+			left outer join (
+				select
+					distinct dbName as databaseName, fileID, fileName as filePath
+					from databaseFileSizeLog (nolock)
+					where serverName = @@serverName
+						and ymd >= dateAdd(hour, -6, getDate())
+				) b on a.databaseName = b.databaseName
+					and a.fileID = b.fileID
+			where a.msWaiting >= 5000 -- or a.numRequests >= 2
+
+		drop table #waitingIO
+	end
+
 
 	--*********************************************************************************************************************
 	-- Send output to the notification system

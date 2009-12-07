@@ -2,6 +2,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 ALTER procedure [dbo].[pr_monitorSQLStatistics]
 as
 begin
@@ -235,4 +236,6 @@ begin
 		end
 
 	end
+
+	delete from performanceLog_stage where counterName like '%acrUserStore%'
 end
