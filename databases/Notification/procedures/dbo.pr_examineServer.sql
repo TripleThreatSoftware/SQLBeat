@@ -61,6 +61,7 @@ begin
 	declare @nUkeyServer int
 	declare @nNumSuccess int
 	declare @nNumFailure int
+	declare @nNumAlerts int
 
 	declare @nRunStamp bigint
 	declare @nLowSpaceThreshold bigint
@@ -2137,9 +2138,11 @@ begin
 		insert into #cpuTasks (cpuNumber, currentTasks, waitingTasks)
 		EXECUTE(@cProcedureName)
 
+		set @nNumAlerts = (select count(*) from notificationLog (nolock) where serverName = @cServerName and subject like '%tasks waiting%' and ymd >= dateAdd(minute, -10, getDate()))
+
 		insert into #results (severity, subject, message)
 		select
-			2,
+			case when @nNumAlerts > 0 and waitingTasks > 5 then 1 else 2 end,
 			'CPU ' + convert(varchar(20), cpuNumber) + ' has ' + convert(varchar(20), waitingTasks) + ' tasks waiting.',
 			'Time: ' + convert(varchar(20), getDate(), 120) + ' <br>' +
 				'CPU ' + convert(varchar(20), cpuNumber) + ' has ' + convert(varchar(20), currentTasks) + ' tasks running and ' + convert(varchar(20), waitingTasks) + ' tasks waiting.'
@@ -2188,10 +2191,12 @@ begin
 		insert into #waitingIO (databaseName, fileID, numRequests, msWaiting)
 		EXECUTE(@cProcedureName)
 
+		set @nNumAlerts = (select count(*) from notificationLog (nolock) where serverName = @cServerName and subject like '%requests waiting%' and ymd >= dateAdd(minute, -10, getDate()))
+
 		insert into #results (severity, subject, message)
 		select
-			-- weight based on how long
-			case when msWaiting > 20000 then 1 else 2 end as severity,
+			-- weight based on how long and whether this is the first alert in the last 10 minutes
+			case when msWaiting > 20000 and @nNumAlerts > 0 then 1 else 2 end as severity,
 			convert(varchar(20), a.numRequests) + ' requests waiting for ' + convert(varchar(20), a.msWaiting) + 'ms on "' + left(b.filePath, 3) + '"' as subject,
 			'Time: ' + convert(varchar(20), getDate(), 120) + '<br>' +
 				'Database ' + a.databaseName + ' has ' + convert(varchar(20), a.numRequests) + ' requests waiting for ' + convert(varchar(20), a.msWaiting) + 'ms on "' + b.filePath + '"' as message

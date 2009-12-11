@@ -1,3 +1,8 @@
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
 -- update dm_servers set serviceCheck = 1 where isSQLBox = 1 and detailedCheck = 1
 
 -- select top 100 * from messagesSent order by ymd desc
@@ -885,6 +890,14 @@ begin
 			and isSuccess = 0
 			and ymd >= dateAdd(minute, -@nMinutesBackToLook, getDate())
 
+	update #failures
+		set jobOutcome = jobOutcome + isnull('<br>' + b.stepOutcome, '')
+		from #failures a
+		join jobStepHistory b on a.ukey = b.ukey_jobHistory
+			and b.ukey_server = @nUkeyServer
+			and a.ukey_job = b.ukey_job
+			and b.isSuccess = 0
+
 	delete from #failures where jobOutcome like '%in the middle of a restore%'
 
 	while exists (
@@ -1623,7 +1636,7 @@ begin
 
 		insert into #results (severity, subject, message)
 		select
-			2,
+			3,
 			'CPU ' + convert(varchar(20), cpuNumber) + ' has ' + convert(varchar(20), waitingTasks) + ' tasks waiting.',
 			'Time: ' + convert(varchar(20), getDate(), 120) + ' <br>' +
 				'CPU ' + convert(varchar(20), cpuNumber) + ' has ' + convert(varchar(20), currentTasks) + ' tasks running and ' + convert(varchar(20), waitingTasks) + ' tasks waiting.'
@@ -1656,7 +1669,7 @@ begin
 		insert into #results (severity, subject, message)
 		select
 			-- weight based on how long
-			case when msWaiting > 20000 then 1 else 2 end as severity,
+			3 as severity,
 			convert(varchar(20), a.numRequests) + ' requests waiting for ' + convert(varchar(20), a.msWaiting) + 'ms on "' + isnull(left(b.filePath, 3), 'N/A') + '"' as subject,
 			'Time: ' + convert(varchar(20), getDate(), 120) + '<br>' +
 				'Database ' + a.databaseName + ' has ' + convert(varchar(20), a.numRequests) + ' requests waiting for ' + convert(varchar(20), a.msWaiting) + 'ms on "' + isnull(b.filePath, 'N/A') + '"' as message
