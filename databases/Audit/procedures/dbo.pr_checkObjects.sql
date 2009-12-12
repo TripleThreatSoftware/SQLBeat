@@ -1,7 +1,3 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
 ALTER procedure [dbo].[pr_checkObjects]
 as
 begin
@@ -16,7 +12,7 @@ begin
 	set @cServerName = ''
 
 	create table #objectText (databaseName varchar(500), objectName varchar(500), id bigint,
-		xtype varchar(2), objectText varchar(8000), ukey int identity, isChanged bit default 0)
+		xtype varchar(2), objectText varchar(8000), ukey int identity, isChanged bit default 0, colID int default 0)
 	create table #tableStructure (databaseName varchar(500), tableName varchar(500), tableID bigint,
 		xtype varchar(2), columnName varchar(200), columnLength smallint, columnPrecision tinyint, columnType tinyint,
 		columnXType tinyint, columnIsNullable int, ukey int identity, isChanged bit default 0)
@@ -94,7 +90,8 @@ begin
 				'''''' + @cDatabaseName + '''''' as databaseName,
 				a.name as objectName,
 				a.id, a.xtype,
-				case when a.xtype = ''''D'''' then a.name + '''' '''' else '''''''' end + b.text as text
+				case when a.xtype = ''''D'''' then a.name + '''' '''' else '''''''' end + b.text as text,
+				b.colID
 				from [' + @cServerName + '].['' + @cDatabaseName + ''].dbo.sysobjects a
 				join [' + @cServerName + '].['' + @cDatabaseName + ''].dbo.syscomments b on a.id = b.id
 				where a.xtype <> ''''s''''
@@ -106,7 +103,7 @@ begin
 					and a.name not like ''''syncobj%''''
 				order by a.name''
 
-		insert into #objectText (databaseName, objectName, id, xtype, objectText)
+		insert into #objectText (databaseName, objectName, id, xtype, objectText, colid)
 		EXEC sp_executeSQL @cSQLString
 
 		SET @cSQLString = ''
@@ -200,7 +197,8 @@ begin
 		-- anything in the table that is in the current snapshot, update
 		update auditData_objectText
 			set ymd_lastSeen = getDate(),
-				isCurrent = 1
+				isCurrent = 1,
+				colID = b.colID
 			from auditData_objectText a
 			join #objectText b on isnull(a.databaseName, '') = isnull(b.databaseName, '')
 				and isnull(a.objectName, '') = isnull(b.objectName, '')
@@ -222,9 +220,10 @@ begin
 				and a.serverName = @cServerName
 
 		-- add new things to the table
-		insert into auditData_objectText (serverName, databaseName, objectName, id, xtype, objectText, textChecksum)
+		insert into auditData_objectText (serverName, databaseName, objectName, id, xtype, objectText, textChecksum, colID)
 		select @cServerName, databaseName, objectName, id, xtype, objectText,
-			notification.dbo.fn_checksum(isnull(objectText, ''))
+			notification.dbo.fn_checksum(isnull(objectText, '')),
+			colID
 			from #objectText
 			where isChanged = 1
 			order by ukey
@@ -409,3 +408,4 @@ begin
 	drop table #indexes
 	drop table #foreignKeys
 end
+GO
