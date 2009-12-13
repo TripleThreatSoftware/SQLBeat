@@ -10,11 +10,12 @@
 -- EXEC sp_configure 'xp_cmdshell', '1'
 -- EXEC sp_configure 'agent xps', '1'
 -- reconfigure
+-- select * from notificationLog order by ymd desc
 -- select * from dm_servers where serverName = 'sqlcluster01'
 -- select top 500 * from notificationLog_history (nolock) where runGUID = 'CFCB992F-12E5-47C9-95CD-C36B133A0640' order by ymd
 -- select top 100 * from notificationLog_history (nolock) order by ymd desc
 -- select top 100 * from processLog (nolock) where serverName = 'sqlcluster01' and command <> 'awaiting command' order by ymd desc
--- exec pr_examineServer 'devmssql02', 600
+-- exec pr_examineServer 'web03', 600
 -- exec pr_examineServer '10.3.10.197', 600
 ALTER procedure [dbo].[pr_examineServer] (@cServerName varchar(100), @nMinutesBackToLook int)
 as
@@ -256,14 +257,20 @@ begin
 		begin
 			insert into #databaseNames
 			select [name], [dbID]
-				from [' + @cServerName + '].master.dbo.sysdatabases
-				where (
-						(status & 32) <> 32 -- loading
-						and (status & 64) <> 64 -- prerecovery
-						and (status & 128) <> 128 -- recovery
-						and (status & 512) <> 512 -- offline
-						and (status & 4096) <> 4096 -- single user
-						)
+				from openquery([' + @cServerName + '], ''
+					select *
+						from master.dbo.sysdatabases
+						where (
+								(status & 32) <> 32 -- loading
+								and (status & 64) <> 64 -- prerecovery
+								and (status & 128) <> 128 -- recovery
+								and (status & 512) <> 512 -- offline
+								and (status & 4096) <> 4096 -- single user
+								)
+							and databasepropertyex([name], ''''IsInStandby'''') = 0
+							and databaseproperty([name], ''''IsSuspect'''') = 0
+							and databasepropertyex([name], ''''Status'''') <> ''''SUSPECT''''
+					'')
 		end'
 
 	if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
@@ -988,19 +995,24 @@ begin
 			declare @cDatabaseName varchar(200)
 			declare @cSQLString nvarchar(4000)
 
-			SET @cSQLString = ''
-			SET @cDatabaseName = ''
+			SET @cSQLString = ''''
+			SET @cDatabaseName = ''''
 
 			WHILE @cDatabaseName IS NOT NULL
 			BEGIN
 				select @cDatabaseName = MIN(name)
 					FROM [' + @cServerName + '].master.dbo.sysdatabases
 					WHERE name NOT IN (''master'', ''model'', ''tempdb'', ''msdb'', ''distribution'', ''pubs'', ''northwind'')
-						and (status & 32) <> 32 -- loading
-						and (status & 64) <> 64 -- prerecovery
-						and (status & 128) <> 128 -- recovery
-						and (status & 512) <> 512 -- offline
-						and (status & 4096) <> 4096 -- single user
+						and (
+							(status & 32) <> 32 -- loading
+							and (status & 64) <> 64 -- prerecovery
+							and (status & 128) <> 128 -- recovery
+							and (status & 512) <> 512 -- offline
+							and (status & 4096) <> 4096 -- single user
+							)
+						and databasepropertyex([name], ''IsInStandby'') = 0
+						and databaseproperty([name], ''IsSuspect'') = 0
+						and databasepropertyex([name], ''Status'') <> ''SUSPECT''
 						AND name > @cDatabaseName
 
 				IF @cDatabaseName IS NULL BREAK

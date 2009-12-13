@@ -766,6 +766,8 @@ begin
 			or jobName like '%LSRestore%'
 			or jobName like '%LSAlert%'
 
+			or jobName like 'MP%'
+
 	-- jobs that we have a history for
 	insert into #results (message, severity, subject, isLongRunningJob)
 	select distinct left(
