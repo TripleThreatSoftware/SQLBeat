@@ -72,6 +72,7 @@ begin
 	declare @nBlockingSecondsThreshold bigint
 
 	declare @bIsOffHours bit
+	declare @bCheckOrphanedUsers bit
 
 	declare @dLastCheck dateTime
 	declare @dLastSuccess dateTime
@@ -104,8 +105,9 @@ begin
 		@nRunningMinutesThreshold = runningMinutesThreshold,
 		@nMultipleBlockAlert = multipleBlocksThreshold,
 		@nBlockingSecondsThreshold = blockingSecondsThreshold,
-		@nUkeyServer = ukey
-		from dm_servers
+		@nUkeyServer = ukey,
+		@bCheckOrphanedUsers = checkOrphanedUsers
+		from dm_servers (nolock)
 		where serverName = @cServerName
 
 	update dm_servers set skipNextRun = 0 where serverName = @cServerName
@@ -988,68 +990,72 @@ begin
 	--*********************************************************************************************************************
 	-- Orphaned Users
 	--*********************************************************************************************************************
-	set @cSQLString = '
-		create procedure ' + @cProcedureName + '
-		as
-		begin
-			declare @cDatabaseName varchar(200)
-			declare @cSQLString nvarchar(4000)
+	if @bCheckOrphanedUsers = 1
+	begin
 
-			SET @cSQLString = ''''
-			SET @cDatabaseName = ''''
+		set @cSQLString = '
+			create procedure ' + @cProcedureName + '
+			as
+			begin
+				declare @cDatabaseName varchar(200)
+				declare @cSQLString nvarchar(4000)
 
-			WHILE @cDatabaseName IS NOT NULL
-			BEGIN
-				select @cDatabaseName = MIN(name)
-					FROM [' + @cServerName + '].master.dbo.sysdatabases
-					WHERE name NOT IN (''master'', ''model'', ''tempdb'', ''msdb'', ''distribution'', ''pubs'', ''northwind'')
-						and (
-							(status & 32) <> 32 -- loading
-							and (status & 64) <> 64 -- prerecovery
-							and (status & 128) <> 128 -- recovery
-							and (status & 512) <> 512 -- offline
-							and (status & 4096) <> 4096 -- single user
-							)
-						and databasepropertyex([name], ''IsInStandby'') = 0
-						and databaseproperty([name], ''IsSuspect'') = 0
-						and databasepropertyex([name], ''Status'') <> ''SUSPECT''
-						AND name > @cDatabaseName
+				SET @cSQLString = ''''
+				SET @cDatabaseName = ''''
 
-				IF @cDatabaseName IS NULL BREAK
+				WHILE @cDatabaseName IS NOT NULL
+				BEGIN
+					select @cDatabaseName = MIN(name)
+						FROM [' + @cServerName + '].master.dbo.sysdatabases
+						WHERE name NOT IN (''master'', ''model'', ''tempdb'', ''msdb'', ''distribution'', ''pubs'', ''northwind'')
+							and (
+								(status & 32) <> 32 -- loading
+								and (status & 64) <> 64 -- prerecovery
+								and (status & 128) <> 128 -- recovery
+								and (status & 512) <> 512 -- offline
+								and (status & 4096) <> 4096 -- single user
+								)
+							and databasepropertyex([name], ''IsInStandby'') = 0
+							and databaseproperty([name], ''IsSuspect'') = 0
+							and databasepropertyex([name], ''Status'') <> ''SUSPECT''
+							AND name > @cDatabaseName
 
-				SET @cSQLString = ''
-			SELECT '''''' + @cDatabaseName + '''''' AS dbName,
-				a.[name] AS userName
+					IF @cDatabaseName IS NULL BREAK
 
-				FROM [' + @cServerName + '].['' + @cDatabaseName + ''].dbo.sysusers a
-				left outer join [' + @cServerName + '].master.dbo.syslogins b on a.sid = b.sid
+					SET @cSQLString = ''
+				SELECT '''''' + @cDatabaseName + '''''' AS dbName,
+					a.[name] AS userName
 
-				WHERE a.islogin = 1
-					AND a.name not in (''''guest'''', ''''sys'''', ''''information_schema'''')
-					AND b.sid is null''
+					FROM [' + @cServerName + '].['' + @cDatabaseName + ''].dbo.sysusers a
+					left outer join [' + @cServerName + '].master.dbo.syslogins b on a.sid = b.sid
 
-				insert into #orphanedUsers (dbName, userName)
-				EXEC sp_executeSQL @cSQLString
-			END
-		 end'
+					WHERE a.islogin = 1
+						AND a.name not in (''''guest'''', ''''sys'''', ''''information_schema'''')
+						AND b.sid is null''
 
-	if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
-		execute('drop procedure ' + @cProcedureName)
+					insert into #orphanedUsers (dbName, userName)
+					EXEC sp_executeSQL @cSQLString
+				END
+			 end'
 
-	insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Orphaned Users', @cSQLString, @nUkeyGroup)
+		if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
+			execute('drop procedure ' + @cProcedureName)
 
-	exec sp_executeSQL @cSQLString
+		insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Orphaned Users', @cSQLString, @nUkeyGroup)
 
-	if @bTesting = 1
-		print @cSQLString
-	EXECUTE(@cProcedureName)
+		exec sp_executeSQL @cSQLString
 
-	insert into #results (message, severity, subject)
-	select
-		'User ' + isnull(userName, 'N/A') + ' is orphaned within [' + isnull(dbName, 'N/A') + '].' as message,
-		3 as severity,
-		'User ' + isnull(userName, 'N/A') + ' is orphaned within [' + isnull(dbName, 'N/A') + '].' as subject
-		from #orphanedUsers
+		if @bTesting = 1
+			print @cSQLString
+		EXECUTE(@cProcedureName)
+
+		insert into #results (message, severity, subject)
+		select
+			'User ' + isnull(userName, 'N/A') + ' is orphaned within [' + isnull(dbName, 'N/A') + '].' as message,
+			3 as severity,
+			'User ' + isnull(userName, 'N/A') + ' is orphaned within [' + isnull(dbName, 'N/A') + '].' as subject
+			from #orphanedUsers
+	end
 
 	--*********************************************************************************************************************
 	-- SQL Error Log

@@ -1,4 +1,4 @@
-alter table dm_servers add isSharepoint bit default 0
+alter table dm_servers add checkOrphanedUsers bit default 1
 GO
-update dm_servers set isSharepoint = 1 where serverName like 'prosp%'
+update dm_servers set checkOrphanedUsers = 0
 GO
