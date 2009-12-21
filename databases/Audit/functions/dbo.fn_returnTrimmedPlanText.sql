@@ -1,6 +1,12 @@
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
 --= select dbo.fn_returnTrimmedPlanText('(@nUkeyProduct int,@cSessionID nvarchar(24),@cMachineID nvarchar(24),@nUkeyWebsite int)exec pr_returnProductImages @cSessionID, @cMachineID, @nUkeyProduct, 0')
 
-create function fn_returnTrimmedPlanText (@cSQLString varchar(8000))
+create function [dbo].[fn_returnTrimmedPlanText] (@cSQLString varchar(8000))
 returns varchar(1000)
 as
 begin
@@ -35,3 +41,4 @@ begin
 
 	return @cReturnString
 end
+GO

@@ -1,4 +1,8 @@
-alter table dm_servers add checkOrphanedUsers bit default 1
-GO
-update dm_servers set checkOrphanedUsers = 0
-GO
+use [notification]
+go
+alter table dm_servers add checkExecutionStats bit default 0
+go
+update dm_servers set checkExecutionStats = 0
+go
+update dm_servers set checkExecutionStats = 1 where servername = 'web03'
+go

@@ -420,14 +420,31 @@ begin
 	--*********************************************************************************************************************
 
 	declare @dLastJobData dateTime
-
---	set @dLastJobData = (select max(ymd) from jobHistory (nolock) where ukey_server = @nUkeyServer)
-
 	set @dLastJobData = dateAdd(hour, -12, getDate())
 
-	---- if we have no job data, just look at today
-	--if isnull(@dLastJobData, '') = ''
-	--	set @dLastJobData = convert(varchar(10), getDate(), 120)
+	declare @cJobID uniqueIdentifier
+	set @cJobID = null
+
+--	declare @cJobName varchar(1000)
+	set @cJobName = ''
+
+	create table #jobInstances (job_id uniqueIdentifier, instance_id int)
+
+	while exists (select top 1 job_id from msdb.dbo.sysjobs (nolock) where [name] > @cJobName)
+	begin
+		select top 1
+			@cJobID = job_id,
+			@cJobName = [name]
+			from msdb.dbo.sysjobs (nolock)
+			where [name] > @cJobName
+			order by [name]
+
+		insert into #jobInstances (job_id, instance_id)
+		select top 50 @cJobId, instance_id
+			from msdb.dbo.sysjobhistory (nolock)
+			where job_id = @cJobId
+			order by instance_id desc
+	end
 
 	-- jobs
 	insert into #jobHistory (job_id, jobName, jobOutcome, runningSeconds, ymd, isSuccess, isEnabled)
@@ -453,6 +470,8 @@ begin
 		from msdb.dbo.sysjobs a
 		join msdb.dbo.sysjobhistory b on a.job_id = b.job_id
 			and b.step_id = 0
+		join #jobInstances c on a.job_id = c.job_id
+			and b.instance_id = c.instance_id
 		where left(run_date, 4) + '-' +
 			left(right(run_date, 4), 2) + '-' +
 			right(run_date, 2) + ' ' +
@@ -487,6 +506,8 @@ begin
 			and b.step_id <> 0
 		join msdb.dbo.sysjobsteps c on a.job_id = c.job_id
 			and b.step_id = c.step_id
+		join #jobInstances d on a.job_id = d.job_id
+			and b.instance_id = d.instance_id
 		where left(run_date, 4) + '-' +
 			left(right(run_date, 4), 2) + '-' +
 			right(run_date, 2) + ' ' +
@@ -494,6 +515,8 @@ begin
 			left(right(right('000000' + convert(varchar(20), run_time), 6), 4), 2) + ':' +
 			right(right('000000' + convert(varchar(20), run_time), 6), 2) + '.000' >= '' + convert(varchar(20), @dLastJobData, 120) + ''
 		order by a.job_id, b.run_date, b.run_time, b.step_id
+
+	drop table #jobInstances
 
 	--*********************************************************************************************************************
 	-- Add job data to local mart tables
@@ -1295,6 +1318,8 @@ begin
 				delete from #detailedChecks where ukey = @nUkey and isFailure = 1
 		end
 	end
+
+	delete from #detailedChecks where jobHistory like '%changed since it was compiled%'
 
 	-- these should be failures and long running detailed check jobs.
 	insert into #results (serverName, subject, message, severity)
