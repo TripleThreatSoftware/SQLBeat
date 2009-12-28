@@ -164,7 +164,7 @@ begin
 		Current_Step int, Current_Retry_Attempt int, State int, ymd dateTime, last_run_outcome int, job_id_char varchar(100),
 		nextRun dateTime, minutesRunning decimal(10,2), secondsRunning int, startTime dateTime, jobName varchar(200), spidStartTime dateTime,
 		currentStepName varchar(200), currentStepText varchar(1000),
-		expectedRunningSeconds int default 0, maxRunningSeconds int default 0)
+		expectedRunningSeconds int default 0, maxRunningSeconds int default 0, runStatus varchar(8000))
 
 	create table #buffer (eventType varchar(30), parameters int, eventInfo varchar(255))
 
@@ -191,7 +191,6 @@ begin
 	CREATE TABLE #drives (ukey int identity, driveLetter varchar(1), freeSpace int NULL)
 
 	create table #databaseNames (dbname varchar(100), dbID int, isSuspect bit, isAvailable bit)
-	create table #suspectDatabases (dbname varchar(200))
 
 	create table #fileSizes (dbname varchar(100), objectname varchar(100), fileName varchar(100), size bigint, isLog bit default 0, fileID int)
 
@@ -282,10 +281,49 @@ begin
 	-- Identify any suspect remote databases
 	--*********************************************************************************************************************
 
-	insert into #results (message, severity, subject)
-	select 'Database ' + dbName + ' is SUSPECT', 1, 'Database ' + dbName + ' is SUSPECT'
-		from #databaseNames
-		where isSuspect = 1
+	if (select count(*) from #databaseNames where isSuspect = 1) > 0
+	begin
+		create table #suspectDatabases (dbName varchar(500))
+
+		-- let's do some validating here; we seem to be catching LS databases as they transition into a RESTORE state
+
+		set @cSQLString = '
+			create procedure ' + @cProcedureName + '
+			as
+			begin
+				insert into #suspectDatabases (dbName)
+				select [name]
+					from openquery([' + @cServerName + '], ''
+						select [name]
+							case
+								when
+									databaseproperty([name], ''''IsSuspect'''') = 0
+									and databasepropertyex([name], ''''Status'''') <> ''''SUSPECT''''
+									then 0
+									else 1
+									end as isSuspect
+							from master.dbo.sysdatabases (nolock)
+						'')
+					where isSuspect = 1
+			end'
+
+		if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
+			execute('drop procedure ' + @cProcedureName)
+
+		insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Validating SUSPECT databases', @cSQLString, @nUkeyGroup)
+		exec sp_executeSQL @cSQLString
+
+		if @bTesting = 1
+			print @cSQLString
+		EXECUTE(@cProcedureName)
+
+		insert into #results (message, severity, subject)
+		select 'Database ' + dbName + ' is SUSPECT', 1, 'Database ' + dbName + ' is SUSPECT'
+			from #suspectDatabases
+
+
+		drop table #suspectDatabases
+	end
 
 	delete from #databaseNames where isSuspect = 1 or isAvailable = 0
 
@@ -1477,6 +1515,43 @@ begin
 		-- now, let's get rid of anything that is not currently running
 		delete from #runningJobs where running = 0
 
+		declare @cJobID varchar(200)
+		set @cJobID = ''
+
+		while exists (select top 1 job_id from #runningJobs where convert(varchar(200), job_id) > @cJobID and running = 1)
+		begin
+			select top 1
+				@cJobID = job_id
+				from #runningJobs
+				where convert(varchar(200), job_id) > @cJobID
+					and running = 1
+				order by convert(varchar(200), job_id)
+
+			set @cThisMessage = ''
+
+			select top 3
+				@cThisMessage = @cThisMessage +
+				'<b>' + isnull(b.stepName, 'N/A') + '</b> @ ' + isnull(convert(varchar(20), a.ymd, 120), 'N/A') + ' <br>' +
+					'Runtime: ' + convert(varchar(20), isnull(a.runningSeconds, 0)) + 's<br>' +
+					'Outcome: ' + case when a.isSuccess = 1 then 'OK' else isnull(a.stepOutcome, 'N/A') end + '<br>' +
+					case when a.isSuccess = 1 then '' else 'Step Text:' + isnull(b.stepCommand, 'N/A') end + '<br>'
+				from jobStepHistory a (nolock)
+				join dm_serverJobSteps b (nolock) on a.ukey_jobStep = b.ukey
+					and a.ukey_job = b.ukey_job
+					and b.ukey_server = @nUkeyServer
+				join dm_serverJobs c (nolock) on b.ukey_job = c.ukey
+					and a.ukey_job = c.ukey
+					and c.ukey_server = @nUkeyServer
+					and c.job_id = @cJobID
+				where a.ukey_server = @nUkeyServer
+				order by a.ymd desc
+
+			update #runningJobs
+				set runStatus = @cThisMessage
+				where running = 1
+					and job_id = @cJobID
+		end
+
 		--********************************************************************************************************
 		--********************************************************************************************************
 		-- Now, let's find any jobs that are running now and running longer than they should
@@ -1495,12 +1570,13 @@ begin
 					from jobHistory a (nolock)
 					join dm_serverJobs b (nolock) on a.ukey_job = b.ukey
 						and b.ukey_server = @nUkeyServer
+					join #runningJobs c on b.job_id = c.job_id
 					where a.ukey_server = @nUkeyServer
 						and (
-							a.ymd between dateAdd(week, -1, dateAdd(minute, -30, getDate())) and dateAdd(week, -1, dateAdd(minute, 30, getDate()))
-							or a.ymd between dateAdd(week, -2, dateAdd(minute, -30, getDate())) and dateAdd(week, -2, dateAdd(minute, 30, getDate()))
-							or a.ymd between dateAdd(week, -3, dateAdd(minute, -30, getDate())) and dateAdd(week, -3, dateAdd(minute, 30, getDate()))
-							or a.ymd between dateAdd(week, -4, dateAdd(minute, -30, getDate())) and dateAdd(week, -4, dateAdd(minute, 30, getDate()))
+							a.ymd between dateAdd(week, -1, dateAdd(minute, -30, c.startTime)) and dateAdd(week, -1, dateAdd(minute, 30, c.startTime))
+							or a.ymd between dateAdd(week, -2, dateAdd(minute, -30, c.startTime)) and dateAdd(week, -2, dateAdd(minute, 30, c.startTime))
+							or a.ymd between dateAdd(week, -3, dateAdd(minute, -30, c.startTime)) and dateAdd(week, -3, dateAdd(minute, 30, c.startTime))
+							or a.ymd between dateAdd(week, -4, dateAdd(minute, -30, c.startTime)) and dateAdd(week, -4, dateAdd(minute, 30, c.startTime))
 
 							or dateAdd(second, runningSeconds, a.ymd) between dateAdd(week, -1, dateAdd(minute, -30, getDate())) and dateAdd(week, -1, dateAdd(minute, 30, getDate()))
 							or dateAdd(second, runningSeconds, a.ymd) between dateAdd(week, -2, dateAdd(minute, -30, getDate())) and dateAdd(week, -2, dateAdd(minute, 30, getDate()))
@@ -1522,12 +1598,13 @@ begin
 					from jobHistory a (nolock)
 					join dm_serverJobs b (nolock) on a.ukey_job = b.ukey
 						and b.ukey_server = @nUkeyServer
+					join #runningJobs c on b.job_id = c.job_id
 					where a.ukey_server = @nUkeyServer
 						and (
-							a.ymd between dateAdd(day, -1, dateAdd(minute, -30, getDate())) and dateAdd(day, -1, dateAdd(minute, 30, getDate()))
-							or a.ymd between dateAdd(day, -2, dateAdd(minute, -30, getDate())) and dateAdd(day, -2, dateAdd(minute, 30, getDate()))
-							or a.ymd between dateAdd(day, -3, dateAdd(minute, -30, getDate())) and dateAdd(day, -3, dateAdd(minute, 30, getDate()))
-							or a.ymd between dateAdd(day, -4, dateAdd(minute, -30, getDate())) and dateAdd(day, -4, dateAdd(minute, 30, getDate()))
+							a.ymd between dateAdd(day, -1, dateAdd(minute, -30, c.startTime)) and dateAdd(day, -1, dateAdd(minute, 30, c.startTime))
+							or a.ymd between dateAdd(day, -2, dateAdd(minute, -30, c.startTime)) and dateAdd(day, -2, dateAdd(minute, 30, c.startTime))
+							or a.ymd between dateAdd(day, -3, dateAdd(minute, -30, c.startTime)) and dateAdd(day, -3, dateAdd(minute, 30, c.startTime))
+							or a.ymd between dateAdd(day, -4, dateAdd(minute, -30, c.startTime)) and dateAdd(day, -4, dateAdd(minute, 30, c.startTime))
 
 							or dateAdd(second, runningSeconds, a.ymd) between dateAdd(day, -1, dateAdd(minute, -30, getDate())) and dateAdd(day, -1, dateAdd(minute, 30, getDate()))
 							or dateAdd(second, runningSeconds, a.ymd) between dateAdd(day, -2, dateAdd(minute, -30, getDate())) and dateAdd(day, -2, dateAdd(minute, 30, getDate()))
@@ -1550,8 +1627,9 @@ begin
 					from jobHistory a (nolock)
 					join dm_serverJobs b (nolock) on a.ukey_job = b.ukey
 						and b.ukey_server = @nUkeyServer
+					join #runningJobs c on b.job_id = c.job_id
 					where a.ukey_server = @nUkeyServer
-						and a.ymd >= dateAdd(hour, -2, getDate())
+						and a.ymd >= dateAdd(hour, -2, c.startTime)
 					group by b.job_id
 				) b on a.job_id = b.job_id
 			where isnull(a.expectedRunningSeconds, 0) = 0
@@ -1592,7 +1670,9 @@ begin
 				'has been running for ' + convert(varchar(20), secondsRunning) + ' seconds. ' + char(13) + char(13) +
 				'Start time: ' + convert(varchar(20), startTime) + char(13) +
 				'Current step: ' + a.currentStepName + char(13) +
-				'Current step text: ' + char(13) + a.currentStepText, 2000) as message,
+				'Current step text: ' + char(13) + a.currentStepText +
+				'Status: ' + isnull(runStatus, 'N/A')
+				, 8000)	as message,
 			-- if runtime > 2x, then it's a critical alert
 			-- otherwise, sit on it
 			case
@@ -1604,8 +1684,8 @@ begin
 			from #runningJobs a
 			where secondsRunning > expectedRunningSeconds * 1.5
 				and secondsRunning > 60
-				-- should be at least 90% of the longest runtime we've observed
-				and secondsRunning > maxRunningSeconds * 0.9
+				-- should be at least 20% higher than the longest runtime we've observed
+				and secondsRunning > maxRunningSeconds * 1.2
 				and expectedRunningSeconds > 0
 				and convert(int, (minutesRunning/10)) > 0
 
@@ -1618,7 +1698,9 @@ begin
 				'has been running for ' + convert(varchar(20), secondsRunning) + ' seconds. ' + char(13) + char(13) +
 				'Start time: ' + convert(varchar(20), startTime) + char(13) +
 				'Current step: ' + a.currentStepName + char(13) +
-				'Current step text: ' + char(13) + a.currentStepText, 2000) as message,
+				'Current step text: ' + char(13) + a.currentStepText +
+				'Status: ' + isnull(runStatus, 'N/A')
+				, 8000)	as message,
 			-- if runtime > 2x, then it's a critical alert
 			-- otherwise, sit on it
 			2 as severity,
@@ -1713,14 +1795,14 @@ begin
 
 				set @cThisSubject = 'Job ' + @cJobName + ' failing at ' + convert(varchar(20), dbo.fn_returnTimeBlock(@dJobFailure), 120)
 				set @cThisMessage = 'Job ' + @cJobName + ' is failing. <br>' +
-					'Failures: ' + convert(varchar(20), @nNumFailure) + '<br>' +
-					'Successes: ' + convert(varchar(20), @nNumSuccess) + '<br>' +
-					'Last Failure: ' + convert(varchar(20), @dLastFailure, 120) + '<br>' +
-					'Last Success: ' + convert(varchar(20), @dLastSuccess, 120) + '<br>' +
+					'Failures: ' + isnull(convert(varchar(20), @nNumFailure), 'N/A') + '<br>' +
+					'Successes: ' + isnull(convert(varchar(20), @nNumSuccess), 'N/A') + '<br>' +
+					'Last Failure: ' + isnull(convert(varchar(20), @dLastFailure, 120), 'N/A') + '<br>' +
+					'Last Success: ' + isnull(convert(varchar(20), @dLastSuccess, 120), 'N/A') + '<br>' +
 					replicate('=', 20) + '<br>'
 
 				select @cThisMessage = @cThisMessage +
-					'==<b>' + isnull(b.stepName, 'N/A') + '</b> @ ' + convert(varchar(20), a.ymd, 120) + ' <br>' +
+					'==<b>' + isnull(b.stepName, 'N/A') + '</b> @ ' + isnull(convert(varchar(20), a.ymd, 120), 'N/A') + ' <br>' +
 						'Runtime: ' + convert(varchar(20), isnull(a.runningSeconds, 0)) + 's<br>' +
 						'Outcome: ' + case when a.isSuccess = 1 then 'OK' else isnull(a.stepOutcome, 'N/A') end + '<br>' +
 						case when a.isSuccess = 1 then '' else 'Step Text:' + isnull(b.stepCommand, 'N/A') end + '<br>'

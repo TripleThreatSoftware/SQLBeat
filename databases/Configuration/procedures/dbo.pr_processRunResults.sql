@@ -1,10 +1,12 @@
-USE [Configuration]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_processRunResults]    Script Date: 08/27/2008 09:28:40 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
+-- select top 100 * from runs_log order by ymd desc
+-- exec pr_processRunResults 37
+-- select top 100 * from notification..drivespacelog order by ukey desc
+
 ALTER procedure [dbo].[pr_processRunResults] (@nUkeyGroup int)
 as
 begin
@@ -281,26 +283,44 @@ begin
 	--		f.keyName
 
 	create table #messageStage (serverName varchar(200), subject varchar(500), message varchar(8000),
-		isDriveSpace bit default 0, isService bit default 0)
+		isDriveSpace bit default 0, isService bit default 0, severity int default 3)
 	create table #messagesToSend (ukey int identity, serverName varchar(200), subject varchar(500), message varchar(8000),
-		isDriveSpace bit default 0, isService bit default 0)
+		isDriveSpace bit default 0, isService bit default 0, severity int default 3)
 
 	-- changed services
-	insert into #messageStage (serverName, subject, message, isService)
-	select serverName,
-		'State of services on ' + serverName + ' has changed.' as subject,
-		'State of service "' + instanceName + '" on ' + serverName + ' changed from ' + isnull(oldValue, 'N/A') + ' to ' + isnull(newValue, 'N/A') + '.' as message,
-		1 as isService
-		from #results
-		where counterName = 'win32_service'
-			and keyName = 'state'
-			and instanceName not like '%shadow copy%'
-			and instanceName not like '%application management%'
-			and instanceName not like '%background intelligent transfer service%'
-			and instanceName not like '%web proxy auto-discovery%'
+	-- if more than 5 changed, assume some kind of glitch
+	if (
+		select count(*)
+			from #results
+			where counterName = 'win32_service'
+				and keyName = 'state'
+				and instanceName not like '%shadow copy%'
+				and instanceName not like '%application management%'
+				and instanceName not like '%background intelligent transfer service%'
+				and instanceName not like '%web proxy auto-discovery%'
+		) <= 5
+	begin
+
+		insert into #messageStage (serverName, subject, message, isService)
+		select serverName,
+			'State of services on ' + serverName + ' has changed.' as subject,
+			'State of service "' + instanceName + '" on ' + serverName + ' changed from ' + isnull(oldValue, 'N/A') + ' to ' + isnull(newValue, 'N/A') + '.' as message,
+			1 as isService
+			from #results
+			where counterName = 'win32_service'
+				and keyName = 'state'
+				and instanceName not like '%shadow copy%'
+				and instanceName not like '%application management%'
+				and instanceName not like '%background intelligent transfer service%'
+				and instanceName not like '%web proxy auto-discovery%'
+
+				and instanceName not like '%Runtime Optimization Service%'
+				and instanceName not like '%Logical Disk Manager%'
+				and instanceName not like '%Virtual Disk Service%'
+	end
 
 	-- disk subsystem status changes
-	insert into #messageStage (serverName, subject, message, isDriveSpace)
+	insert into #messageStage (serverName, subject, message, isDriveSpace, severity)
 	select serverName,
 		'Status of logical disk "' + instanceName + '" on ' + serverName + ' changed.' as subject,
 		'Counter "' + isnull(keyName, 'N/A') + '" ' +
@@ -308,7 +328,8 @@ begin
 			'on ' + serverName + ' ' +
 			'changed from ' + isnull(oldValue, 'N/A') + ' ' +
 			'to ' + isnull(newValue, 'N/A') + '.' as message,
-		1 as isDriveSpace
+		1 as isDriveSpace,
+		1 as severity
 		from #results
 		where counterName in ('Win32_LogicalDisk')
 			and (
@@ -346,7 +367,7 @@ begin
 			and keyName not like '%ErrorsFromASPPreprocessor%'
 			and keyName not like '%ErrorsPerSec%'
 			and keyName not in ('ErrorsAccessPermissions', 'ErrorsGrantedAccess', 'ErrorsLogon', 'SessionsErroredOut')
-			and counterName not in ('Win32_process')
+			and counterName not in ('Win32_process', 'Win32_Processor', 'win32_service', 'Win32_LogicalDisk')
 
 	-- any changed local groups or users
 	insert into #messageStage (serverName, subject, message)
@@ -361,73 +382,73 @@ begin
 		where counterName in ('win32_group', 'win32_groupUser', 'Win32_UserAccount')
 			and not keyName = 'PartComponent'
 
-	-- drive space below threshold
-	insert into #messageStage (serverName, subject, message, isDriveSpace)
-	select a.serverName,
-		'Disk space below absolute threshold for ' + a.instanceName + ' on ' + a.serverName + '.' as subject,
-		'Disk space for ' + a.instanceName + ' on ' + a.serverName + ' generated an alert.' + char(13) + char(13) +
-			char(9) + 'Current  : ' + a.newValue + char(13) +
-			char(9) + 'Previous : ' + a.oldValue + char(13) +
-			char(9) + 'Change   : ' + convert(varchar(20),
-					convert(decimal(10,2),
-						((convert(decimal(25,4), a.newValue) - convert(decimal(25,4), a.oldValue)) / convert(decimal(25, 4), a.oldValue)) * 100
-					)
-				) + '%',
-		1 as isDriveSpace
+	--******************************************************************************************************
+	--******************************************************************************************************
+	-- Drive space
 
+	insert into notification..driveSpaceLog (ymd, serverName, driveLetter, driveSpace)
+	select @dLastRun, b.serverName, left(a.instanceName, 1), convert(decimal(20,2), a.newValue) / (1024*1000)
 		from #results a
 		join notification.dbo.dm_servers b (nolock) on a.serverName = b.serverName
-			and a.newValue < convert(decimal(25,4), b.lowspaceThreshold)
-		where counterName = 'Win32_LogicalDisk'
-			and keyName = 'freeSpace'
+--		join notification.dbo.dm_drivespaceThresholds d (nolock) on b.ukey = d.ukey_server
+--			and a.newValue <= d.lowSpaceThreshold
+--			and a.instanceName = d.driveLetter
+		where a.counterName = 'Win32_LogicalDisk'
+			and a.keyName = 'freeSpace'
 			and isnumeric(a.newValue) = 1
 			and isnumeric(a.oldValue) = 1
 
-	-- drive space below relative threshold
-	insert into #messageStage (serverName, subject, message, isDriveSpace)
-	select a.serverName,
-		'Disk free space at ' + convert(varchar(20), convert(decimal(10,0), a.portionRemaining * 100)) + '%' + ' for ' + a.instanceName + ' on ' + a.serverName + '.' as subject,
-		'Disk space for ' + a.instanceName + ' on ' + a.serverName + ' generated an alert.' + char(13) + char(13) +
-			char(9) + 'Disk Type : ' + a.driveType + char(13) +
-			char(9) + 'Available : ' + convert(varchar(20), a.freeSpace) + char(13) +
-			char(9) + 'Total     : ' + convert(varchar(20), a.totalSpace) + char(13) +
-			char(9) + '% Free    : ' + convert(varchar(20), convert(decimal(10,3), a.portionRemaining * 100)) + '%' + char(13) +
-			char(9) + 'Threshold : ' + convert(varchar(20), convert(decimal(10,2), b.lowspaceThresholdRelative * 100)) + '%',
-		1 as isDriveSpace
+	print 'Added ' + convert(varchar(20), @@rowcount) + ' drive space records'
 
-		from (
-			select serverName, instanceName, driveType, freeSpace, totalSpace,
-				case when totalSpace <> 0
-					then convert(decimal(10,5), convert(decimal(20,2), freeSpace) / convert(decimal(20,2), totalSpace))
-					else 0 end as portionRemaining
-				from (
-					select serverName,
-						a.instanceName,
-						max(case when f.keyName = 'freeSpace' then convert(decimal(25,0), keyValue) else 0 end) as freeSpace,
-						max(case when f.keyName = 'size' then convert(decimal(25,0), keyValue) else 0 end) as totalSpace,
-						max(case when f.keyName = 'description' then keyValue else '' end) as driveType
-						from #thisRun a
-						join notification..dm_servers d (nolock) on a.ukey_server = d.ukey
-						join dm_counters e (nolock) on a.ukey_counter = e.ukey
-						join dm_keyNames f (nolock) on a.ukey_keyname = f.ukey
-						where counterName = 'Win32_LogicalDisk'
-							and f.keyName in ('freeSpace', 'size', 'description')
-						group by serverName,
-							a.instanceName
-					) a
-				where totalSpace <> 0
-					and not driveType like '%cd%'
-			) a
-		join notification..dm_servers b (nolock) on a.serverName = b.serverName
-			and a.portionRemaining <= b.lowspaceThresholdRelative
+--	-- drive space below relative threshold
+--	insert into #messageStage (serverName, subject, message, isDriveSpace)
+--	select a.serverName,
+--		'Disk free space at ' + convert(varchar(20), convert(decimal(10,0), a.portionRemaining * 100)) + '%' + ' for ' + a.instanceName + ' on ' + a.serverName + '.' as subject,
+--		'Disk space for ' + a.instanceName + ' on ' + a.serverName + ' generated an alert.' + char(13) + char(13) +
+--			char(9) + 'Disk Type : ' + a.driveType + char(13) +
+--			char(9) + 'Available : ' + convert(varchar(20), a.freeSpace) + char(13) +
+--			char(9) + 'Total     : ' + convert(varchar(20), a.totalSpace) + char(13) +
+--			char(9) + '% Free    : ' + convert(varchar(20), convert(decimal(10,3), a.portionRemaining * 100)) + '%' + char(13) +
+--			char(9) + 'Threshold : ' + convert(varchar(20), convert(decimal(10,2), b.lowspaceThresholdRelative * 100)) + '%',
+--		1 as isDriveSpace
+--
+--		from (
+--			select serverName, instanceName, driveType, freeSpace, totalSpace,
+--				case when totalSpace <> 0
+--					then convert(decimal(10,5), convert(decimal(20,2), freeSpace) / convert(decimal(20,2), totalSpace))
+--					else 0 end as portionRemaining
+--				from (
+--					select serverName,
+--						a.instanceName,
+--						max(case when f.keyName = 'freeSpace' then convert(decimal(25,0), keyValue) else 0 end) as freeSpace,
+--						max(case when f.keyName = 'size' then convert(decimal(25,0), keyValue) else 0 end) as totalSpace,
+--						max(case when f.keyName = 'description' then keyValue else '' end) as driveType
+--						from #thisRun a
+--						join notification..dm_servers d (nolock) on a.ukey_server = d.ukey
+--						join dm_counters e (nolock) on a.ukey_counter = e.ukey
+--						join dm_keyNames f (nolock) on a.ukey_keyname = f.ukey
+--						where counterName = 'Win32_LogicalDisk'
+--							and f.keyName in ('freeSpace', 'size', 'description')
+--						group by serverName,
+--							a.instanceName
+--					) a
+--				where totalSpace <> 0
+--					and not driveType like '%cd%'
+--			) a
+--		join notification..dm_servers b (nolock) on a.serverName = b.serverName
+--			and a.portionRemaining <= b.lowspaceThresholdRelative
+
+	--******************************************************************************************************
+	--******************************************************************************************************
 
 	-- memory below threshold
-	insert into #messageStage (serverName, subject, message)
+	insert into #messageStage (serverName, subject, message, severity)
 	select a.serverName,
 		'Memory alert for ' + a.serverName + '.' as subject,
 		keyName + ' below threshold.' + char(13) + char(13) +
 			char(9) + 'Current  : ' + isnull(newValue, 'N/A') + char(13) +
-			char(9) + 'Previous : ' + isnull(oldValue, 'N/A') as message
+			char(9) + 'Previous : ' + isnull(oldValue, 'N/A') as message,
+		1 as severity
 
 		from #results a
 		join notification.dbo.dm_servers b (nolock) on
@@ -497,9 +518,10 @@ begin
 	declare @nThisUkey int
 	declare @bIsDriveSpace bit
 	declare @bIsService bit
+	declare @nSeverity int
 
-	insert into #messagesToSend (subject, message, serverName, isService, isDriveSpace)
-	select distinct subject, message, serverName, isService, isDriveSpace
+	insert into #messagesToSend (subject, message, serverName, isService, isDriveSpace, severity)
+	select distinct subject, message, serverName, isService, isDriveSpace, severity
 		from #messageStage
 		order by serverName, subject, message
 
@@ -510,7 +532,8 @@ begin
 			@cThisSubject = subject,
 			@nThisUkey = ukey,
 			@bIsDriveSpace = isDriveSpace,
-			@bIsService = isService
+			@bIsService = isService,
+			@nSeverity = severity
 			from #messagesToSend
 			order by ukey
 
@@ -529,7 +552,7 @@ begin
 		print @cThisMessage
 
 		insert into notification..notificationLog_stage (serverName, subject, message, severity, isConfiguration, isService, isDriveSpace) values (
-			@cThisServer, @cThisSubject, @cThisMessage, 2, 1, @bIsService, @bIsDriveSpace)
+			@cThisServer, @cThisSubject, @cThisMessage, @nSeverity, 1, @bIsService, @bIsDriveSpace)
 
 		delete
 			from #messagesToSend

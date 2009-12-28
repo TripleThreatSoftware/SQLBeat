@@ -20,6 +20,13 @@ begin
 	-- Get rid of duplicates
 	--*********************************************************************************************************************
 
+	update eventLog_stage with (rowlock)
+		set timeWritten = convert(dateTime, left(replace(timeWritten, '''', ''), 8) + ' ' + substring(replace(timeWritten, '''', ''),9,2) + ':' + substring(replace(timeWritten, '''', ''),11,2), 112)
+		from eventLog_stage a
+		join dm_servers b (nolock) on (a.computerName = b.serverName or a.computerName = isnull(b.friendlyName, ''))
+			and b.ukey_group = @nUkeyGroup
+		where left(timeWritten, 1) = ''''
+
 	select *,
 		convert(varchar(8000), '') as emailMessage,
 		convert(varchar(8000), '') as emailSubject,

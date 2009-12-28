@@ -1348,7 +1348,10 @@ begin
 				'Run History: ' + char(13) +
 				isnull(a.runHistory, 'N/A'),
 			8000) as message,
-		3 as severity
+		case when a.isSuccess = 0 and a.isRunning = 0
+			then 1
+			else 3
+			end as severity
 		from #detailedChecks a
 		left outer join #runtimeHistory b on a.ukey_group = b.ukey_group
 			and a.serverName = b.serverName

@@ -36,6 +36,9 @@ begin
 	set @cSMTPPort = (select top 1 settingValue from dm_settings where settingName = 'SMTP Port')
 	set @bSMTPUseSSL = (select top 1 convert(bit, settingValue) from dm_settings where settingName = 'SMTP SSL')
 
+	if isnull(@cSMTPPort, '') in ('0', '')
+		set @cSMTPPort = null
+
 	--************* Create the CDO.Message Object ************************
 	EXEC @hr = sp_OACreate 'CDO.Message', @iMsg OUT
 

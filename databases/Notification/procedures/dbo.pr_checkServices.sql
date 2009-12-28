@@ -1,9 +1,9 @@
-/****** Object:  StoredProcedure [dbo].[pr_checkServices]    Script Date: 05/19/2009 13:59:45 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE      procedure [dbo].[pr_checkServices] (@nUkeyGroup int)
+
+ALTER      procedure [dbo].[pr_checkServices] (@nUkeyGroup int)
 as
 begin
 	set nocount on
@@ -108,7 +108,7 @@ begin
 
 		if (select count(*) from #runningServices where serviceName like '%xp_cmdshell%') > 0
 		begin
-			insert into notificationLog_stage (serverName, subject, message, severity) values (@cServerName, 'XP_CMDSHELL is disabled', 'Unable to check running services - XP_CMDSHELL access is disabled.', 2)
+			insert into notificationLog_stage (serverName, subject, message, severity) values (@cServerName, 'XP_CMDSHELL is disabled', 'Unable to check running services - XP_CMDSHELL access is disabled.', 3)
 			update dm_servers set serviceCheck = 0 where serverName = @cServerName
 			truncate table #runningServices
 			continue
@@ -229,4 +229,3 @@ begin
 	drop table #messages
 	drop table #runningServices
 end
-GO
