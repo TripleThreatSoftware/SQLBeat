@@ -1126,7 +1126,7 @@ begin
 
 			-- weight the severity based on how long it's been running, and whether or not it's business hours
 			case
-				when @bIsOffHours = 1 and convert(decimal(10,2), convert(decimal(10,2), dateDiff(second, isnull(lastBatchTime, getDate()), getDate())) / 60) > 30 then 1
+				when @bIsOffHours = 1 and convert(decimal(10,2), convert(decimal(10,2), dateDiff(second, isnull(lastBatchTime, getDate()), getDate())) / 60) > 45 then 1
 				when @bIsOffHours = 0 and convert(decimal(10,2), convert(decimal(10,2), dateDiff(second, isnull(lastBatchTime, getDate()), getDate())) / 60) > 15 then 1
 				else 2
 				end as severity,
