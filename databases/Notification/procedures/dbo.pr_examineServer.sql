@@ -283,6 +283,9 @@ begin
 
 	if (select count(*) from #databaseNames where isSuspect = 1) > 0
 	begin
+		-- pause for 5 seconds to allow any database state change in progress to complete, just in case
+		waitfor delay '00:00:05'
+
 		create table #suspectDatabases (dbName varchar(500))
 
 		-- let's do some validating here; we seem to be catching LS databases as they transition into a RESTORE state
