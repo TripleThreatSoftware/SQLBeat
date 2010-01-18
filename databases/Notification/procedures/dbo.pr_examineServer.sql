@@ -284,7 +284,7 @@ begin
 	if (select count(*) from #databaseNames where isSuspect = 1) > 0
 	begin
 		-- pause for 5 seconds to allow any database state change in progress to complete, just in case
-		waitfor delay '00:00:05'
+		waitfor delay '00:00:10'
 
 		create table #suspectDatabases (dbName varchar(500))
 
@@ -1580,15 +1580,15 @@ begin
 					join #runningJobs c on b.job_id = c.job_id
 					where a.ukey_server = @nUkeyServer
 						and (
-							a.ymd between dateAdd(week, -1, dateAdd(minute, -30, c.startTime)) and dateAdd(week, -1, dateAdd(minute, 30, c.startTime))
-							or a.ymd between dateAdd(week, -2, dateAdd(minute, -30, c.startTime)) and dateAdd(week, -2, dateAdd(minute, 30, c.startTime))
-							or a.ymd between dateAdd(week, -3, dateAdd(minute, -30, c.startTime)) and dateAdd(week, -3, dateAdd(minute, 30, c.startTime))
-							or a.ymd between dateAdd(week, -4, dateAdd(minute, -30, c.startTime)) and dateAdd(week, -4, dateAdd(minute, 30, c.startTime))
+							a.ymd between dateAdd(week, -1, dateAdd(minute, -60, c.startTime)) and dateAdd(week, -1, dateAdd(minute, 60, c.startTime))
+							or a.ymd between dateAdd(week, -2, dateAdd(minute, -60, c.startTime)) and dateAdd(week, -2, dateAdd(minute, 60, c.startTime))
+							or a.ymd between dateAdd(week, -3, dateAdd(minute, -60, c.startTime)) and dateAdd(week, -3, dateAdd(minute, 60, c.startTime))
+							or a.ymd between dateAdd(week, -4, dateAdd(minute, -60, c.startTime)) and dateAdd(week, -4, dateAdd(minute, 60, c.startTime))
 
-							or dateAdd(second, runningSeconds, a.ymd) between dateAdd(week, -1, dateAdd(minute, -30, getDate())) and dateAdd(week, -1, dateAdd(minute, 30, getDate()))
-							or dateAdd(second, runningSeconds, a.ymd) between dateAdd(week, -2, dateAdd(minute, -30, getDate())) and dateAdd(week, -2, dateAdd(minute, 30, getDate()))
-							or dateAdd(second, runningSeconds, a.ymd) between dateAdd(week, -3, dateAdd(minute, -30, getDate())) and dateAdd(week, -3, dateAdd(minute, 30, getDate()))
-							or dateAdd(second, runningSeconds, a.ymd) between dateAdd(week, -4, dateAdd(minute, -30, getDate())) and dateAdd(week, -4, dateAdd(minute, 30, getDate()))
+							or dateAdd(second, runningSeconds, a.ymd) between dateAdd(week, -1, dateAdd(minute, -60, getDate())) and dateAdd(week, -1, dateAdd(minute, 60, getDate()))
+							or dateAdd(second, runningSeconds, a.ymd) between dateAdd(week, -2, dateAdd(minute, -60, getDate())) and dateAdd(week, -2, dateAdd(minute, 60, getDate()))
+							or dateAdd(second, runningSeconds, a.ymd) between dateAdd(week, -3, dateAdd(minute, -60, getDate())) and dateAdd(week, -3, dateAdd(minute, 60, getDate()))
+							or dateAdd(second, runningSeconds, a.ymd) between dateAdd(week, -4, dateAdd(minute, -60, getDate())) and dateAdd(week, -4, dateAdd(minute, 60, getDate()))
 							)
 					group by b.job_id
 				) b on a.job_id = b.job_id
@@ -1608,15 +1608,15 @@ begin
 					join #runningJobs c on b.job_id = c.job_id
 					where a.ukey_server = @nUkeyServer
 						and (
-							a.ymd between dateAdd(day, -1, dateAdd(minute, -30, c.startTime)) and dateAdd(day, -1, dateAdd(minute, 30, c.startTime))
-							or a.ymd between dateAdd(day, -2, dateAdd(minute, -30, c.startTime)) and dateAdd(day, -2, dateAdd(minute, 30, c.startTime))
-							or a.ymd between dateAdd(day, -3, dateAdd(minute, -30, c.startTime)) and dateAdd(day, -3, dateAdd(minute, 30, c.startTime))
-							or a.ymd between dateAdd(day, -4, dateAdd(minute, -30, c.startTime)) and dateAdd(day, -4, dateAdd(minute, 30, c.startTime))
+							a.ymd between dateAdd(day, -1, dateAdd(minute, -60, c.startTime)) and dateAdd(day, -1, dateAdd(minute, 60, c.startTime))
+							or a.ymd between dateAdd(day, -2, dateAdd(minute, -60, c.startTime)) and dateAdd(day, -2, dateAdd(minute, 60, c.startTime))
+							or a.ymd between dateAdd(day, -3, dateAdd(minute, -60, c.startTime)) and dateAdd(day, -3, dateAdd(minute, 60, c.startTime))
+							or a.ymd between dateAdd(day, -4, dateAdd(minute, -60, c.startTime)) and dateAdd(day, -4, dateAdd(minute, 60, c.startTime))
 
-							or dateAdd(second, runningSeconds, a.ymd) between dateAdd(day, -1, dateAdd(minute, -30, getDate())) and dateAdd(day, -1, dateAdd(minute, 30, getDate()))
-							or dateAdd(second, runningSeconds, a.ymd) between dateAdd(day, -2, dateAdd(minute, -30, getDate())) and dateAdd(day, -2, dateAdd(minute, 30, getDate()))
-							or dateAdd(second, runningSeconds, a.ymd) between dateAdd(day, -3, dateAdd(minute, -30, getDate())) and dateAdd(day, -3, dateAdd(minute, 30, getDate()))
-							or dateAdd(second, runningSeconds, a.ymd) between dateAdd(day, -4, dateAdd(minute, -30, getDate())) and dateAdd(day, -4, dateAdd(minute, 30, getDate()))
+							or dateAdd(second, runningSeconds, a.ymd) between dateAdd(day, -1, dateAdd(minute, -60, getDate())) and dateAdd(day, -1, dateAdd(minute, 60, getDate()))
+							or dateAdd(second, runningSeconds, a.ymd) between dateAdd(day, -2, dateAdd(minute, -60, getDate())) and dateAdd(day, -2, dateAdd(minute, 60, getDate()))
+							or dateAdd(second, runningSeconds, a.ymd) between dateAdd(day, -3, dateAdd(minute, -60, getDate())) and dateAdd(day, -3, dateAdd(minute, 60, getDate()))
+							or dateAdd(second, runningSeconds, a.ymd) between dateAdd(day, -4, dateAdd(minute, -60, getDate())) and dateAdd(day, -4, dateAdd(minute, 60, getDate()))
 							)
 					group by b.job_id
 				) b on a.job_id = b.job_id
@@ -2113,6 +2113,7 @@ begin
 						) a
 				) a
 			where tempdbSize > maxSize
+				and tempdbSize > 5000
 
 		if (select isnull(checkLogFileSize, 0) from dm_servers (nolock) where ukey = @nUkeyServer) = 1
 		begin
@@ -2241,9 +2242,12 @@ begin
 		select
 			-- weight based on how long and whether this is the first alert in the last 10 minutes
 			case when msWaiting > 20000 and @nNumAlerts > 0 then 1 else 2 end as severity,
-			convert(varchar(20), a.numRequests) + ' requests waiting for ' + convert(varchar(20), a.msWaiting) + 'ms on "' + left(b.filePath, 3) + '"' as subject,
+			convert(varchar(20), isnull(a.numRequests, 0)) + ' requests ' +
+				'waiting for ' + convert(varchar(20), a.msWaiting) + 'ms on "' + isnull(left(b.filePath, 3), 'N/A') + '"' as subject,
 			'Time: ' + convert(varchar(20), getDate(), 120) + '<br>' +
-				'Database ' + a.databaseName + ' has ' + convert(varchar(20), a.numRequests) + ' requests waiting for ' + convert(varchar(20), a.msWaiting) + 'ms on "' + b.filePath + '"' as message
+				'Database ' + isnull(a.databaseName, 'N/A') + ' ' +
+				'has ' + convert(varchar(20), isnull(a.numRequests, 0)) + ' requests ' +
+				'waiting for ' + convert(varchar(20), a.msWaiting) + 'ms on "' + isnull(left(b.filePath, 3), 'N/A') + '"' as message
 			from #waitingIO a
 			left outer join (
 				select

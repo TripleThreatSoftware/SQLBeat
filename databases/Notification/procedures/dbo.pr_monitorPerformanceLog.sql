@@ -3,7 +3,6 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-
 -- exec pr_monitorPerformanceLog '2009-08-20 00:09.000'
 -- exec pr_monitorPerformanceLog '2009-09-21 13:22.000'
 
@@ -22,12 +21,13 @@ begin
 	declare @nUkeyCounter int
 	declare @nPage int
 	declare @nNumPages int
+	declare @nSeverity int
 
 	if isnull(@dRightNow, '') = ''
 		set @dRightNow = getDate()
 
 	set @dEndDate = @dRightNow
-	set @dStartDate = isnull(@dStartDate, dateAdd(hour, -3, @dEndDate))
+	set @dStartDate = isnull(@dStartDate, dateAdd(hour, -18, @dEndDate))
 
 	create table #servers (ukey_server int, serverName varchar(200))
 	insert into #servers (ukey_server, serverName)
@@ -78,15 +78,15 @@ begin
 				having count(distinct runNumber) <> 10
 			) b on a.ukey_server = b.ukey_server
 
-	-- if we don't have 20 total data points for history, forget it
-	delete #runstamps
-		from #runstamps a
-		join (
-			select ukey_server
-				from #allRuns
-				group by ukey_server
-				having count(distinct runstamp) < 20
-			) b on a.ukey_server = b.ukey_server
+	---- if we don't have 20 total data points for history, forget it
+	--delete #runstamps
+	--	from #runstamps a
+	--	join (
+	--		select ukey_server
+	--			from #allRuns
+	--			group by ukey_server
+	--			having count(distinct runstamp) < 20
+	--		) b on a.ukey_server = b.ukey_server
 
 	set @cSQLString = 'select a.ukey_server, left(b.objectName, 200),left(c.counterName, 200), left(a.instanceName, 200), '
 
@@ -121,7 +121,7 @@ begin
 		time1 bigint, time2 bigint, time3 bigint, time4 bigint, time5 bigint, time6 bigint, time7 bigint, time8 bigint, time9 bigint, time10 bigint,
 		delta9 decimal(30,4), delta10 decimal(30,4),
 		averageValue decimal(30,4), minValue decimal(30,4), maxValue decimal(30,4),
-		historicalAverage decimal(30,4), historicalMinValue decimal(30,4), historicalMaxValue decimal(30,4), isAlert bit default 0)
+		historicalAverage decimal(30,4), historicalMinValue decimal(30,4), historicalMaxValue decimal(30,4), isAlert bit default 0, latestReading dateTime)
 
 	insert into #results (ukey_server, objectName, counterName, instanceName, time1, time2, time3, time4, time5, time6, time7, time8, time9, time10)
 	exec sp_executeSQL @cSQLString
@@ -131,6 +131,15 @@ begin
 
 	delete from #results
 		where counterName in ('Log File(s) Size (KB)', 'Log Truncations', 'Precent Log Used')
+
+	update #results
+		set latestReading = b.latestReading
+		from #results a
+		join (
+			select ukey_server, dbo.fn_runstampToDate(max(runStamp)) as latestReading
+				from #runstamps
+				group by ukey_server
+			) b on a.ukey_server = b.ukey_server
 
 	update #results
 		set delta9 = case when time8 = 0 then 0
@@ -251,6 +260,93 @@ begin
 	--**********************************************************************************************
 	--**********************************************************************************************
 	-- for known counters, set alert values for defined thresholds
+
+	select a.*, b.maxFreeMemory, b.serverName, case when a.time10 < b.maxFreeMemory * 0.25 then 1 else 2 end as severity
+		into #memoryAlerts
+		from #results a
+		join (
+			select d.ukey, d.serverName, max(maxValue) as maxFreeMemory
+				from mart_performanceLog_byday a (nolock)
+				join dm_performanceObjects b (nolock) on a.ukey_object = b.ukey
+					and b.objectName = 'SQLBeat Statistics'
+				join dm_performanceCounters c (nolock) on a.ukey_counter = c.ukey
+					and c.counterName in ('Maximum Free Memory (kb)')
+				join dm_servers d (nolock) on a.ukey_server = d.ukey
+				where a.ymd >= dateAdd(week, -6, getdate())
+				group by d.ukey, d.serverName
+			) b on a.ukey_server = b.ukey
+			and (
+				-- either we are less than 25% free (and any change is observed) or a change of more than 25% has been observed
+				a.time10 < b.maxFreeMemory * 0.25
+				or delta10 < .75
+				)
+		where a.counterName = 'Maximum Free Memory (kb)'
+			and a.objectName = 'SQLBeat Statistics'
+			and time9 > time10
+
+	if @@rowcount > 0
+	begin
+
+		set @nUkeyServer = 0
+		while exists (select top 1 ukey_server from #memoryAlerts where ukey_server > @nUkeyServer)
+		begin
+			select top 1
+				@nUkeyServer = ukey_server,
+				@cServerName = serverName,
+				@nSeverity = severity,
+				@cSubject = 'SQL memory down to ' + convert(varchar(20), convert(decimal(10,2), 100*convert(decimal(15,2), time10) / convert(decimal(15,2), maxFreeMemory))) + '% at ' + convert(varchar(20), latestReading, 120) + '.',
+				@cMessage = 'SQL memory down to ' + dbo.fn_returnFormattedInt(time10) + ' (' + convert(varchar(20), convert(decimal(10,2), 100*convert(decimal(15,2), time10) / convert(decimal(15,2), maxFreeMemory))) + '%) ' +
+					'at ' + convert(varchar(20), latestReading, 120) + '.<br>' +
+					'This is a change of ' + convert(varchar(20), convert(decimal(10,2), 100 * (1 - delta10))) + '% from the previous reading.<br><br>' +
+					'Maximum Observed Value: ' + dbo.fn_returnFormattedInt(maxFreeMemory) + '<br><br>'
+				from #memoryAlerts
+				where ukey_server > @nUkeyServer
+				order by ukey_server
+
+			set @cMessage = @cMessage + '<b><u>Lowest Readings on Last 3 days</u></b><br>'
+			select @cMessage = @cMessage + convert(varchar(10), a.ymd, 120) + ': ' + dbo.fn_returnFormattedInt(minValue) + '<br>'
+				from mart_performanceLog_byday a (nolock)
+				join dm_performanceObjects b (nolock) on a.ukey_object = b.ukey
+					and b.objectName = 'SQLBeat Statistics'
+				join dm_performanceCounters c (nolock) on a.ukey_counter = c.ukey
+					and c.counterName in ('Maximum Free Memory (kb)')
+				where a.ymd >= dateAdd(day, -3, @dRightNow)
+					and a.ymd < @dRightNow
+					and a.ukey_server = @nUkeyServer
+
+			select @cMessage = @cMessage + '<br><b><u>Last 9 readings</u></b><br>' +
+					dbo.fn_runstampToString(r1.runstamp) + ': ' + dbo.fn_returnFormattedInt(time1) + '<br>' +
+					dbo.fn_runstampToString(r2.runstamp) + ': ' + dbo.fn_returnFormattedInt(time2) + '<br>' +
+					dbo.fn_runstampToString(r3.runstamp) + ': ' + dbo.fn_returnFormattedInt(time3) + '<br>' +
+					dbo.fn_runstampToString(r4.runstamp) + ': ' + dbo.fn_returnFormattedInt(time4) + '<br>' +
+					dbo.fn_runstampToString(r5.runstamp) + ': ' + dbo.fn_returnFormattedInt(time5) + '<br>' +
+					dbo.fn_runstampToString(r6.runstamp) + ': ' + dbo.fn_returnFormattedInt(time6) + '<br>' +
+					dbo.fn_runstampToString(r7.runstamp) + ': ' + dbo.fn_returnFormattedInt(time7) + '<br>' +
+					dbo.fn_runstampToString(r8.runstamp) + ': ' + dbo.fn_returnFormattedInt(time8) + '<br>' +
+					dbo.fn_runstampToString(r9.runstamp) + ': ' + dbo.fn_returnFormattedInt(time9) + '<br>' +
+					'<font color="red"><b>' + dbo.fn_runstampToString(r10.runstamp) + ': ' + dbo.fn_returnFormattedInt(time10) + '</b></font>'
+				from #memoryAlerts a
+				join #runstamps r1 on r1.runNumber = 1 and r1.ukey_server = @nUkeyServer
+				join #runstamps r2 on r2.runNumber = 2 and r2.ukey_server = @nUkeyServer
+				join #runstamps r3 on r3.runNumber = 3 and r3.ukey_server = @nUkeyServer
+				join #runstamps r4 on r4.runNumber = 4 and r4.ukey_server = @nUkeyServer
+				join #runstamps r5 on r5.runNumber = 5 and r5.ukey_server = @nUkeyServer
+				join #runstamps r6 on r6.runNumber = 6 and r6.ukey_server = @nUkeyServer
+				join #runstamps r7 on r7.runNumber = 7 and r7.ukey_server = @nUkeyServer
+				join #runstamps r8 on r8.runNumber = 8 and r8.ukey_server = @nUkeyServer
+				join #runstamps r9 on r9.runNumber = 9 and r9.ukey_server = @nUkeyServer
+				join #runstamps r10 on r10.runNumber = 10 and r10.ukey_server = @nUkeyServer
+				where a.ukey_server = @nUkeyServer
+
+			print @cSubject
+			print @cMessage
+
+			insert into notificationLog_stage (serverName, subject, message, severity) values (@cServerName, @cSubject, @cMessage, @nSeverity)
+		end
+	end
+
+	drop table #memoryAlerts
+
 	update #results
 		set isAlert = 1
 		where counterName = 'SQL Compilations/sec'
@@ -380,6 +476,7 @@ begin
 						or rtrim(ltrim(counterName)) in ('Cache Entries Count')
 						or counterName like '%trans/sec%'
 						or counterName like '%cmds/sec%'
+						or counterName like '%global cursor%'
 						then 1
 						else 0 end) as numBad,
 				count(*) as numTotal
@@ -481,7 +578,7 @@ begin
 				print @cSubject
 				print @cMessage
 
-				insert into notificationLog_stage (serverName, subject, message, severity) values (@cServerName, @cSubject, @cMessage, 2)
+				insert into notificationLog_stage (serverName, subject, message, severity) values (@cServerName, @cSubject, @cMessage, 3)
 
 				set @nPage = @nPage + 1
 				set @nUkeyCounter = @nUkeyCounter + 3

@@ -317,6 +317,7 @@ begin
 				and instanceName not like '%Runtime Optimization Service%'
 				and instanceName not like '%Logical Disk Manager%'
 				and instanceName not like '%Virtual Disk Service%'
+				and instanceName not like '%seclogon%'
 	end
 
 	-- disk subsystem status changes
