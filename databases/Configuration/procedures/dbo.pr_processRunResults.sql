@@ -452,11 +452,13 @@ begin
 		1 as severity
 
 		from #results a
-		join notification.dbo.dm_servers b (nolock) on
-			(a.keyName = 'FreeVirtualMemory' and a.newValue < b.lowVirtualMemoryThreshold)
-			or (a.keyName = 'FreePhysicalMemory' and a.newValue < b.lowPhysicalMemoryThreshold)
-			or (a.keyName = 'PoolNonpagedBytes' and a.newValue < b.lowPoolNonpagedBytesThreshold)
-			or (a.keyName = 'PoolPagedBytes' and a.newValue < b.lowPoolPagedBytesThreshold)
+		join notification.dbo.dm_servers b (nolock) on a.serverName = b.serverName
+			and (
+				(a.keyName = 'FreeVirtualMemory' and a.newValue < b.lowVirtualMemoryThreshold)
+				or (a.keyName = 'FreePhysicalMemory' and a.newValue < b.lowPhysicalMemoryThreshold)
+				or (a.keyName = 'PoolNonpagedBytes' and a.newValue < b.lowPoolNonpagedBytesThreshold)
+				or (a.keyName = 'PoolPagedBytes' and a.newValue < b.lowPoolPagedBytesThreshold)
+				)
 		where (
 				(counterName = 'Win32_OperatingSystem' and keyName in ('FreeVirtualMemory', 'FreePhysicalMemory'))
 				or (
@@ -464,6 +466,25 @@ begin
 					and keyName in ('PoolNonpagedBytes', 'PoolPagedBytes')
 				)
 			)
+
+
+	--******************************************************************************************************
+	--******************************************************************************************************
+
+	-- processor load
+
+	insert into processorLoadLog (ukey_server, ymd, processorName, processorLoad)
+	select b.ukey, @dLastRun,
+		max(case when f.keyName = 'name' then ltrim(a.keyValue + '\') else '' end) + max(case when f.keyName = 'deviceID' then ltrim(a.keyValue) else '' end) as processorName,
+		max(case when f.keyName = 'loadPercentage' then convert(int, a.keyValue) else 0 end) as processorLoad
+		from #thisRun a
+		join notification.dbo.dm_servers b (nolock) on a.ukey_server = b.ukey
+		join dm_counters e (nolock) on a.ukey_counter = e.ukey
+		join dm_keyNames f (nolock) on a.ukey_keyname = f.ukey
+		where e.counterName = 'Win32_Processor'
+			and f.keyName in ('LoadPercentage', 'name', 'deviceID')
+		group by b.ukey, a.instanceName
+
 
 --	-- changes to hardware
 --	insert into #messageStage (serverName, subject, message)

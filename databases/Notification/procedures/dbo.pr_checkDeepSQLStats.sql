@@ -1,3 +1,7 @@
+truncate table deepSQLStats_unindexedTables
+truncate table deepSQLStats_indexesNotOptimal
+
+GO
 --***********************************************************************************************************************************************
 --***********************************************************************************************************************************************
 
@@ -20,6 +24,8 @@ begin
 
 	create table #performance (ukey int identity, ukey_parent int, nastyLine varchar(3000))
 	create table #results (ymd dateTime default getDate(), serverName varchar(200), keyName varchar(100), subkeyName varchar(200), keyValue varchar(8000), ukey_server int)
+
+	create index ix_results_keyName_subkeyName_keyValue on #results (keyName, subkeyName) include (keyValue) with fillfactor = 80
 
 	set @cServerName = ''
 
@@ -66,7 +72,15 @@ begin
 		delete from #performance where nastyLine = ''or nastyLine = 'null' or nastyline like '%dbcc execution completed%' or nastyLine is null
 
 		-- if there's an error, pitch the set and queue an alert
-		if (select count(*) from #performance where nastyLine like 'msg%level%state%server%line%' or nastyLine like '%incorrect syntax%') > 0
+		if (
+			select count(*)
+				from #performance
+				where nastyLine like 'msg%level%state%server%line%'
+					or nastyLine like '%incorrect syntax%'
+					or nastyLine like '%sql native client%'
+					or nastyLine like '%login timeout expired%'
+					or nastyLine like '%could not open a connection%'
+			) > 0
 		begin
 			declare @cMessage varchar(8000)
 			set @cMessage = ''
@@ -205,51 +219,51 @@ begin
 				and charindex('over ', keyValue) > 0
 				and charindex('consumed ', keyValue) > 0
 
-		insert into deepSQLStats_unindexedTables (ymd, ukey_server, serverName, databaseName, tableName, tableScans)
-		select
-			ymd, ukey_server, serverName,
-			left(objectName, charindex('.', objectName) - 1) as databaseName,
-			substring(objectName, charindex('.', objectName) + 1, 99) as tableName,
-			tableScans
-			from (
-				select
-					ymd,
-					ukey_server,
-					serverName,
-					rtrim(left(substring(keyValue, charindex('against', keyValue) + 8, 5000), charindex(' ', substring(keyValue, charindex('against', keyValue) + 8, 5000)) - 2)) as objectName,
-					dbo.fn_returnDigits(substring(keyValue, 1, charindex(' ', keyValue)), 1) as tableScans
-					from #results (nolock)
-					where keyName = 'Indexing'
-						and subkeyName = 'Tables not indexed'
-						and charindex('against', keyValue) > 0
-						and charindex(' ', keyValue) > 0
-						and charindex(' ', substring(keyValue, charindex('against', keyValue) + 8, 5000)) > 2
-				) a
-			where charindex('.', objectname) > 1
+		--insert into deepSQLStats_unindexedTables (ymd, ukey_server, serverName, databaseName, tableName, tableScans)
+		--select
+		--	ymd, ukey_server, serverName,
+		--	left(objectName, charindex('.', objectName) - 1) as databaseName,
+		--	substring(objectName, charindex('.', objectName) + 1, 99) as tableName,
+		--	tableScans
+		--	from (
+		--		select
+		--			ymd,
+		--			ukey_server,
+		--			serverName,
+		--			rtrim(left(substring(keyValue, charindex('against', keyValue) + 8, 5000), charindex(' ', substring(keyValue, charindex('against', keyValue) + 8, 5000)) - 2)) as objectName,
+		--			dbo.fn_returnDigits(substring(keyValue, 1, charindex(' ', keyValue)), 1) as tableScans
+		--			from #results (nolock)
+		--			where keyName = 'Indexing'
+		--				and subkeyName = 'Tables not indexed'
+		--				and charindex('against', keyValue) > 0
+		--				and charindex(' ', keyValue) > 0
+		--				and charindex(' ', substring(keyValue, charindex('against', keyValue) + 8, 5000)) > 2
+		--		) a
+		--	where charindex('.', objectname) > 1
 
-		insert into deepSQLStats_indexesNotOptimal (ymd, ukey_server, serverName, databaseName, tableName, indexNumber, isClustered, tableScans, indexSeeks)
-		select
-			ymd, ukey_server, serverName,
-			left(objectName, charindex('.', objectName) - 1) as databaseName,
-			left(substring(objectName, charindex('.', objectName) + 1, 99), charindex(' (', substring(objectName, charindex('.', objectName) + 1, 99))) as tableName,
-			dbo.fn_returnDigits(substring(objectName, charindex('(', objectName), 99), 0) as indexNumber,
-			case when objectName like '%(clustered index%' then 1 else 0 end as isClustered,
-			tableScans, indexSeeks
-			from (
-				select
-					ymd,
-					ukey_server,
-					serverName,
-					left(substring(keyValue, charindex('against', keyValue) + 8, 5000), charindex(')', substring(keyValue, charindex('against', keyValue) + 8, 5000))) as objectName,
-					dbo.fn_returnDigits(substring(keyValue, 1, charindex(' ', keyValue)), 1) as tableScans,
-					dbo.fn_returnDigits(substring(keyValue, charindex('vs ', keyValue) + 1, 20), 1) as indexSeeks
-					from #results (nolock)
-					where keyName = 'Indexing'
-						and subkeyName = 'Indexes not being used'
-						and charindex('against', keyValue) > 0
-						and charindex(' ', keyValue) > 0
-						and charindex('vs ', keyValue) > 0
-				) a
+		--insert into deepSQLStats_indexesNotOptimal (ymd, ukey_server, serverName, databaseName, tableName, indexNumber, isClustered, tableScans, indexSeeks)
+		--select
+		--	ymd, ukey_server, serverName,
+		--	left(objectName, charindex('.', objectName) - 1) as databaseName,
+		--	left(substring(objectName, charindex('.', objectName) + 1, 99), charindex(' (', substring(objectName, charindex('.', objectName) + 1, 99))) as tableName,
+		--	dbo.fn_returnDigits(substring(objectName, charindex('(', objectName), 99), 0) as indexNumber,
+		--	case when objectName like '%(clustered index%' then 1 else 0 end as isClustered,
+		--	tableScans, indexSeeks
+		--	from (
+		--		select
+		--			ymd,
+		--			ukey_server,
+		--			serverName,
+		--			left(substring(keyValue, charindex('against', keyValue) + 8, 5000), charindex(')', substring(keyValue, charindex('against', keyValue) + 8, 5000))) as objectName,
+		--			dbo.fn_returnDigits(substring(keyValue, 1, charindex(' ', keyValue)), 1) as tableScans,
+		--			dbo.fn_returnDigits(substring(keyValue, charindex('vs ', keyValue) + 1, 20), 1) as indexSeeks
+		--			from #results (nolock)
+		--			where keyName = 'Indexing'
+		--				and subkeyName = 'Indexes not being used'
+		--				and charindex('against', keyValue) > 0
+		--				and charindex(' ', keyValue) > 0
+		--				and charindex('vs ', keyValue) > 0
+		--		) a
 
 		insert into deepSQLStats_indexesNotUsed (ymd, ukey_server, serverName, databaseName, tableName, indexName, numUpdates)
 		select
@@ -306,8 +320,3 @@ begin
 	drop table #performance
 	drop table #results
 end
-GO
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO

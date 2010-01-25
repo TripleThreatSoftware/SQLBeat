@@ -265,7 +265,7 @@ begin
 		into #memoryAlerts
 		from #results a
 		join (
-			select d.ukey, d.serverName, max(maxValue) as maxFreeMemory
+			select d.ukey, d.serverName, max(maxValue) as maxFreeMemory, min(minValue) as minFreeMemory
 				from mart_performanceLog_byday a (nolock)
 				join dm_performanceObjects b (nolock) on a.ukey_object = b.ukey
 					and b.objectName = 'SQLBeat Statistics'
@@ -283,6 +283,7 @@ begin
 		where a.counterName = 'Maximum Free Memory (kb)'
 			and a.objectName = 'SQLBeat Statistics'
 			and time9 > time10
+			and time10 < minFreeMemory
 
 	if @@rowcount > 0
 	begin
@@ -477,6 +478,7 @@ begin
 						or counterName like '%trans/sec%'
 						or counterName like '%cmds/sec%'
 						or counterName like '%global cursor%'
+						or counterName like '%Free Space in tempdb%'
 						then 1
 						else 0 end) as numBad,
 				count(*) as numTotal
@@ -489,7 +491,7 @@ begin
 
 	delete from #results where delta10 = 0 and isAlert = 0
 
-	delete from #results where counterName like '%transactions/sec%'
+	delete from #results where counterName like '%transactions/sec%' or counterName like '%Free Space in tempdb%'
 
 	--******************************************************************************************************
 	--******************************************************************************************************

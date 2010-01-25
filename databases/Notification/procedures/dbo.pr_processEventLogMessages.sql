@@ -3,7 +3,6 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-
 -- create table eventLog_stage_hist (ukey_group int, ymd dateTime default getDate(), step varchar(200))
 -- pr_processEventLogMessages 35
 -- select * from eventLog_history where servername = 'prooradb06' order by ymd desc
@@ -15,6 +14,13 @@ as
 begin
 
 	insert into eventLog_history (notes, ukey_group) values ('Processing messages', @nUkeyGroup)
+
+	-- in case we picked up any alerts from a server which has a different name from the one we know, delete them
+	delete eventLog_stage with (rowlock)
+		from eventLog_stage a
+		left outer join dm_servers b (nolock) on (a.computerName = b.serverName or a.computerName = isnull(b.friendlyName, ''))
+		where b.ukey is null
+
 
 	--*********************************************************************************************************************
 	-- Get rid of duplicates
@@ -38,7 +44,10 @@ begin
 			and b.ukey_group = @nUkeyGroup
 
 	if @@rowcount = 0
+	begin
+		drop table #eventLog
 		return
+	end
 
 	update dm_servers with (rowlock)
 		set lastEventLogCheck = getDate()
@@ -47,12 +56,6 @@ begin
 			select distinct computerName
 				from #eventLog
 			) b on a.serverName = b.computerName
-
-	-- in case we picked up any alerts from a server which has a different name from the one we know, delete them
-	delete eventLog_stage
-		from eventLog_stage a
-		left outer join dm_servers b (nolock) on (a.computerName = b.serverName or a.computerName = isnull(b.friendlyName, ''))
-		where b.ukey is null
 
 	delete #eventLog with (rowlock)
 		from #eventLog a
@@ -162,6 +165,8 @@ begin
 			and message not like '%It has taken too long to refresh the W3SVC counters%'
 			and message not like '%the execute method of job definition%'
 
+			and message not like '%The Security System detected an authentication error for%'
+
 			and isnull(message, '') <> ''
 
 	update #eventLog
@@ -172,6 +177,7 @@ begin
 		set emailMessage = isnull(computerName, 'BAD COMPUTER NAME') + ' @ ' + convert(varchar(20), convert(dateTime, timeWritten), 120) + char(13) + char(13) + isnull(message, 'BAD MESSAGE'),
 			severity = case when
 				message not like '%sspi%'
+				and message not like '%unable to cycle%'
 				and (
 					message like '%temperature%'
 					or message like '%thermal%'

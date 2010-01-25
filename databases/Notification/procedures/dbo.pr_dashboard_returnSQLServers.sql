@@ -1,25 +1,47 @@
-/****** Object:  StoredProcedure [dbo].[pr_dashboard_returnSQLServers]    Script Date: 05/19/2009 13:59:45 ******/
+USE [Notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_dashboard_returnSQLServers]    Script Date: 01/25/2010 14:09:15 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE procedure [dbo].[pr_dashboard_returnSQLServers]
+
+ALTER procedure [dbo].[pr_dashboard_returnSQLServers] (@bIncludeInactiveServers bit = 0)
 as
 begin
+	declare @dStartDate dateTime
+	set @dStartDate = getDate()
+
 	set nocount on
 
-	create table #results (ukey int identity, ukey_server int, serverName varchar(100), groupName varchar(100), numDatabases int, databaseDelta varchar(50), logSize varchar(50),
-		uniqueUsers int default 0, activeDatabases int default 0, driveSpaceAvailable varchar(50), driveSpaceDelta varchar(50), errors int default 0,
+	print convert(varchar(10), dateDiff(ms, @dStartDate, getDate())) + 'ms: Starting'
+
+	create table #results (ukey int, ukey_server int, serverName varchar(100), groupName varchar(100), numDatabases int, databaseDelta varchar(50), logSize varchar(50),
+		uniqueUsers int default 0, activeDatabases int default 0, driveSpaceAvailable varchar(50), driveSpaceDelta varchar(50), errors int,
 		lastDeepScan varchar(14), lastDetailedCheck varchar(14), lowestDriveSpace varchar(20), uptime decimal(10,2))
 
-	insert into #results (serverName, ukey_server)
-	select serverName, ukey
+	print convert(varchar(10), dateDiff(ms, @dStartDate, getDate())) + 'ms: Created tables'
+
+	insert into #results (serverName, ukey_server, ukey)
+	select serverName, ukey, ukey
 		from dm_servers (nolock)
 		where isnull(isSQLBox, 0) = 1
 			and isnull(isClusterNode, 0) = 0
+			and (
+				(
+					lastDetailedCheck >= dateAdd(day, -3, getDate())
+					or lastEventLogCheck >= dateAdd(day, -3, getDate())
+					or lastConfigurationCheck >= dateAdd(day, -3, getDate())
+					or (lastPingCheck >= dateAdd(day, -3, getDate()) and isServerPingable = 1)
+					or ukey in (select top 10 ukey from dm_servers (nolock) order by ukey desc)
+					)
+				or @bIncludeInactiveServers = 1
+				)
 
 	if (select count(*) from #results where serverName = @@serverName) = 0
 		insert into #results (serverName) values (@@serverName)
+
+	print convert(varchar(10), dateDiff(ms, @dStartDate, getDate())) + 'ms: Selected server list'
 
 	create clustered index ix_tmp_results_serverName on #results (serverName) with fillfactor = 100
 
@@ -36,7 +58,10 @@ begin
 			and ymd >= dateAdd(hour, -24, getDate())
 		group by serverName, dbName
 
-	create clustered index ix_tmp_databaseReadings on #databaseReadings (serverName, dbName, ymdMin, ymdMax) with fillfactor = 100
+	print convert(varchar(10), dateDiff(ms, @dStartDate, getDate())) + 'ms: Identified databases'
+
+	create index ix_tmp_databaseReadings_min on #databaseReadings (ymdMin, serverName, dbName) with fillfactor = 100
+	create index ix_tmp_databaseReadings_max on #databaseReadings (ymdMax, serverName, dbName) with fillfactor = 100
 
 	insert into @databasesSizes
 	select
@@ -55,6 +80,8 @@ begin
 		join databaseFileSizeLog c (nolock) on a.dbName = c.dbName
 			and a.ymdMax = c.ymd
 			and c.serverName = a.serverName
+
+	print convert(varchar(10), dateDiff(ms, @dStartDate, getDate())) + 'ms: Calculated database sizes'
 
 	update #results
 		set numDatabases = b.numDatabases,
@@ -86,6 +113,8 @@ begin
 			and a.dbName not in ('master', 'model', 'msdb', 'tempdb', 'pubs', 'distribution')
 		group by a.serverName
 
+	print convert(varchar(10), dateDiff(ms, @dStartDate, getDate())) + 'ms: Counted unique users'
+
 	--create index ix_processLog_serverName_unique on processLog (ymd, serverName, spid, dbName, login, hostname) with fillfactor = 70
 
 	update #results
@@ -95,15 +124,17 @@ begin
 		join @uniqueUsers b on a.serverName = b.serverName
 
 	update #results
-		set errors = b.numErrors
+		set errors = isnull(b.numErrors, 0)
 		from #results a
-		join (
+		left outer join (
 			select a.serverName, count(*) as numErrors
 				from notificationLog (nolock) a
 				join #results b on a.serverName = b.serverName
 				where dateDiff(hour, ymd, getDate()) <= 12
 				group by a.serverName
 			) b on a.serverName = b.serverName
+
+	print convert(varchar(10), dateDiff(ms, @dStartDate, getDate())) + 'ms: Counted errors'
 
 	--create index ix_notificationLog_serverName on notificationLog (serverName, ymd) with fillfactor = 70
 
@@ -124,12 +155,14 @@ begin
 				where ymd >= dateAdd(hour, -12, getDate())
 				group by serverName, driveLetter
 			) a
-		join driveSpaceLog b on a.minYMD = b.ymd
+		join driveSpaceLog b (nolock) on a.minYMD = b.ymd
 			and a.driveLetter = b.driveLetter
 			and b.serverName = a.serverName
-		join driveSpaceLog c on a.maxYMD = c.ymd
+		join driveSpaceLog c (nolock) on a.maxYMD = c.ymd
 			and a.driveLetter = c.driveLetter
 			and c.serverName = a.serverName
+
+	print convert(varchar(10), dateDiff(ms, @dStartDate, getDate())) + 'ms: Calculated drive space'
 
 	--create index ix_driveSpaceLog_serverName on driveSpaceLog (serverName, driveLetter, ymd) with fillfactor = 70
 
@@ -169,6 +202,8 @@ begin
 							and a.driveSpace_end = b.minSpace
 			) b on a.serverName = b.serverName
 
+	print convert(varchar(10), dateDiff(ms, @dStartDate, getDate())) + 'ms: Calculated lowest drive space'
+
 	update #results
 		set lastDeepScan = dbo.fn_returnShortDate(b.lastDeepSQL2005Check),
 			lastDetailedCheck = dbo.fn_returnShortDate(b.lastDetailedCheck),
@@ -176,6 +211,8 @@ begin
 		from #results a
 		join dm_servers b (nolock) on a.serverName = b.serverName
 		join dm_serverGroups c (nolock) on b.ukey_group = c.ukey
+
+	print convert(varchar(10), dateDiff(ms, @dStartDate, getDate())) + 'ms: Added scan dates'
 
 	select a.* , b.availability
 		from #results a
@@ -200,7 +237,8 @@ begin
 					) a
 			) b on a.serverName = b.serverName
 
+	print convert(varchar(10), dateDiff(ms, @dStartDate, getDate())) + 'ms: Added availability'
+
 	drop table #results
 	drop table #databaseReadings
 end
-GO

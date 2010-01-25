@@ -1,3 +1,10 @@
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
 ALTER procedure [dbo].[pr_compareDatabases] (@cSourceServer varchar(500), @cSourceDatabase varchar(500),
 	@cTargetServer varchar(500), @cTargetDatabase varchar(500),
 	@bEmailResults bit = 0, @bTargetIsSubscriber bit = 0)
@@ -500,7 +507,7 @@ begin
 				set @cMessage = @cMessage + '</table>'
 
 				print @cMessage
-				insert into notification..notificationLog_stage (serverName, subject, message, severity) values (@cTargetServer, @cSubject, @cMessage, 3)
+				insert into notification..notificationLog_stage (serverName, subject, message, severity) values (@cTargetServer, @cSubject, @cMessage, 2)
 
 			end
 		end

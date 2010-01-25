@@ -1,4 +1,9 @@
-ALTER procedure [dbo].[pr_dashboard_returnServerList]
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+ALTER procedure [dbo].[pr_dashboard_returnServerList] (@bIncludeInactiveServers bit = 0)
 as
 begin
 
@@ -19,26 +24,24 @@ begin
 		left outer join (
 			select
 				a.ukey_server,
-				count(distinct case when d.counterName = 'Win32_Processor' and e.keyName = 'deviceID' then ltrim(keyValue) else null end) as numProcessors,
-				avg(case when d.counterName = 'Win32_Processor' and e.keyName = 'loadPercentage' then convert(int, keyValue) else 0 end) as processorLoad,
-				max(case when d.counterName = 'Win32_ComputerSystem' and e.keyName = 'model' then keyValue else null end) as hardwareModel
-
-				from configuration.dbo.runs_data a (nolock)
-				join configuration.dbo.dm_counters d (nolock) on a.ukey_counter = d.ukey
-					and d.counterName in ('Win32_Processor', 'Win32_ComputerSystem')
-				join configuration.dbo.dm_keyNames e (nolock) on a.ukey_keyName = e.ukey
-					and e.keyName in ('LoadPercentage', 'name', 'deviceID', 'model')
-				join configuration.dbo.runs f (nolock) on a.ukey_run = f.ukey
-					and f.ymd > dateAdd(hour, -2, getDate())
-
-				where (d.counterName = 'Win32_Processor' and e.keyName = 'name')
-					or (d.counterName = 'Win32_Processor' and e.keyName = 'deviceID')
-					or (d.counterName = 'Win32_ComputerSystem' and e.keyName = 'model')
-					or (d.counterName = 'Win32_Processor' and e.keyName = 'loadPercentage')
-
+				max(left(processorName, charindex('\', processorName) - 1)) as hardwareModel,
+				count(distinct processorName) as numProcessors,
+				avg(processorLoad) as processorLoad
+				from configuration..processorLoadLog a (nolock)
+				where ymd >= dateAdd(hour, -2, getDate())
 				group by a.ukey_server
-
 			) c on a.ukey = c.ukey_server
+		where (
+			isServerPingable = 1
+			and (
+				lastDetailedCheck >= dateAdd(day, -3, getDate())
+				or lastEventLogCheck >= dateAdd(day, -3, getDate())
+				or lastConfigurationCheck >= dateAdd(day, -3, getDate())
+				or (lastPingCheck >= dateAdd(day, -3, getDate()) and isServerPingable = 1)
+				or a.ukey in (select top 10 ukey from dm_servers order by ukey desc)
+				)
+			)
+			or @bIncludeInactiveServers = 1
 		order by case when b.isProduction=1 then 0 else 1 end, isnull(b.groupName, ''), a.serverName
 
 end

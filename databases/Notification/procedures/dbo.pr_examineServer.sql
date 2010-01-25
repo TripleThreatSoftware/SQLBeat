@@ -2236,12 +2236,12 @@ begin
 		insert into #waitingIO (databaseName, fileID, numRequests, msWaiting)
 		EXECUTE(@cProcedureName)
 
-		set @nNumAlerts = (select count(*) from notificationLog (nolock) where serverName = @cServerName and subject like '%requests waiting%' and ymd >= dateAdd(minute, -10, getDate()))
+		set @nNumAlerts = (select count(*) from notificationLog (nolock) where serverName = @cServerName and subject like '%requests waiting%' and ymd >= dateAdd(minute, -15, getDate()))
 
 		insert into #results (severity, subject, message)
 		select
 			-- weight based on how long and whether this is the first alert in the last 10 minutes
-			case when msWaiting > 20000 and @nNumAlerts > 0 then 1 else 2 end as severity,
+			case when msWaiting > 20000 and @nNumAlerts > 2 then 1 else 2 end as severity,
 			convert(varchar(20), isnull(a.numRequests, 0)) + ' requests ' +
 				'waiting for ' + convert(varchar(20), a.msWaiting) + 'ms on "' + isnull(left(b.filePath, 3), 'N/A') + '"' as subject,
 			'Time: ' + convert(varchar(20), getDate(), 120) + '<br>' +
@@ -2254,7 +2254,7 @@ begin
 					distinct dbName as databaseName, fileID, fileName as filePath
 					from databaseFileSizeLog (nolock)
 					where serverName = @cServerName
-						and ymd >= dateAdd(hour, -3, getDate())
+						and ymd >= dateAdd(hour, -6, getDate())
 				) b on a.databaseName = b.databaseName
 					and a.fileID = b.fileID
 			where a.msWaiting >= 1000 -- or a.numRequests >= 2
