@@ -9,10 +9,16 @@ begin
 	declare @nUkeyAuditRun bigint
 	declare @nUkeyServer int
 
+	declare @bRunDuringMaintenanceWindow bit
+
 	set @cServerName = ''
+	set @bRunDuringMaintenanceWindow = 1
+
+	if exists (select top 1 ukey from [notification]..dm_settings where settingName = 'Run object audit outside of maintenance window' and settingValue = '1')
+		set @bRunDuringMaintenanceWindow = 0
 
 	create table #objectText (databaseName varchar(500), objectName varchar(500), id bigint,
-		xtype varchar(2), objectText varchar(8000), ukey int identity, isChanged bit default 0, colID int default 0)
+		xtype varchar(2), objectText varchar(8000), ukey int identity, isChanged bit default 0)
 	create table #tableStructure (databaseName varchar(500), tableName varchar(500), tableID bigint,
 		xtype varchar(2), columnName varchar(200), columnLength smallint, columnPrecision tinyint, columnType tinyint,
 		columnXType tinyint, columnIsNullable int, ukey int identity, isChanged bit default 0)
@@ -34,8 +40,13 @@ begin
 				and (lastObjectCheck is null or dateDiff(minute, lastObjectCheck, getDate()) > isnull(objectCheckMinuteInterval, 5))
 				and isServerPingable = 1
 				and skipNextRun <> 1
-				and right(convert(varchar(20), getDate(), 120), 8) >= right(convert(varchar(20), maintenanceWindowStart, 120), 8)
-				and right(convert(varchar(20), getDate(), 120), 8) <= right(convert(varchar(20), maintenanceWindowStop, 120), 8)
+				and (
+					@bRunDuringMaintenanceWindow = 0
+					or (
+						right(convert(varchar(20), getDate(), 120), 8) >= right(convert(varchar(20), maintenanceWindowStart, 120), 8)
+						and right(convert(varchar(20), getDate(), 120), 8) <= right(convert(varchar(20), maintenanceWindowStop, 120), 8)
+						)
+					)
 		)
 	begin
 		truncate table #objectText
@@ -54,8 +65,13 @@ begin
 				and (lastObjectCheck is null or dateDiff(minute, lastObjectCheck, getDate()) > isnull(objectCheckMinuteInterval, 5))
 				and isServerPingable = 1
 				and skipNextRun <> 1
-				and right(convert(varchar(20), getDate(), 120), 8) >= right(convert(varchar(20), maintenanceWindowStart, 120), 8)
-				and right(convert(varchar(20), getDate(), 120), 8) <= right(convert(varchar(20), maintenanceWindowStop, 120), 8)
+				and (
+					@bRunDuringMaintenanceWindow = 0
+					or (
+						right(convert(varchar(20), getDate(), 120), 8) >= right(convert(varchar(20), maintenanceWindowStart, 120), 8)
+						and right(convert(varchar(20), getDate(), 120), 8) <= right(convert(varchar(20), maintenanceWindowStop, 120), 8)
+						)
+					)
 			order by servername
 
 		print 'Processing ' + @cServerName
@@ -90,8 +106,7 @@ begin
 				'''''' + @cDatabaseName + '''''' as databaseName,
 				a.name as objectName,
 				a.id, a.xtype,
-				case when a.xtype = ''''D'''' then a.name + '''' '''' else '''''''' end + b.text as text,
-				b.colID
+				case when a.xtype = ''''D'''' then a.name + '''' '''' else '''''''' end + b.text as text
 				from [' + @cServerName + '].['' + @cDatabaseName + ''].dbo.sysobjects a
 				join [' + @cServerName + '].['' + @cDatabaseName + ''].dbo.syscomments b on a.id = b.id
 				where a.xtype <> ''''s''''
@@ -103,7 +118,7 @@ begin
 					and a.name not like ''''syncobj%''''
 				order by a.name''
 
-		insert into #objectText (databaseName, objectName, id, xtype, objectText, colid)
+		insert into #objectText (databaseName, objectName, id, xtype, objectText)
 		EXEC sp_executeSQL @cSQLString
 
 		SET @cSQLString = ''
@@ -197,8 +212,7 @@ begin
 		-- anything in the table that is in the current snapshot, update
 		update auditData_objectText
 			set ymd_lastSeen = getDate(),
-				isCurrent = 1,
-				colID = b.colID
+				isCurrent = 1
 			from auditData_objectText a
 			join #objectText b on isnull(a.databaseName, '') = isnull(b.databaseName, '')
 				and isnull(a.objectName, '') = isnull(b.objectName, '')
@@ -220,10 +234,9 @@ begin
 				and a.serverName = @cServerName
 
 		-- add new things to the table
-		insert into auditData_objectText (serverName, databaseName, objectName, id, xtype, objectText, textChecksum, colID)
+		insert into auditData_objectText (serverName, databaseName, objectName, id, xtype, objectText, textChecksum)
 		select @cServerName, databaseName, objectName, id, xtype, objectText,
-			notification.dbo.fn_checksum(isnull(objectText, '')),
-			colID
+			notification.dbo.fn_checksum(isnull(objectText, ''))
 			from #objectText
 			where isChanged = 1
 			order by ukey
@@ -408,4 +421,3 @@ begin
 	drop table #indexes
 	drop table #foreignKeys
 end
-GO

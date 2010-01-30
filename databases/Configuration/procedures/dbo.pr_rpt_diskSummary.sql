@@ -1,31 +1,39 @@
-USE [Configuration]
+SET ANSI_NULLS ON
 GO
 
-ALTER procedure [dbo].[pr_rpt_diskSummary]
+SET QUOTED_IDENTIFIER ON
+GO
+
+-- pr_rpt_diskSummary 1
+
+alter procedure [dbo].[pr_rpt_diskSummary] (@nUkeyServer int = 0)
 as
 begin
 	declare @nUkeyEarliestRun int
 
-	set @nUkeyEarliestRun = (select min(ukey) from runs where dateDiff(day, ymd, getDate()) <= 7)
+	set @nUkeyEarliestRun = (select min(ukey) from runs where dateDiff(day, ymd, getDate()) <= 2)
 
-	select a.ukey_server,
+	select
+		a.ukey_server,
 		a.ukey_counter,
 		max(a.ukey_run) as ukey_thisRun
 		into #runHistory
-		from runs_data a
-		join runs b on a.ukey_run = b.ukey
-			and dateDiff(day, b.ymd, getDate()) < 2
-		join dm_counters d on a.ukey_counter = d.ukey
+		from runs_data a (nolock)
+		join runs b (nolock) on a.ukey_run = b.ukey
+			and b.ukey >= @nUkeyEarliestRun
+		join dm_counters d (nolock) on a.ukey_counter = d.ukey
 			and d.counterName like '%disk%'
 			and d.counterName like '%Win32_PerfFormattedData%'
 			and not d.counterName like '%raw%'
 		where a.ukey_run >= @nUkeyEarliestRun
+			and (a.ukey_server = @nUkeyServer or @nUkeyServer = 0)
 		group by a.ukey_server, a.ukey_counter
+
+	create clustered index ix_tmp_runHistory on #runHistory (ukey_thisRun, ukey_server, ukey_counter) with fillfactor = 100
 
 	-- disk status
 	select
 		serverName,
-		ymd,
 		max(instanceName) as instanceName,
 		max(case when keyName = 'FreeMegabytes' then latestValue else null end) as freeMegaBytes_latestValue,
 		max(case when keyName = 'FreeMegabytes' then maxValue else null end) as freeMegaBytes_maxValue,
@@ -59,35 +67,36 @@ begin
 
 		from (
 			select
-				e.ymd,
 				c.serverName,
 				a.instance,
 				max(case when keyname = 'name' then keyValue else null end) as instanceName,
 				b.keyName,
 				max(case when keyName in ('percentIdleTime', 'percentDiskReadTime', 'percentDiskTime', 'percentDiskWriteTime', 'percentFreeSpace', 'freeMegabytes') then convert(decimal(25,0), keyvalue) else null end) as maxValue,
 				min(case when keyName in ('percentIdleTime', 'percentDiskReadTime', 'percentDiskTime', 'percentDiskWriteTime', 'percentFreeSpace', 'freeMegabytes') then convert(decimal(25,0), keyvalue) else null end) as minValue,
-				convert(decimal(20,2), avg(case when keyName in ('percentIdleTime', 'percentDiskReadTime', 'percentDiskTime', 'percentDiskWriteTime', 'percentFreeSpace', 'freeMegabytes') then convert(decimal(25,0), keyvalue) else null end)) as avgValue,
+				convert(decimal(30,6), avg(case when keyName in ('percentIdleTime', 'percentDiskReadTime', 'percentDiskTime', 'percentDiskWriteTime', 'percentFreeSpace', 'freeMegabytes') then convert(decimal(30,6), keyvalue) else null end)) as avgValue,
 				max(case when f.ukey_server is not null then keyValue else null end) as latestValue
-				from runs_data a
-				join dm_keyNames b on a.ukey_keyName = b.ukey
+				from runs_data a (nolock)
+				join dm_keyNames b (nolock) on a.ukey_keyName = b.ukey
 					and keyName in ('percentIdleTime', 'percentDiskReadTime', 'percentDiskTime', 'percentDiskWriteTime', 'percentFreeSpace', 'freeMegabytes',
 						'name')
-				join notification..dm_servers c on a.ukey_server = c.ukey
-				join dm_counters d on a.ukey_counter = d.ukey
+				join notification..dm_servers c (nolock) on a.ukey_server = c.ukey
+				join dm_counters d (nolock) on a.ukey_counter = d.ukey
 					and d.counterName like '%disk%'
 					and d.counterName like '%Win32_PerfFormattedData%'
 					and not d.counterName like '%raw%'
-				join runs e on a.ukey_run = e.ukey
-				left outer join #runHistory f on a.ukey_server = f.ukey_server
+				join runs e (nolock) on a.ukey_run = e.ukey
+					and e.ukey >= @nUkeyEarliestRun
+				join #runHistory f on a.ukey_server = f.ukey_server
 					and a.ukey_run = f.ukey_thisRun
 					and a.ukey_counter = f.ukey_counter
 				where a.ukey_run >= @nUkeyEarliestRun
-				group by e.ymd, serverName, a.instance, b.keyName
+				group by serverName, a.instance, b.keyName
 			) a
-		group by serverName, instance, ymd
+		group by serverName, instance
 		having max(instanceName) <> '_total'
 		order by serverName, instanceName
 
 	drop table #runHistory
 
 end
+GO
