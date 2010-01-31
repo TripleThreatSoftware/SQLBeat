@@ -318,6 +318,7 @@ begin
 				and instanceName not like '%Logical Disk Manager%'
 				and instanceName not like '%Virtual Disk Service%'
 				and instanceName not like '%seclogon%'
+				and instanceName not like '%aelookupsvc%'
 	end
 
 	-- disk subsystem status changes

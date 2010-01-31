@@ -114,8 +114,7 @@ begin
 
 	-- we divine a list of all current and archived databases
 
-	insert into #databases
-	select [name]
+	insert into #databases	select [name]
 		from master.dbo.sysdatabases
 		where left([name], len(db_name())) = db_name()
 			and [name] <> db_name()
@@ -259,7 +258,6 @@ begin
 
 		-- and for these, build a list of fields they all have in common
 		set @cFieldList = '*'
-
 		insert into #fields
 		select fieldName, count(*), max(naturalOrder) as naturalOrder
 			from #allTableFields
@@ -426,11 +424,13 @@ begin
 
 				if @cDatabaseName = db_name()
 					set @nEndDate = 0
+				else
+					set @nEndDate = 1
 
 				if @@version not like '%sql server 2005%' and @@version not like '%sql server 2008%'
 					if (select count(*) from #allTableFields where dbname = @cDatabaseName and tableName = @cThisTableName and fieldName = 'ymd' and dataType = 'dateTime') > 0
 						and @dStartDate <> ''
-						set @cWhereClause = 'where ymd >= ''' + convert(varchar(20), @dStartDate) + '''' + case when @nEndDate <> 0 then ''' and ymd <= ''' + convert(varchar(20), @dEndDate) + '''' else '' end
+						set @cWhereClause = 'where ymd >= ''' + convert(varchar(20), @dStartDate, 120) + '''' + case when @nEndDate <> 0 then ''' and ymd < ''' + convert(varchar(10), dateAdd(day, 1, @dEndDate), 120) + '''' else '' end
 
 				set @cSQLString = 'select ' + @cFieldList + char(13) + char(10) + char(9) +
 						'from ' + @cDatabaseName + '..' + @cThisTableName + ' ' + @cWhereClause + case when @lLastRow = 0 and @nCounter < @nNumberOfViewTables then ' union all ' + char(13) + char(10) + char(9) else '' end
@@ -532,21 +532,21 @@ begin
 
 				set @nCounter = @nCounter + 1
 
-	-- 			print '1: ' + @cVeryLongString1
-	-- 			print '2: ' + @cVeryLongString2
-	-- 			print '3: ' + @cVeryLongString3
-	-- 			print '4: ' + @cVeryLongString4
-	-- 			print '5: ' + @cVeryLongString5
-	-- 			print '6: ' + @cVeryLongString6
-	-- 			print '7: ' + @cVeryLongString7
-	-- 			print '8: ' + @cVeryLongString8
-	-- 			print '9: ' + @cVeryLongString9
-	-- 			print '10: ' + @cVeryLongString10
-	-- 			print '11: ' + @cVeryLongString11
-	-- 			print '12: ' + @cVeryLongString12
-	-- 			print '13: ' + @cVeryLongString13
-	-- 			print '14: ' + @cVeryLongString14
-	-- 			print '15: ' + @cVeryLongString15
+	 			--print '1: ' + @cVeryLongString1
+	 			--print '2: ' + @cVeryLongString2
+	 			--print '3: ' + @cVeryLongString3
+	 			--print '4: ' + @cVeryLongString4
+	 			--print '5: ' + @cVeryLongString5
+	 			--print '6: ' + @cVeryLongString6
+	 			--print '7: ' + @cVeryLongString7
+	 			--print '8: ' + @cVeryLongString8
+	 			--print '9: ' + @cVeryLongString9
+	 			--print '10: ' + @cVeryLongString10
+	 			--print '11: ' + @cVeryLongString11
+	 			--print '12: ' + @cVeryLongString12
+	 			--print '13: ' + @cVeryLongString13
+	 			--print '14: ' + @cVeryLongString14
+	 			--print '15: ' + @cVeryLongString15
 			end
 
 -- 			print @cVeryLongString1
@@ -569,7 +569,6 @@ begin
 				+ @cVeryLongString2
 				+ @cVeryLongString3
 				+ @cVeryLongString4
-
 				+ @cVeryLongString5
 				+ @cVeryLongString6
 				+ @cVeryLongString7

@@ -50,13 +50,7 @@ begin
 	if @@rowcount = 0
 	begin
 		select
-			'images/not-available.jpg' as diskIO,
-			'images/not-available.jpg' as cpuTime,
-
-			'images/not-available.jpg' as diskIO_pie,
-			'images/not-available.jpg' as cpuTime_pie,
-
-			'images/not-available.jpg' as overallLoad
+			'images/not-available.jpg' as graphURL
 
 		return
 	end
@@ -127,7 +121,7 @@ begin
 
 --select * from #dataValues
 
-	exec notification..pr_generateGoogleChartsRequest @nWidth = 1000, @nHeight = 300, @bRelativeToTotal = 1, @bAbsoluteYAxis = 0
+	exec notification..pr_generateGoogleChartsRequest @nWidth = @nGraphWidth, @nHeight = 300, @bRelativeToTotal = 1, @bAbsoluteYAxis = 0
 
 
 	drop table #dataValues
