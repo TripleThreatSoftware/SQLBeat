@@ -319,6 +319,9 @@ begin
 				and instanceName not like '%Virtual Disk Service%'
 				and instanceName not like '%seclogon%'
 				and instanceName not like '%aelookupsvc%'
+
+				and instanceName not like '%netmeeting%'
+				and instanceName not like '%secondary logon%'
 	end
 
 	-- disk subsystem status changes

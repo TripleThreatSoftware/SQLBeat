@@ -1337,13 +1337,21 @@ begin
 
 		insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Adding to local job tables', '', @nUkeyGroup)
 
-		insert into dm_serverJobs (ukey_server, jobName, job_id, isEnabled)
-		select distinct @nUkeyServer, a.jobName, a.job_id, a.isEnabled
+		insert into dm_serverJobs (ukey_server, jobName, job_id, isEnabled, isCurrent)
+		select distinct @nUkeyServer, a.jobName, a.job_id, a.isEnabled, 1
 			from #jobHistory a
 			left outer join dm_serverJobs b (nolock) on b.ukey_server = @nUkeyServer
 				and b.jobName = a.jobName
 				and a.job_id = b.job_id
 			where b.ukey is null
+
+		update dm_serverJobs with (rowlock)
+			set isCurrent = 0
+			from dm_serverJobs a
+			left outer join #jobHistory b on a.jobName = b.jobName
+				and a.job_id = b.job_id
+			where a.ukey_server = @nUkeyServer
+				and isCurrent = 1
 
 		insert into dm_serverJobSteps (ukey_server, ukey_job, stepName, stepCommand, stepNumber)
 		select distinct @nUkeyServer, a.ukey, b.stepName, b.stepCommand, b.stepNumber
@@ -2254,7 +2262,7 @@ begin
 					distinct dbName as databaseName, fileID, fileName as filePath
 					from databaseFileSizeLog (nolock)
 					where serverName = @cServerName
-						and ymd >= dateAdd(hour, -6, getDate())
+						and ymd >= dateAdd(hour, -24, getDate())
 				) b on a.databaseName = b.databaseName
 					and a.fileID = b.fileID
 			where a.msWaiting >= 1000 -- or a.numRequests >= 2

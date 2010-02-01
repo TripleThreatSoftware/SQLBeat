@@ -475,6 +475,7 @@ begin
 						or (rtrim(ltrim(counterName)) in ('Memory Pages Allocated') and time10 < 20)
 						or (rtrim(ltrim(counterName)) in ('Cursor Memory Usage') and delta10 < 1)
 						or rtrim(ltrim(counterName)) in ('Cache Entries Count')
+						or (rtrim(ltrim(counterName)) like '%blocks' and time10 < time9)
 						or counterName like '%trans/sec%'
 						or counterName like '%cmds/sec%'
 						or counterName like '%global cursor%'
