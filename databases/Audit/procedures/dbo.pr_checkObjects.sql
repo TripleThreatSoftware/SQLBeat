@@ -1,3 +1,8 @@
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
 ALTER procedure [dbo].[pr_checkObjects]
 as
 begin
@@ -18,7 +23,7 @@ begin
 		set @bRunDuringMaintenanceWindow = 0
 
 	create table #objectText (databaseName varchar(500), objectName varchar(500), id bigint,
-		xtype varchar(2), objectText varchar(8000), ukey int identity, isChanged bit default 0)
+		xtype varchar(2), objectText varchar(8000), ukey int identity, isChanged bit default 0, textChecksum bigint)
 	create table #tableStructure (databaseName varchar(500), tableName varchar(500), tableID bigint,
 		xtype varchar(2), columnName varchar(200), columnLength smallint, columnPrecision tinyint, columnType tinyint,
 		columnXType tinyint, columnIsNullable int, ukey int identity, isChanged bit default 0)
@@ -26,6 +31,9 @@ begin
 		indexID bigint, indexName varchar(200), indexXType varchar(2), columnName varchar(200),
 		keyNumber int, isChanged bit default 0, ukey int identity)
 	create table #foreignKeys (databaseName varchar(500), id bigint, keyName varchar(200), isChanged bit default 0, ukey int identity)
+
+	create index ix_tmp_tableStructure on #tableStructure (databaseName, tableName) with fillfactor = 100
+	create index ix_tmp_objectText on #objectText (databaseName, objectName, id) with fillfactor = 100
 
 	insert into auditRuns (ymd) values (getDate())
 	set @nUkeyAuditRun = (select scope_identity())
@@ -113,7 +121,7 @@ begin
 					and left(a.name, 3) <> ''''dt_''''
 					and a.name not like ''''sys%''''
 					and a.name not like ''''df__sys%''''
-					and a.name not like ''''sp_%''''
+					and a.name not like ''''sp_ms%''''
 					and a.name not like ''''df__MS%''''
 					and a.name not like ''''syncobj%''''
 				order by a.name''
@@ -197,6 +205,9 @@ begin
 		--***************************************************************************************************************************
 		--***************************************************************************************************************************
 
+		update #objectText
+			set textChecksum = notification.dbo.fn_checksum(isnull(objectText, ''))
+
 		-- find things that don't currently exist in the table
 		update #objectText
 			set isChanged = 1
@@ -206,7 +217,7 @@ begin
 				and isnull(a.objectName, '') = isnull(b.objectName, '')
 				and isnull(a.id, '') = isnull(b.id, '')
 				and isnull(a.xtype, '') = isnull(b.xtype, '')
-				and notification.dbo.fn_checksum(isnull(a.objectText, '')) = b.textChecksum
+				and a.textChecksum = b.textChecksum
 			where b.ukey is null
 
 		-- anything in the table that is in the current snapshot, update
@@ -218,7 +229,7 @@ begin
 				and isnull(a.objectName, '') = isnull(b.objectName, '')
 				and isnull(a.id, '') = isnull(b.id, '')
 				and isnull(a.xtype, '') = isnull(b.xtype, '')
-				and notification.dbo.fn_checksum(isnull(b.objectText, '')) = a.textChecksum
+				and b.textChecksum = a.textChecksum
 			where a.serverName = @cServerName
 
 		-- anything in the table but not in the snapshot, mark as gone!
@@ -229,14 +240,14 @@ begin
 				and isnull(a.objectName, '') = isnull(b.objectName, '')
 				and isnull(a.id, '') = isnull(b.id, '')
 				and isnull(a.xtype, '') = isnull(b.xtype, '')
-				and notification.dbo.fn_checksum(isnull(b.objectText, '')) = a.textChecksum
+				and b.textChecksum = a.textChecksum
 			where b.ukey is null
 				and a.serverName = @cServerName
 
 		-- add new things to the table
 		insert into auditData_objectText (serverName, databaseName, objectName, id, xtype, objectText, textChecksum)
 		select @cServerName, databaseName, objectName, id, xtype, objectText,
-			notification.dbo.fn_checksum(isnull(objectText, ''))
+			textChecksum
 			from #objectText
 			where isChanged = 1
 			order by ukey
@@ -247,6 +258,7 @@ begin
 		-- deal with the table structure table
 		--***************************************************************************************************************************
 		--***************************************************************************************************************************
+
 
 		-- find things that don't currently exist in the table
 		update #tableStructure
