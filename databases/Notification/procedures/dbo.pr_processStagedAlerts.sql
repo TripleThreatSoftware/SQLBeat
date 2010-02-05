@@ -1,13 +1,13 @@
-/****** Object:  StoredProcedure [dbo].[pr_processStagedAlerts]    Script Date: 05/19/2009 13:59:45 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 --select top 100 * from notificationLog
 --select top 100 * from notificationLog_stage
 
 
-CREATE procedure [dbo].[pr_processStagedAlerts]
+ALTER procedure [dbo].[pr_processStagedAlerts]
 as
 begin
 	declare @nMaxUkey int
@@ -97,41 +97,40 @@ begin
 		from notificationLog_stage a
 		join notificationLog b on a.serverName = b.serverName
 			and a.subject = b.subject
---			and a.message = b.message
-			and b.ymd >= dateAdd(hour, -48, getDate())
+			and (
+				b.ymd >= dateAdd(hour, -2, getDate())
+				or a.ymd = b.ymd
+				)
 		where a.ukey >= @nMinUkey
 			and a.ukey <= @nMaxUkey
 
 	-- deprioritize high impact messages from low impact servers off hours
-	if @bIsOffHours = 1
-		update notificationLog_stage
-			set severity = case
---				when severity = 1 and b.offHoursPriority <> 1 then 2
-				when severity = 1 and c.isProduction <> 1 then 2
-				else severity end
-			from notificationLog_stage a
-			join dm_servers b on a.serverName = b.serverName
-			join dm_serverGroups c on b.ukey_group = c.ukey
---			where isnull(a.isEventLog, 0) = 0
-
 	update notificationLog_stage
-		set severity = 2
+		set severity = case
+			when severity = 1 and c.isProduction <> 1 then 2
+			else severity end
 		from notificationLog_stage a
-		where (
-				isLongRunningJob = 1
-				or isJobFailure = 1
-			)
-			and (
-				subject like '%monitor sql statistics%'
-				or subject like '%configuration check%'
-				or subject like '%import weblogs%'
-				or subject like '%maintenance%'
-				or subject like '%monitor%'
-				or subject like '%report%'
-				or subject like '%fragmentation check%'
-				or subject like '%integrity check%'
-				or subject like '%service check%'
-				)
+		join dm_servers b (nolock) on a.serverName = b.serverName
+		join dm_serverGroups c (nolock) on b.ukey_group = c.ukey
+
+--	update notificationLog_stage
+--		set severity = 2
+--		from notificationLog_stage a
+--		where (
+--				isLongRunningJob = 1
+--				or isJobFailure = 1
+--			)
+--			and (
+--				subject like '%monitor sql statistics%'
+--				or subject like '%configuration check%'
+--				or subject like '%import weblogs%'
+--				or subject like '%maintenance%'
+--				or subject like '%monitor%'
+--				or subject like '%report%'
+--				or subject like '%fragmentation check%'
+--				or subject like '%integrity check%'
+--				or subject like '%service check%'
+--				)
 
 	insert into notificationLog (ymd, subject, message, messageSent, messageSentDate, severity,
 		isJobFailure, isLogShippingJobFailure, isLongRunningJob, isBlocking, isLongRunningProcess,
@@ -139,16 +138,20 @@ begin
 	select a.ymd, subject, message, 1 as messageSent, null as messageSentDate, severity, isJobFailure,
 		isLogShippingJobFailure, isLongRunningJob, isBlocking, isLongRunningProcess,
 		isDriveSpace, isLogSize, isEventLog, a.serverName, isService, isConnectivity, isInstalledSoftware
-		from notificationLog_stage a
-		join dm_servers b on a.serverName = b.serverName
+		from notificationLog_stage a (nolock)
+		join dm_servers b (nolock) on a.serverName = b.serverName
 		where b.silenceUntil is not null
 			and getDate() < b.silenceUntil
+			and a.ukey >= @nMinUkey
+			and a.ukey <= @nMaxUkey
 
 	delete notificationLog_stage
 		from notificationLog_stage a
-		join dm_servers b on a.serverName = b.serverName
+		join dm_servers b (nolock) on a.serverName = b.serverName
 		where b.silenceUntil is not null
 			and getDate() < b.silenceUntil
+			and a.ukey >= @nMinUkey
+			and a.ukey <= @nMaxUkey
 
 	--***************************************************************************************************
 	-- Manual cleanup
@@ -214,6 +217,8 @@ begin
 				having dateDiff(minute, max(ymd), getDate()) >= 15
 			) b on a.serverName = b.serverName
 		where isConnectivity = 1
+			and a.ukey >= @nMinUkey
+			and a.ukey <= @nMaxUkey
 
 	delete notificationLog_stage
 		from notificationLog_stage a
@@ -225,6 +230,8 @@ begin
 				having dateDiff(minute, max(ymd), getDate()) >= 15
 			) b on a.serverName = b.serverName
 		where isConnectivity = 1
+			and a.ukey >= @nMinUkey
+			and a.ukey <= @nMaxUkey
 
 	--***************************************************************************************************
 	-- Get down to the business of sending
@@ -252,4 +259,3 @@ begin
 
 	drop table #exceptions
 end
-GO

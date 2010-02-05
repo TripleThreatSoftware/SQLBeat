@@ -1,11 +1,17 @@
-/****** Object:  StoredProcedure [dbo].[pr_sendAlerts]    Script Date: 05/19/2009 13:59:45 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE procedure [dbo].[pr_sendAlerts] (@cUserName varchar(100) = '', @bIsPreview bit = 0, @bOverride bit = 0)
+
+-- exec pr_sendAlerts '', 1, 0, 1
+-- delete from messageRules where ukey = 18
+
+ALTER procedure [dbo].[pr_sendAlerts] (@cUserName varchar(100) = '', @bIsPreview bit = 0, @bOverride bit = 0, @bClearQueue bit = 0)
 as
 begin
+--	if @bIsPreview = 0
+--		return
+
 	set nocount off
 
 	declare @bIsBusinessHours bit
@@ -24,8 +30,8 @@ begin
 	select
 		b.ukey as ukey_rule, b.userName, c.emailAddress, a.*
 		into #messages
-		from notificationLog a
-		join messageRules b on
+		from notificationLog a (nolock)
+		join messageRules b (nolock) on
 			(a.serverName = b.serverEquals or isnull(b.serverEquals, '') = '')
 			and (a.serverName like '%' + b.serverLike + '%' or isnull(b.serverLike, '') = '')
 			and (a.message like '%' + b.messageLike + '%' or isnull(b.messageLike, '') = '')
@@ -69,8 +75,8 @@ begin
 				or isnull(businessHours, 0) = 0
 				)
 			and (b.userName = @cUserName or isnull(@cUserName, '') = '')
-		join userEmails c on b.ukey_userEmail = c.ukey
-		left outer join dm_servers d on a.serverName = d.serverName
+		join userEmails c (nolock) on b.ukey_userEmail = c.ukey
+		left outer join dm_servers d (nolock) on a.serverName = d.serverName
 		where (
 				b.ukey_group = d.ukey_group
 				or isnull(b.ukey_group, 0) = 0
@@ -80,11 +86,11 @@ begin
 
 	delete #messages
 		from #messages a
-		join messageRules b on
+		join messageRules b (nolock) on
 			(a.serverName = b.serverEquals or b.serverEquals is null)
-			and (a.serverName like '%' + b.serverLike + '%' or b.serverLike is null)
-			and (a.message like '%' + b.messageLike + '%' or b.messageLike is null)
-			and (a.subject like '%' + b.subjectLike + '%' or b.subjectLike is null)
+			and (a.serverName like '%' + b.serverLike + '%' or isnull(b.serverLike, '') = '')
+			and (a.message like '%' + b.messageLike + '%' or isnull(b.messageLike, '') = '')
+			and (a.subject like '%' + b.subjectLike + '%' or isnull(b.subjectLike, '') = '')
 			and (a.severity = b.severity or isnull(b.severity, 0) = 0)
 			and (
 				isnull(b.allMessages, 0) = 1
@@ -123,20 +129,28 @@ begin
 						or (businessHours = 0 and offHours = 0)
 						or isnull(businessHours, 0) = 0
 						)
+--					and not @bIsPreview = 1
 				)
-			and (b.userName = a.userName or b.userName is null)
-		left outer join dm_servers d on a.serverName = d.serverName
+			and (b.userName = a.userName or isnull(b.userName, '') = '')
+		left outer join dm_servers d (nolock) on a.serverName = d.serverName
 		where (
 			b.ukey_group = d.ukey_group
 			or isnull(b.ukey_group, 0) = 0
 --			or isnull(d.ukey_group, 0) = 0
 			)
 
+	if @bClearQueue = 1
+	begin
+		insert into notificationsSent (ukey_notification, userName, emailAddress)
+		select distinct ukey, userName, emailAddress
+			from #messages
+	end
+
 	select distinct a.serverName, a.userName, a.emailAddress, a.subject, a.message, a.ukey as ukey_notification, a.ymd,
 		identity(int) as ukey
 		into #messagesToSend
 		from #messages a
-		left outer join notificationsSent b on a.ukey = b.ukey_notification
+		left outer join notificationsSent b (nolock) on a.ukey = b.ukey_notification
 			and a.userName = b.userName
 			and a.emailAddress = b.emailAddress
 		where b.ukey is null
@@ -144,19 +158,31 @@ begin
 			and isnull(a.message, '') <> ''
 		order by a.emailAddress, a.ymd
 
+	-- as a double-check against duplicate entries in notificationLog, check against actual messages sent and do not send duplicates
+	delete #messagesToSend
+		from #messagesToSend a
+		join (
+			select distinct recipient, subject, body
+				from messagesSent (nolock)
+				where ymd >= dateAdd(hour, -2, getDate())
+			) b on a.emailAddress = b.recipient
+				and a.subject = b.subject
+				and a.message = b.body
+
+
 	if @bIsPreview = 0
 	begin
 
 		-- rate limiter!
 
-		if (select count(*) from #messagesToSend) > 500 and @bOverride = 0
+		if (select count(*) from #messagesToSend) > 1000 and @bOverride = 0
 		begin
 			-- panic! email Cole, do not send these out
 
-			set @cThisSubject = 'SQLBeat (' + @@servername + '): More than 500 messages are queued to send'
+			set @cThisSubject = 'SQLBeat (' + @@servername + '): More than 1000 messages are queued to send'
 			set @cThisMessage = 'There are ' + convert(varchar(20), (select count(*) from #messagesToSend)) + ' messages in the hopper to send for ' + @@servername + '.'
 
-			exec pr_sendMessage '', 'cole@sqlbeat.com', 'More than 100 messages are queued to send', @cThisMessage
+			exec pr_sendMessage '', 'cole@sqlbeat.com', 'More than 1000 messages are queued to send', @cThisMessage
 		end
 		else
 		begin
@@ -190,11 +216,10 @@ begin
 	begin
 		select ukey, serverName, ymd, left(subject, 130) as subject, emailAddress
 			from #messagesToSend
-			where ymd >= dateAdd(day, -1, getDate())
+--			where ymd >= dateAdd(day, -1, getDate())
 			order by ymd desc, subject
 	end
 
 	drop table #messages
 	drop table #messagesToSend
 end
-GO
