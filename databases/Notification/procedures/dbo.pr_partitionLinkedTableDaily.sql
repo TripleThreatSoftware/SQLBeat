@@ -1,10 +1,5 @@
-/****** Object:  StoredProcedure [dbo].[pr_partitionLinkedTableDaily]    Script Date: 05/19/2009 13:59:45 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
 -- exec pr_partitionLinkedTableDaily 'runs_data', 'ukey_run', 'runs', 'ukey', 'ymd', 'ukey_run, ukey_server, ukey_counter, instance, ukey_keyName, ukey', 0
-CREATE procedure [dbo].[pr_partitionLinkedTableDaily] (
+ALTER procedure [dbo].[pr_partitionLinkedTableDaily] (
 	@cTableName varchar(100),
 	@cForeignKeyField varchar(100),
 	@cForeignTable varchar(100),
@@ -94,7 +89,6 @@ begin
 
 	-- with linked tables, if we try and build one with data for today we don't yet know the full range of FK values
 	-- it will end up creating a constraint violation the next time we insert for today, later in the day
-	-- SOOOO: We don't insert records for today with linked table calls
 	while @dToday < convert(varchar(10), getDate(), 120)
 	begin
 		insert into #dm_ymd (ymd, week, day, month, year) values (
@@ -141,14 +135,16 @@ begin
 					'min([' + @cForeignTableKeyField + ']) as ukey_min, ' +
 					'max([' + @cForeignTableKeyField + ']) as ukey_max ' +
 					'from ' + @cForeignTable + ' ' +
-					'where [' + @cForeignTableKeyField + '] in (select distinct [' + @cForeignKeyField + '] from [' + @cTableName + ']) ' +
-					'	and [' + @cForeignTableDateField + '] < convert(varchar(10), getDate(), 120) ' +
+					'where [' + @cForeignTableDateField + '] < convert(varchar(10), getDate(), 120) ' +
 					'group by convert(varchar(10), ' + @cForeignTableDateField + ', 120) ' +
 				') a
 			left outer join #dm_ymd b on a.dateField = b.ymd
 				and b.ymd >= ''' + convert(varchar(10), @dFirstDate, 120) + ''''
 
 		insert into #days
+		exec sp_executeSQL @cSQLString
+
+		set @cSQLString = 'delete from #days where ukey_max < (select min([' + @cForeignKeyField + ']) from [' + @cTableName + '])'
 		exec sp_executeSQL @cSQLString
 	end
 
@@ -310,6 +306,9 @@ begin
 					where left(name, len(@cArchiveDBName)) = @cArchiveDBName
 					order by dbo.fn_returnDigits(name, 0) desc
 			end
+
+if convert(varchar(10), getDate(), 120) = '2009-05-06'
+	set @cOldestDatabasePath = 'e:\sqldata\'
 
 --			print 'Creating new database, storing files in: ' + isnull(@cOldestDatabasePath, 'BAD PATH')
 
@@ -474,6 +473,7 @@ create table [' + @cArchiveTableName + '_' + @cToday + '] (' + @cTableStructure 
 		-- note that the destination table will always have a UKEY, whether it comes from
 		-- source data or is an IDENTITY at the destination. If it's in the source data,
 		-- it will be included in the field list. Otherwise it'll happen in transfer.
+
 		select identity(int, 1, 1) as ukey,
 			[year],
 			[month],
@@ -493,7 +493,9 @@ create table [' + @cArchiveTableName + '_' + @cToday + '] (' + @cTableStructure 
 			group by [year], [month], [week], case
 				when ymd > @dLastDayTable then '[' + @cArchiveDBName + left(ymdString, 6) + ']..[' + @cArchiveTableName + '_' + ymdString + ']'
 				else '[' + @cArchiveDBName + left(ymdString, 6) + ']..[' + @cArchiveTableName + '_' + left(ymdString, 6) + '_week' + convert(varchar(4), [week]) + ']'
-				end		declare @nThisUkey int
+				end
+
+		declare @nThisUkey int
 
 		set @nThisUkey = 0
 
@@ -552,15 +554,19 @@ begin
 
 	set @cSQLString = ''
 	use ['' + @cThisDatabase + '']
+	' + case when @@version not like '%server 2008%' then 'backup log ['' + @cThisDatabase + ''] with truncate_only' else '' end + '
 	exec sp_spaceUsed @updateusage = ''''TRUE''''
 	dbcc shrinkfile(2,1)''
 
+	print @cSQLString
 	exec sp_executeSQL @cSQLString
 end'
+				print @cSQLString
 				exec sp_executeSQL @cSQLString
 
 
 				set @cSQLString = 'use tempdb
+' + case when @@version not like '%server 2008%' then 'backup log [tempdb] with truncate_only' else '' end + '
 dbcc shrinkfile(2,1)'
 				exec sp_executeSQL @cSQLString
 

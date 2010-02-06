@@ -1,10 +1,5 @@
-/****** Object:  StoredProcedure [dbo].[pr_partitionTableDaily]    Script Date: 12/04/2009 18:51:57 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
 -- The keyFieldList variable should not contain ymd_id or ymd fields
-CREATE   procedure [dbo].[pr_partitionTableDaily] (@cTableName varchar(100), @cDateField varchar(100), @cKeyfieldList varchar(100), @lMakeUkey bit)
+ALTER   procedure [dbo].[pr_partitionTableDaily] (@cTableName varchar(100), @cDateField varchar(100), @cKeyfieldList varchar(100), @lMakeUkey bit)
 as
 begin
 	set noCount on
@@ -28,6 +23,7 @@ begin
 	declare @dEndDate dateTime
 	declare @cTableStructure varchar(5000)
 	declare @cArchiveDBName varchar(50)
+	declare @cMessage varchar(8000)
 
 	declare @lMakeNewTable bit
 	declare @cFieldList varchar(4000)
@@ -40,6 +36,7 @@ begin
 	declare @nFieldPrecision int
 	declare @nStringLength int
 	declare @nIsNullable int
+	declare @nRowCount int
 
 	declare @nLastDayTableWeek int
 	declare @nLastDayTableYear int
@@ -289,6 +286,11 @@ begin
 				insert into dm_settings (settingName, settingValue) values ('Partition Data Path', @cOldestDataPath)
 				insert into dm_settings (settingName, settingValue) values ('Partition Log Path', @cOldestDataPath)
 			end
+
+			if right(@cOldestDataPath, 1) <> '\'
+				set @cOldestDataPath = @cOldestDataPath + '\'
+			if right(@cOldestLogPath, 1) <> '\'
+				set @cOldestLogPath = @cOldestLogPath + '\'
 
 --			print 'Creating new database, storing files in: ' + isnull(@cOldestDatabasePath, 'BAD PATH')
 
@@ -595,11 +597,15 @@ create table [' + @cArchiveTableName + '_' + @cToday + '] (' + @cTableStructure 
 					insert into hist_partitionTableDaily (stepName) values ('Failed to delete records. ' + isnull(error_message(), 'N/A'))
 				end catch
 
+				set @nRowCount = @@rowcount
+				set @cMessage = 'Deleted ' + convert(varchar(20), @nRowCount) + ' duplicate rows'
+				insert into hist_partitionTableDaily (stepName) values (@cMessage)
+
 				insert into hist_partitionTableDaily (stepName) values
 					('Inserting ' + convert(varchar(10), @dStartDate, 120) + ' - ' + convert(varchar(10), @dEndDate, 120) + ' into ' + @cDestinationTableName)
 
 				set @cSQLString = 'insert into ' + @cDestinationTableName + ' (' + @cFieldList + ')
-				select distinct ' + @cFieldList + '
+				select ' + @cFieldList + '
 					from ' + @cTableName + ' (nolock)
 					where ' + @cDateField + ' >= ''' + convert(varchar(10), @dStartDate, 120) + '''
 						and ' + @cDateField + ' < ''' + convert(varchar(10), dateAdd(day, 1, @dEndDate), 120) + ''''
@@ -612,16 +618,19 @@ create table [' + @cArchiveTableName + '_' + @cToday + '] (' + @cTableStructure 
 					insert into hist_partitionTableDaily (stepName) values ('Failed to insert records. ' + isnull(error_message(), 'N/A'))
 				end catch
 
-				insert into hist_partitionTableDaily (stepName) values ('Rows inserted for this week')
+				set @nRowCount = @@rowcount
+				set @cMessage = 'Inserted ' + convert(varchar(20), @nRowCount) + ' rows for this week'
+				insert into hist_partitionTableDaily (stepName) values (@cMessage)
 
 				-- if that's all we needed in this database, shrink it
 				if (select count(*) from #weeks where databaseName = @cDatabaseName and ukey > @nThisUkey) = 0
 				begin
-					insert into hist_partitionTableDaily (stepName) values ('Shrinking ' + @cDatabaseName)
+					insert into hist_partitionTableDaily (stepName) values ('Shrinking log for ' + @cDatabaseName)
 
 					set @cSQLString = '
 use [' + @cDatabaseName + ']
-exec sp_spaceUsed @updateusage = ''TRUE''
+' + case when @@version not like '%server 2008%' then 'backup log ['' + @@cDatabaseName + ''] with truncate_only' else '' end + '
+--exec sp_spaceUsed @updateusage = ''TRUE''
 dbcc shrinkfile(2,1)'
 
 					exec sp_executeSQL @cSQLString
