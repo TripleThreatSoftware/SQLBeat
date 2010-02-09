@@ -1,5 +1,7 @@
 --select top 100 * from notificationLog_history order by ymd desc
 -- exec pr_examineServer 'web03', 600
+-- select architecture, * from dm_servers
+-- update dm_servers set password = 'REDACTED', wmiPassword = 'REDACTED'
 -- exec pr_examineServer '10.3.10.197', 600
 ALTER procedure [dbo].[pr_examineServer] (@cServerName varchar(100), @nMinutesBackToLook int)
 as
@@ -37,6 +39,7 @@ begin
 	declare @cProcedureName varchar(100)
 	declare @cServerNamePart varchar(200)
 
+	declare @nArchitecture int
 	declare @nSPID int
 	declare @nOffHoursPriority int
 	declare @nReturnStatus int
@@ -90,7 +93,8 @@ begin
 		@nMultipleBlockAlert = multipleBlocksThreshold,
 		@nBlockingSecondsThreshold = blockingSecondsThreshold,
 		@nUkeyServer = ukey,
-		@bCheckOrphanedUsers = checkOrphanedUsers
+		@bCheckOrphanedUsers = checkOrphanedUsers,
+		@nArchitecture = architecture
 		from dm_servers (nolock)
 		where serverName = @cServerName
 
@@ -226,9 +230,21 @@ begin
 
 	declare @cVersion varchar(500)
 	set @cVersion = (select top 1 results from #junkString)
-	set @cVersion = left(@cVersion, 50)
 
-	update dm_servers with (rowlock) set serverVersion = @cVersion where ukey = @nUkeyServer and isnull(serverVersion, '') <> @cVersion
+	update dm_servers with (rowlock)
+		set serverVersion = lefT(@cVersion , 50)
+		where ukey = @nUkeyServer
+			and isnull(serverVersion, '') <> @cVersion
+
+	print 'Found version: ' + @cVersion
+	print 'Existing architecture: ' + convert(varchar(20), @nArchitecture)
+
+	if isnull(@nArchitecture, 0) <> case when @cVersion like '%x64%' then 64 else 32 end
+	begin
+		update dm_servers with (rowlock)
+			set architecture = case when @cVersion like '%x64%' then 64 else 32 end
+			where ukey = @nUkeyServer
+	end
 
 	truncate table #junkString
 

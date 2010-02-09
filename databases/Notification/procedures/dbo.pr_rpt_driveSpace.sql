@@ -1,5 +1,6 @@
 -- select top 100 * from notificationLog order by ymd desc
 -- select * from dm_drivespaceThresholds
+
 ALTER procedure [dbo].[pr_rpt_driveSpace]
 as
 begin
@@ -17,13 +18,13 @@ begin
 		create clustered index ix_driveSpaceThresholds_server_driveLetter on dm_drivespaceThresholds (ukey_server, driveLetter) with fillfactor = 70
 	end
 
-	declare @latestReadings table (ukey_server int, serverName varchar(200), driveLetter varchar(1), latestReading dateTime)
+	declare @latestReadings table (ukey_server int, serverName varchar(200), driveLetter varchar(1), latestReading dateTime, firstReading dateTime)
 
 	insert into @latestReadings
-	select a.ukey, a.serverName, b.driveLetter, max(b.ymd) as latestReading
+	select a.ukey, a.serverName, b.driveLetter, max(b.ymd) as latestReading, min(b.ymd) as firstReading
 		from dm_servers a (nolock)
 		join drivespaceLog b (nolock) on a.serverName = b.serverName
-			and b.ymd >= dateAdd(hour, -6, getDate())
+			and b.ymd >= dateAdd(hour, -12, getDate())
 		where a.isEnabled = 1
 --			and a.detailedCheck = 1
 		group by a.ukey, a.serverName, b.driveLetter
@@ -49,12 +50,35 @@ begin
 			and b.driveSpace <= d.lowSpaceThreshold
 			and b.driveLetter = d.driveLetter
 
-	insert into notificationLog_stage (serverName, severity, subject, message)
+	-- if it hasn't changed by more than 25mb in the last twelve hours, and we've already sent a message, don't send another
+	delete #driveSpaceAlerts
+		from #driveSpaceAlerts a
+		join @latestReadings b on a.serverName = b.serverName
+			and a.driveLetter = b.driveLetter
+		join driveSpaceLog c (nolock) on a.serverName = c.serverName
+			and a.driveLetter = c.driveLetter
+			and c.ymd = b.firstReading
+		join (
+			select distinct serverName, substring(subject, 7, 1) as driveLetter
+				from notificationLog (nolock)
+				where isDriveSpace = 1
+					and ymd >= dateAdd(hour, -3, getDate())
+					and subject like '%is down to%'
+			) d on a.serverName = d.serverName
+				and a.driveLetter = d.driveLetter
+		--where (c.driveSpace - a.driveSpace) < 25
+		--	and d.serverName is null
+
+	insert into notificationLog_stage (serverName, severity, subject, message, isDriveSpace)
 	select
-		serverName, 1,
-		'Drive ' + isnull(driveLetter, 'N/A') + ' is down to ' + convert(varchar(100), driveSpace) + 'mb free.' as subject,
-		'Drive ' + isnull(driveLetter, 'N/A') + ' is down to ' + convert(varchar(100), driveSpace) + 'mb free at ' + convert(varchar(20), latestReading, 120) + '. Threshold is defined as ' + convert(varchar(100), lowSpaceThreshold) + 'mb.' as message
-		from #drivespaceAlerts
+		a.serverName,
+		case when c.isProduction = 1 then 1 else 2 end,
+		'Drive ' + isnull(a.driveLetter, 'N/A') + ' is down to ' + convert(varchar(100), a.driveSpace) + 'mb free.' as subject,
+		'Drive ' + isnull(a.driveLetter, 'N/A') + ' is down to ' + convert(varchar(100), a.driveSpace) + 'mb free at ' + convert(varchar(20), a.latestReading, 120) + '. Threshold is defined as ' + convert(varchar(100), a.lowSpaceThreshold) + 'mb.' as message,
+		1
+		from #drivespaceAlerts a
+		left outer join dm_servers b (nolock) on a.ukey_server = b.ukey
+		left outer join dm_serverGroups c (nolock) on b.ukey_group = c.ukey
 
 	set @nThisUkey = 0
 
@@ -270,7 +294,7 @@ begin
 			where serverName = @cServerName
 
 		insert into notificationLog_stage (serverName, subject, message, severity, isDriveSpace)
-		select @cServerName, @cThisSubject, @cThisMessage, 2, 1
+		select @cServerName, @cThisSubject, @cThisMessage, 3, 1
 
 	end
 end
