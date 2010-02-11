@@ -1,10 +1,8 @@
-USE [Configuration]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_processStagedData]    Script Date: 08/20/2008 10:41:40 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 --alter table runs_stage add ukey_group int
 --alter table runs_log add ukey_group int
 --GO
@@ -16,7 +14,7 @@ begin
 	declare @cInstance varchar(200)
 	declare @nCounter int
 
-	set @dRunStart = (select dateAdd(minute, -5, min(ymd)) from runs_stage where ukey_group = @nUkeyGroup)
+	set @dRunStart = (select dateAdd(minute, -5, min(ymd)) from runs_stage (nolock) where ukey_group = @nUkeyGroup)
 
 	insert into runs (ymd) values (getDate())
 
@@ -24,7 +22,7 @@ begin
 
 	insert into dm_keyNames (keyName)
 	select distinct a.keyName
-		from runs_stage a
+		from runs_stage a (nolock)
 		join notification.dbo.dm_servers b (nolock) on a.serverName = b.serverName
 			and b.ukey_group = @nUkeyGroup
 		left outer join dm_keyNames c (nolock) on a.keyName = c.keyName
@@ -34,7 +32,7 @@ begin
 	select a.ukey, @nUkeyRun as ukey_run, b.ukey as ukey_server, c.ukey as ukey_counter, d.ukey as ukey_keyName, a.keyValue, instance,
 		convert(int, 0) as rowNum
 		into #runResults
-		from runs_stage a
+		from runs_stage a (nolock)
 		join notification.dbo.dm_servers b (nolock) on a.serverName = b.serverName
 			and b.ukey_group = @nUkeyGroup
 		left outer join dm_counters c (nolock) on a.counterName = c.objectName + '.' + c.counterName
@@ -94,12 +92,12 @@ begin
 			and b.configurationCheck = 0
 			and b.eventLogCheck = 0
 
-	update notification.dbo.dm_servers with (rowlock)
-		set configurationCheck = 0,
-			eventLogCheck = 0
-		from notification.dbo.dm_servers a
-		join #disableServers b (nolock) on a.serverName = b.serverName
-		where a.ukey_group = @nUkeyGroup
+	--update notification.dbo.dm_servers with (rowlock)
+	--	set configurationCheck = 0,
+	--		eventLogCheck = 0
+	--	from notification.dbo.dm_servers a
+	--	join #disableServers b (nolock) on a.serverName = b.serverName
+	--	where a.ukey_group = @nUkeyGroup
 
 	declare @cServerName varchar(200)
 	declare @cMessage varchar(4000)
@@ -107,33 +105,33 @@ begin
 	set @cServerName = ''
 	set @cMessage = ''
 
-	while exists (select top 1 servername from #disableServers where serverName >= @cServerName)
-	begin
-		select top 1
-			@cServerName = serverName
-			from #disableServers
-			where serverName >= @cServerName
-			order by serverName
-
-		set @cMessage = ''
-
-		select @cMessage = @cMessage + char(13) + message
-			from runs_log a
-			where serverName = @cServerName
-				and ukey_group = @nUkeyGroup
-				and ymd >= dateAdd(hour, -1, getDate())
-			order by ymd
-
-		insert into notification.dbo.notificationLog_stage (serverName, isConnectivity, severity, subject, message)
-		select
-			@cServerName,
-			1 as isConnectivity,
-			2 as severity,
-			'Unable to connect to ' + @cServerName + ' using WMI at ' + convert(varchar(20), getDate(), 120) + '.' as subject,
-			isnull(@cMessage, '') + char(13) + char(13) +
-				'Future connections using WMI are DISABLED.'
-
-	end
+--	while exists (select top 1 servername from #disableServers where serverName >= @cServerName)
+--	begin
+--		select top 1
+--			@cServerName = serverName
+--			from #disableServers
+--			where serverName >= @cServerName
+--			order by serverName
+--
+--		set @cMessage = ''
+--
+--		select @cMessage = @cMessage + char(13) + message
+--			from runs_log a
+--			where serverName = @cServerName
+--				and ukey_group = @nUkeyGroup
+--				and ymd >= dateAdd(hour, -1, getDate())
+--			order by ymd
+--
+--		insert into notification.dbo.notificationLog_stage (serverName, isConnectivity, severity, subject, message)
+--		select
+--			@cServerName,
+--			1 as isConnectivity,
+--			2 as severity,
+--			'Unable to connect to ' + @cServerName + ' using WMI at ' + convert(varchar(20), getDate(), 120) + '.' as subject,
+--			isnull(@cMessage, '') + char(13) + char(13) +
+--				'Future connections using WMI are DISABLED.'
+--
+--	end
 
 	drop table #disableServers
 
