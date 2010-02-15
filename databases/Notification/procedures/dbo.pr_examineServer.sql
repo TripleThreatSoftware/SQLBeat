@@ -1,5 +1,5 @@
 --select top 100 * from notificationLog_history order by ymd desc
--- exec pr_examineServer 'web03', 600
+-- exec pr_examineServer 'sqlcluster01', 600
 -- select architecture, * from dm_servers
 -- update dm_servers set password = 'REDACTED', wmiPassword = 'REDACTED'
 -- exec pr_examineServer '10.3.10.197', 600
@@ -60,6 +60,7 @@ begin
 
 	declare @bIsOffHours bit
 	declare @bCheckOrphanedUsers bit
+	declare @bIsMaintenancePeriod bit
 
 	declare @dLastCheck dateTime
 	declare @dLastSuccess dateTime
@@ -94,7 +95,15 @@ begin
 		@nBlockingSecondsThreshold = blockingSecondsThreshold,
 		@nUkeyServer = ukey,
 		@bCheckOrphanedUsers = checkOrphanedUsers,
-		@nArchitecture = architecture
+		@nArchitecture = architecture,
+		@bIsMaintenancePeriod = case
+			when maintenanceWindowStart is null or maintenanceWindowStop is null
+				then 0
+			when right(convert(varchar(20), getDate(), 120), 8) >= right(convert(varchar(20), maintenanceWindowStart, 120), 8)
+				and right(convert(varchar(20), getDate(), 120), 8) <= right(convert(varchar(20), maintenanceWindowStop, 120), 8)
+				then 1
+			else 0
+			end
 		from dm_servers (nolock)
 		where serverName = @cServerName
 
@@ -1701,7 +1710,7 @@ begin
 				'has been running for ' + convert(varchar(20), secondsRunning) + ' seconds. ' + char(13) + char(13) +
 				'Start time: ' + convert(varchar(20), startTime) + char(13) +
 				'Current step: ' + a.currentStepName + char(13) +
-				'Current step text: ' + char(13) + a.currentStepText +
+				'Current step text: ' + char(13) + a.currentStepText + char(13) +
 				'Status: ' + isnull(runStatus, 'N/A')
 				, 8000)	as message,
 			-- if runtime > 2x, then it's a critical alert
@@ -1729,7 +1738,7 @@ begin
 				'has been running for ' + convert(varchar(20), secondsRunning) + ' seconds. ' + char(13) + char(13) +
 				'Start time: ' + convert(varchar(20), startTime) + char(13) +
 				'Current step: ' + a.currentStepName + char(13) +
-				'Current step text: ' + char(13) + a.currentStepText +
+				'Current step text: ' + char(13) + a.currentStepText + char(13) +
 				'Status: ' + isnull(runStatus, 'N/A')
 				, 8000)	as message,
 			-- if runtime > 2x, then it's a critical alert
@@ -1800,7 +1809,7 @@ begin
 				where a.ukey_server = @nUkeyServer
 					and a.isSuccess = 0
 					and a.ukey_job = @nUkeyJob
-					and a.ymd >= dateAdd(minute, -@nMinutesBackToLook, getDate())
+					and a.ymd >= dateAdd(minute, -30, getDate())
 
 			-- if this job has failed more than once in the last 30 minutes, change alert style
 			if (@nNumSuccess = 0 and @nNumFailure > 1)
@@ -1824,29 +1833,43 @@ begin
 							and a.ymd >= dateAdd(day, -1, getDate())
 					)
 
-				set @cThisSubject = 'Job ' + @cJobName + ' failing at ' + convert(varchar(20), dbo.fn_returnTimeBlock(@dJobFailure), 120)
-				set @cThisMessage = 'Job ' + @cJobName + ' is failing. <br>' +
-					'Failures: ' + isnull(convert(varchar(20), @nNumFailure), 'N/A') + '<br>' +
-					'Successes: ' + isnull(convert(varchar(20), @nNumSuccess), 'N/A') + '<br>' +
-					'Last Failure: ' + isnull(convert(varchar(20), @dLastFailure, 120), 'N/A') + '<br>' +
-					'Last Success: ' + isnull(convert(varchar(20), @dLastSuccess, 120), 'N/A') + '<br>' +
-					replicate('=', 20) + '<br>'
+				if @dLastFailure > @dLastSuccess
+				begin
+					-- it has been failing repeatedly, and continues to fail
 
-				select @cThisMessage = @cThisMessage +
-					'==<b>' + isnull(b.stepName, 'N/A') + '</b> @ ' + isnull(convert(varchar(20), a.ymd, 120), 'N/A') + ' <br>' +
-						'Runtime: ' + convert(varchar(20), isnull(a.runningSeconds, 0)) + 's<br>' +
-						'Outcome: ' + case when a.isSuccess = 1 then 'OK' else isnull(a.stepOutcome, 'N/A') end + '<br>' +
-						case when a.isSuccess = 1 then '' else 'Step Text:' + isnull(b.stepCommand, 'N/A') end + '<br>'
-					from jobStepHistory a (nolock)
-					join dm_serverJobSteps b (nolock) on a.ukey_jobStep = b.ukey
-						and b.ukey_server = @nUkeyServer
-						and b.ukey_job = @nUkeyJob
-					where a.ukey_server = @nUkeyServer
-						and a.ukey_jobHistory = @nThisUkey
-						and a.ukey_job = @nUkeyJob
-					order by a.ymd
+					set @cThisSubject = 'Job ' + @cJobName + ' failing at ' + convert(varchar(20), dbo.fn_returnTimeBlock(@dJobFailure), 120)
+					set @cThisMessage = 'Job ' + @cJobName + ' is failing. <br>' +
+						'Failures: ' + isnull(convert(varchar(20), @nNumFailure), 'N/A') + '<br>' +
+						'Successes: ' + isnull(convert(varchar(20), @nNumSuccess), 'N/A') + '<br>' +
+						'Last Failure: ' + isnull(convert(varchar(20), @dLastFailure, 120), 'N/A') + '<br>' +
+						'Last Success: ' + isnull(convert(varchar(20), @dLastSuccess, 120), 'N/A') + '<br>' +
+						replicate('=', 20) + '<br>'
 
-				insert into #results (ymd, subject, message, severity, isJobFailure) values (@dJobFailure, @cThisSubject, @cThisMessage, 2, 1)
+					select @cThisMessage = @cThisMessage +
+						'==<b>' + isnull(b.stepName, 'N/A') + '</b> @ ' + isnull(convert(varchar(20), a.ymd, 120), 'N/A') + ' <br>' +
+							'Runtime: ' + convert(varchar(20), isnull(a.runningSeconds, 0)) + 's<br>' +
+							'Outcome: ' + case when a.isSuccess = 1 then 'OK' else isnull(a.stepOutcome, 'N/A') end + '<br>' +
+							case when a.isSuccess = 1 then '' else 'Step Text:' + isnull(b.stepCommand, 'N/A') end + '<br>'
+						from jobStepHistory a (nolock)
+						join dm_serverJobSteps b (nolock) on a.ukey_jobStep = b.ukey
+							and b.ukey_server = @nUkeyServer
+							and b.ukey_job = @nUkeyJob
+						where a.ukey_server = @nUkeyServer
+							and a.ukey_jobHistory = @nThisUkey
+							and a.ukey_job = @nUkeyJob
+						order by a.ymd
+
+					insert into #results (ymd, subject, message, severity, isJobFailure) values (@dJobFailure, @cThisSubject, @cThisMessage, 2, 1)
+
+					delete from #jobStepHistory where job_id in (select job_id from #jobHistory where ukey = @nThisUkey)
+					delete from #jobHistory where job_id in (select job_id from #jobHistory where ukey = @nThisUkey)
+				end
+				else
+				begin
+					-- it had failed repeatedly, and is now succeeding
+					delete from #jobStepHistory where job_id in (select job_id from #jobHistory where ukey = @nThisUkey)
+					delete from #jobHistory where job_id in (select job_id from #jobHistory where ukey = @nThisUkey)
+				end
 			end
 			else
 			begin
@@ -2211,7 +2234,10 @@ begin
 
 		insert into #results (severity, subject, message)
 		select
-			case when @nNumAlerts > 0 and waitingTasks > 5 then 1 else 2 end,
+			case
+				when @bIsMaintenancePeriod = 1 then 3
+				when @nNumAlerts > 0 and waitingTasks > 5 then 1
+				else 2 end,
 			'CPU ' + convert(varchar(20), cpuNumber) + ' has ' + convert(varchar(20), waitingTasks) + ' tasks waiting.',
 			'Time: ' + convert(varchar(20), getDate(), 120) + ' <br>' +
 				'CPU ' + convert(varchar(20), cpuNumber) + ' has ' + convert(varchar(20), currentTasks) + ' tasks running and ' + convert(varchar(20), waitingTasks) + ' tasks waiting.'
@@ -2265,7 +2291,10 @@ begin
 		insert into #results (severity, subject, message)
 		select
 			-- weight based on how long and whether this is the first alert in the last 10 minutes
-			case when msWaiting > 20000 and @nNumAlerts > 2 then 1 else 2 end as severity,
+			case
+				when @bIsMaintenancePeriod = 1 then 3
+				when msWaiting > 20000 and @nNumAlerts > 2 then 1
+				else 2 end as severity,
 			convert(varchar(20), isnull(a.numRequests, 0)) + ' requests ' +
 				'waiting for ' + convert(varchar(20), a.msWaiting) + 'ms on "' + isnull(left(b.filePath, 3), 'N/A') + '"' as subject,
 			'Time: ' + convert(varchar(20), getDate(), 120) + '<br>' +
@@ -2282,6 +2311,8 @@ begin
 				) b on a.databaseName = b.databaseName
 					and a.fileID = b.fileID
 			where a.msWaiting >= 1000 -- or a.numRequests >= 2
+				-- sanity check
+				and a.msWaiting < 1000*60*5
 
 		drop table #waitingIO
 	end
