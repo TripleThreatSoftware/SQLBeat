@@ -1,8 +1,14 @@
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[pr_rpt_runningProcessSummary]') AND type in (N'P', N'PC'))
-BEGIN
-EXEC dbo.sp_executesql @statement = N'-- exec pr_rpt_runningProcessSummary ''uatmssql02'', ''2008-01-11 17:00:00.000'', ''2008-01-12 01:00:00.000''
+USE [Configuration]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_rpt_runningProcessSummary]    Script Date: 02/17/2010 14:53:08 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 
-CREATE procedure [pr_rpt_runningProcessSummary] (@nUkeyServer int, @dStartDate dateTime, @dEndDate dateTime)
+-- exec pr_rpt_runningProcessSummary 35, '2010-02-17 00:00:00.000', '2010-02-18 00:00:00.000'
+
+ALTER procedure [dbo].[pr_rpt_runningProcessSummary] (@nUkeyServer int, @dStartDate dateTime, @dEndDate dateTime)
 as
 begin
 	declare @cServerName varchar(100)
@@ -10,34 +16,16 @@ begin
 
 	-- busy processes
 	select
-		c.serverName,
-		a.instance,
-		f.ymd,
-		max(case when e.keyName = ''name'' then keyValue else '''' end) as processName,
-
-		convert(decimal(20,0), max(case when e.keyName = ''ThreadCount'' then keyValue else null end)) as ThreadCount,
-		convert(decimal(20,0), max(case when e.keyName = ''PercentProcessorTime'' then keyValue else null end)) as PercentProcessorTime,
-
-		convert(decimal(20,0), max(case when e.keyName = ''PageFileBytes'' then keyValue else null end)) as PageFileBytes,
-		convert(decimal(20,0), max(case when e.keyName = ''PoolNonpagedBytes'' then keyValue else null end)) as PoolNonpagedBytes,
-		convert(decimal(20,0), max(case when e.keyName = ''PoolPagedBytes'' then keyValue else null end)) as PoolPagedBytes,
-		convert(decimal(20,0), max(case when e.keyName = ''PrivateBytes'' then keyValue else null end)) as PrivateBytes,
-		convert(decimal(20,0), max(case when e.keyName = ''VirtualBytes'' then keyValue else null end)) as VirtualBytes,
-		convert(decimal(20,0), max(case when e.keyName = ''IOWriteBytesPersec'' then keyValue else null end)) as IOWriteBytesPersec,
-		convert(decimal(20,0), max(case when e.keyName = ''IOReadBytesPersec'' then keyValue else null end)) as IOReadBytesPersec
-
+		b.serverName, a.ymd, a.instance, a.processName, a.threadCount, a.percentProcessorTime, a.pageFileBytes, a.poolNonpagedBytes,
+		a.poolPagedBytes, a.privateBytes, a.virtualBytes, a.ioWriteBytesPerSecond, a.ioReadBytesPerSecond
 		into #processHistory
 
-		from runs_data a
-		join notification..dm_servers c on a.ukey_server = c.ukey
-			and c.serverName = @cServerName
-		join dm_counters d on a.ukey_counter = d.ukey
-			and d.counterName in (''Win32_PerfFormattedData_PerfProc_Process'', ''Win32_Process'')
-		join dm_keyNames e on a.ukey_keyName = e.ukey
-		join runs f on a.ukey_run = f.ukey
-			and f.ymd >= @dStartDate
-			and f.ymd <= @dEndDate
-		group by c.serverName, a.instance, f.ymd
+		from runningProcessLog a (nolock)
+		join notification..dm_servers b (nolock) on a.ukey_server = b.ukey
+			and b.serverName = @cServerName
+		where a.ukey_server = @nUkeyServer
+			and a.ymd >= @dStartDate
+			and a.ymd <= @dEndDate
 
 	select serverName,
 		processName,
@@ -71,13 +59,13 @@ begin
 		max(VirtualBytes) as VirtualBytes_max,
 		convert(decimal(20,0), avg(VirtualBytes)) as VirtualBytes_avg,
 
-		min(IOWriteBytesPersec) as IOWriteBytesPersec_min,
-		max(IOWriteBytesPersec) as IOWriteBytesPersec_max,
-		convert(decimal(20,0), avg(IOWriteBytesPersec)) as IOWriteBytesPersec_avg,
+		min(IOWriteBytesPerSecond) as IOWriteBytesPersec_min,
+		max(IOWriteBytesPerSecond) as IOWriteBytesPersec_max,
+		convert(decimal(20,0), avg(IOWriteBytesPerSecond)) as IOWriteBytesPersec_avg,
 
-		min(IOReadBytesPersec) as IOReadBytesPersec_min,
-		max(IOReadBytesPersec) as IOReadBytesPersec_max,
-		convert(decimal(20,0), avg(IOReadBytesPersec)) as IOReadBytesPersec_avg
+		min(IOReadBytesPerSecond) as IOReadBytesPersec_min,
+		max(IOReadBytesPerSecond) as IOReadBytesPersec_max,
+		convert(decimal(20,0), avg(IOReadBytesPerSecond)) as IOReadBytesPersec_avg
 
 		into #processSummary
 
@@ -171,26 +159,26 @@ begin
 				else convert(decimal(20,2), b.VirtualBytes) / convert(decimal(20,2), c.VirtualBytes)
 				end * 100) as VirtualBytes_percentOfPresentTotal,
 
-		b.IOWriteBytesPersec as IOWriteBytesPersec_now,
+		b.IOWriteBytesPerSecond as IOWriteBytesPersec_now,
 		d.IOWriteBytesPersec_min as IOWriteBytesPersec_min,
 		d.IOWriteBytesPersec_max as IOWriteBytesPersec_max,
 		d.IOWriteBytesPersec_avg as IOWriteBytesPersec_avg,
 
 		convert(decimal(10,2),
-			case when c.IOWriteBytesPersec = 0
+			case when c.IOWriteBytesPerSecond = 0
 				then convert(decimal(20,2), 0)
-				else convert(decimal(20,2), b.IOWriteBytesPersec) / convert(decimal(20,2), c.IOWriteBytesPersec)
+				else convert(decimal(20,2), b.IOWriteBytesPerSecond) / convert(decimal(20,2), c.IOWriteBytesPerSecond)
 				end * 100) as IOWriteBytesPersec_percentOfPresentTotal,
 
-		b.IOReadBytesPersec as IOReadBytesPersec_now,
+		b.IOReadBytesPerSecond as IOReadBytesPersec_now,
 		d.IOReadBytesPersec_min as IOReadBytesPersec_min,
 		d.IOReadBytesPersec_max as IOReadBytesPersec_max,
 		d.IOReadBytesPersec_avg as IOReadBytesPersec_avg,
 
 		convert(decimal(10,2),
-			case when c.IOReadBytesPersec = 0
+			case when c.IOReadBytesPerSecond = 0
 				then convert(decimal(20,2), 0)
-				else convert(decimal(20,2), b.IOReadBytesPersec) / convert(decimal(20,2), c.IOReadBytesPersec)
+				else convert(decimal(20,2), b.IOReadBytesPerSecond) / convert(decimal(20,2), c.IOReadBytesPerSecond)
 				end * 100) as IOReadBytesPersec_percentOfPresentTotal
 
 		from (
@@ -200,10 +188,10 @@ begin
 			) a
 		join #processHistory b on a.serverName = b.serverName
 			and a.ymd = b.ymd
-			and b.processName <> ''_Total''
+			and b.processName <> '_Total'
 		join #processHistory c on a.serverName = c.serverName
 			and a.ymd = c.ymd
-			and c.processName = ''_Total''
+			and c.processName = '_Total'
 
 			and (
 				(convert(decimal(20,2), c.PageFileBytes) <> 0
@@ -222,10 +210,10 @@ begin
 				or (convert(decimal(20,2), c.PercentProcessorTime) <> 0
 					and convert(decimal(20,2), b.PercentProcessorTime) / convert(decimal(20,2), c.PercentProcessorTime) > .10) -- more than 10% of total
 
-				or (convert(decimal(20,2), c.IOWriteBytesPersec) <> 0
-					and convert(decimal(20,2), b.IOWriteBytesPersec) / convert(decimal(20,2), c.IOWriteBytesPersec) > .10) -- more than 10% of total
-				or (convert(decimal(20,2), c.IOReadBytesPersec) <> 0
-					and convert(decimal(20,2), b.IOReadBytesPersec) / convert(decimal(20,2), c.IOReadBytesPersec) > .10) -- more than 10% of total
+				or (convert(decimal(20,2), c.IOWriteBytesPerSecond) <> 0
+					and convert(decimal(20,2), b.IOWriteBytesPerSecond) / convert(decimal(20,2), c.IOWriteBytesPerSecond) > .10) -- more than 10% of total
+				or (convert(decimal(20,2), c.IOReadBytesPerSecond) <> 0
+					and convert(decimal(20,2), b.IOReadBytesPerSecond) / convert(decimal(20,2), c.IOReadBytesPerSecond) > .10) -- more than 10% of total
 			)
 
 		join #processSummary d on a.serverName = d.serverName
@@ -239,10 +227,3 @@ begin
 	drop table #processSummary
 
 end
-'
-END
-GO
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO

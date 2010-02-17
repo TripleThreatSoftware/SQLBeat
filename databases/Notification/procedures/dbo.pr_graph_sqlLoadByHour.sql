@@ -1,11 +1,13 @@
-/****** Object:  StoredProcedure [dbo].[pr_graph_sqlLoadByHour]    Script Date: 05/19/2009 13:59:45 ******/
+USE [Notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_graph_sqlLoadByHour]    Script Date: 02/17/2010 11:41:49 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
--- exec pr_graph_sqlLoadByHour 'mssql-ny'
+-- exec pr_graph_sqlLoadByHour 'sqlcluster01'
 
-CREATE procedure [dbo].[pr_graph_sqlLoadByHour] (@cServerName varchar(100), @nGraphWidth int = 800)
+ALTER procedure [dbo].[pr_graph_sqlLoadByHour] (@cServerName varchar(100), @nGraphWidth int = 800)
 as
 begin
 
@@ -21,81 +23,6 @@ begin
 
 	set nocount on
 
-	select
-		convert(varchar(20), spid) + isnull(hostname, '') + isnull(dbname, '') + isnull(programName, '') + convert(varchar(20), login_time, 120) as keyString,
-		lastBatchTime, login_time,
-		min(ymd) as ymd,
-		isnull(dbName, 'N/A') as dbname,
-		min(cpuTime) as cpuTime_min,
-		max(cpuTime) as cpuTime_max,
-		min(diskIO) as diskIO_min,
-		max(diskIO) as diskIO_max,
-		max(cpuTime) - min(cpuTime) as cpuTime_delta,
-		max(diskIO) - min(diskIO) as diskIO_delta,
-		convert(dateTime, null) as prevBatchTime,
-		identity(int) as ukey
-		into #activity
-		from (
-			select spid, hostname, dbname, programName, login_time, ymd, lastBatchTime,
-				sum(convert(bigint, cpuTime)) as cpuTime,
-				sum(convert(bigint, diskIO)) as diskIO
-				from notification.dbo.processLog (nolock)
-				where serverName = @cServerName
-					and ymd >= @dStartDate
-					and lastBatchTime >= @dStartDate
-					and hostname <> convert(varchar(100), @@serverName)
-					and lastBatchTime is not null
-					and spid >= 50
---					and ymd < convert(varchar(13), getDate(), 120) + ':00:00.000'
-				group by spid, hostname, dbname, programName, login_time, ymd, lastBatchTime
-			) a
-		group by spid, hostname, programName, login_time, lastBatchTime, dbName
-		order by spid, dbName, hostname, programName, login_time, lastBatchTime
-
-	if @@rowcount = 0
-	begin
-		select
-			'images/not-available.jpg' as diskIO,
-			'images/not-available.jpg' as cpuTime,
-
-			'images/not-available.jpg' as diskIO_pie,
-			'images/not-available.jpg' as cpuTime_pie,
-
-			'images/not-available.jpg' as overallLoad
-
-		return
-	end
-
-	create clustered index ix_tmp_activity on #activity (ukey, keyString) with fillfactor = 90
-
-	update a
-		set prevBatchTime = b.lastBatchTime
-		from #activity a
-		join #activity b on a.keyString = b.keyString
-			and a.ukey = b.ukey + 1
-
-	delete from #activity where prevBatchTime < @dStartDate --or isnull(prevBatchTime, '') = ''
-
-	--create index ix_tmp_activity_prevBatch on #activity (prevBatchTime, keyString) with fillfactor = 100
-
-	update a
-		set cpuTime_delta = a.cpuTime_delta + (a.cpuTime_min - c.cpuTime_max),
-			diskIO_delta = a.diskIO_delta + (a.diskIO_min - c.diskIO_max)
-		from #activity a
-		join #activity c on a.keyString = c.keyString
-			and a.prevBatchTime = c.lastBatchTime
-			and a.lastBatchTime > c.lastBatchTime
-			and a.cpuTime_min >= c.cpuTime_max
-			and a.diskIO_min >= c.diskIO_max
-		where a.prevBatchTime is not null
-
-	-- for any one-off transaction, any CPU or DISK stats showing are all in. We've already added the min/max delta earlier
-	update a
-		set cpuTime_delta = a.cpuTime_delta + a.cpuTime_min,
-			diskIO_delta = a.diskIO_delta + a.diskIO_min
-		from #activity a
-		where a.prevBatchTime is null
-			and login_time > @dStartDate
 
 	create table #dataValues (setName varchar(200), seriesName varchar(100), axis_x varchar(100), axis_y decimal(20,4), sortOrder int identity)
 
@@ -108,41 +35,24 @@ begin
 		'CPUTime' as seriesName,
 		convert(varchar(2),
 			case
-				when datePart(hour, lastBatchTime) >= 13
-					then datePart(hour, lastBatchTime) - 12
-					else datePart(hour, lastBatchTime)
+				when ymd_hour >= 13
+					then ymd_hour - 12
+					else ymd_hour
 					end) +
 				case
-					when datePart(hour, lastBatchTime) >= 13
+					when ymd_hour >= 13
 					then 'p'
 					else 'a'
 				end
 				as axis_x,
-		sum(cpuTime_delta) as axis_y
+		cpuTime as axis_y
 
-		from #activity
-		group by dbName, convert(varchar(10), lastbatchTime, 120), datePart(hour, lastBatchTime)
-		order by dbName, convert(varchar(10), lastbatchTime, 120), datePart(hour, lastBatchTime)
+		from mart_database_byHour (nolock)
+		where serverName = @cServerName
+			and dateAdd(hour, ymd_hour, ymd) >= @dStartDate
+			and dbName in (select top 5 dbName from mart_database_byHour (nolock) where serverName = @cServerName and dateAdd(hour, ymd_hour, ymd) >= @dStartDate group by dbName order by sum(cpuTime) desc)
+		order by dbName, ymd, ymd_hour
 
-	delete #dataValues
-		from #dataValues a
-		join (
-			select setName, seriesName, min(sortOrder) as sortOrder
-				from #dataValues
-				group by setName, seriesName
-			) b on a.setName = b.setName
-				and a.seriesName = b.seriesName
-				and a.sortOrder = b.sortOrder
-
-	insert into #dataValues (setName, seriesName, axis_x, axis_y)
-	select a.setName, 'CPUTime' as seriesName, a.axis_x, 0 as axis_y
-		from (
-			select distinct setName, axis_x
-				from (select distinct setname from #dataValues) a, (select distinct axis_x from #dataValues) b
-			) a
-		left outer join #dataValues b on a.setName = b.setName
-			and a.axis_x = b.axis_x
-		where b.setName is null
 
 	insert into #results (cpuTime)
 	exec notification..pr_generateGoogleChartsRequest @nWidth = 1000, @nHeight = 300, @bRelativeToTotal = 0, @bAbsoluteYAxis = 1
@@ -157,41 +67,23 @@ begin
 		'DiskIO' as seriesName,
 		convert(varchar(2),
 			case
-				when datePart(hour, lastBatchTime) >= 13
-					then datePart(hour, lastBatchTime) - 12
-					else datePart(hour, lastBatchTime)
+				when ymd_hour >= 13
+					then ymd_hour - 12
+					else ymd_hour
 					end) +
-			case
-				when datePart(hour, lastBatchTime) >= 13
-				then 'p'
-				else 'a'
-			end
-			as axis_x,
-		sum(diskIO_delta) as axis_y
+				case
+					when ymd_hour >= 13
+					then 'p'
+					else 'a'
+				end
+				as axis_x,
+		diskIO as axis_y
 
-		from #activity
-		group by dbName, convert(varchar(10), lastbatchTime, 120), datePart(hour, lastBatchTime)
-		order by dbName, convert(varchar(10), lastbatchTime, 120), datePart(hour, lastBatchTime)
-
-	delete #dataValues
-		from #dataValues a
-		join (
-			select setName, seriesName, min(sortOrder) as sortOrder
-				from #dataValues
-				group by setName, seriesName
-			) b on a.setName = b.setName
-				and a.seriesName = b.seriesName
-				and a.sortOrder = b.sortOrder
-
-	insert into #dataValues (setName, seriesName, axis_x, axis_y)
-	select a.setName, 'DiskIO' as seriesName, a.axis_x, 0 as axis_y
-		from (
-			select distinct setName, axis_x
-				from (select distinct setname from #dataValues) a, (select distinct axis_x from #dataValues) b
-			) a
-		left outer join #dataValues b on a.setName = b.setName
-			and a.axis_x = b.axis_x
-		where b.setName is null
+		from mart_database_byHour (nolock)
+		where serverName = @cServerName
+			and dateAdd(hour, ymd_hour, ymd) >= @dStartDate
+			and dbName in (select top 5 dbName from mart_database_byHour (nolock) where serverName = @cServerName and dateAdd(hour, ymd_hour, ymd) >= @dStartDate group by dbName order by sum(diskIO) desc)
+		order by dbName, ymd, ymd_hour
 
 	insert into #results (diskIO)
 	exec notification..pr_generateGoogleChartsRequest @nWidth = 1000, @nHeight = 300, @bRelativeToTotal = 0, @bAbsoluteYAxis = 1
@@ -206,11 +98,13 @@ begin
 		'DiskIO' as setName,
 		'DiskIO' as seriesName,
 		dbName as axis_x,
-		sum(diskIO_delta) as axis_y
+		sum(diskIO) as axis_y
 
-		from #activity
+		from mart_database_byHour (nolock)
+		where serverName = @cServerName
+			and dateAdd(hour, ymd_hour, ymd) >= @dStartDate
+			and dbName in (select top 5 dbName from mart_database_byHour (nolock) where serverName = @cServerName and dateAdd(hour, ymd_hour, ymd) >= @dStartDate group by dbName order by sum(diskIO) desc)
 		group by dbName
-		order by dbName
 
 	insert into #results (diskIO_pie)
 	exec pr_generateGoogleChartsRequest @nWidth = 900, @nHeight = 300, @bRelativeToTotal = 0, @bShowPie = 1
@@ -225,11 +119,13 @@ begin
 		'CPUTime' as setName,
 		'CPUTime' as seriesName,
 		dbName as axis_x,
-		sum(cpuTime_delta) as axis_y
+		sum(cpuTime) as axis_y
 
-		from #activity
+		from mart_database_byHour (nolock)
+		where serverName = @cServerName
+			and dateAdd(hour, ymd_hour, ymd) >= @dStartDate
+			and dbName in (select top 5 dbName from mart_database_byHour (nolock) where serverName = @cServerName and dateAdd(hour, ymd_hour, ymd) >= @dStartDate group by dbName order by sum(cpuTime) desc)
 		group by dbName
-		order by dbName
 
 	insert into #results (cpuTime_pie)
 	exec pr_generateGoogleChartsRequest @nWidth = 900, @nHeight = 300, @bRelativeToTotal = 0, @bShowPie = 1
@@ -246,37 +142,22 @@ begin
 		'CPUTime' as seriesName,
 		convert(varchar(2),
 			case
-				when datePart(hour, lastBatchTime) >= 13
-					then datePart(hour, lastBatchTime) - 12
-					else datePart(hour, lastBatchTime)
+				when ymd_hour >= 13
+					then ymd_hour - 12
+					else ymd_hour
 					end) +
 			case
-					when datePart(minute, lastBatchTime) between 0 and 14 then ' 00'
-					when datePart(minute, lastBatchTime) between 15 and 29 then ' 15'
-					when datePart(minute, lastBatchTime) between 30 and 44 then ' 30'
-					when datePart(minute, lastBatchTime) between 45 and 60 then ' 45'
-					end +
-			case
-				when datePart(hour, lastBatchTime) >= 13
+				when ymd_hour >= 13
 				then 'p'
 				else 'a'
 			end
 			as axis_x,
-		sum(cpuTime_delta) as axis_y
-
-		from #activity
-		group by convert(varchar(10), lastbatchTime, 120), datePart(hour, lastBatchTime), case
-					when datePart(minute, lastBatchTime) between 0 and 14 then ' 00'
-					when datePart(minute, lastBatchTime) between 15 and 29 then ' 15'
-					when datePart(minute, lastBatchTime) between 30 and 44 then ' 30'
-					when datePart(minute, lastBatchTime) between 45 and 60 then ' 45'
-					end
-		order by convert(varchar(10), lastbatchTime, 120), datePart(hour, lastBatchTime), case
-					when datePart(minute, lastBatchTime) between 0 and 14 then ' 00'
-					when datePart(minute, lastBatchTime) between 15 and 29 then ' 15'
-					when datePart(minute, lastBatchTime) between 30 and 44 then ' 30'
-					when datePart(minute, lastBatchTime) between 45 and 60 then ' 45'
-					end
+		sum(cpuTime) as axis_y
+		from mart_database_byHour (nolock)
+		where serverName = @cServerName
+			and dateAdd(hour, ymd_hour, ymd) >= @dStartDate
+		group by ymd, ymd_hour
+		order by ymd, ymd_hour
 
 	insert into #dataValues (setName, seriesName, axis_x, axis_y)
 	select
@@ -284,57 +165,23 @@ begin
 		'DiskIO' as seriesName,
 		convert(varchar(2),
 			case
-				when datePart(hour, lastBatchTime) >= 13
-					then datePart(hour, lastBatchTime) - 12
-					else datePart(hour, lastBatchTime)
+				when ymd_hour >= 13
+					then ymd_hour - 12
+					else ymd_hour
 					end) +
 			case
-					when datePart(minute, lastBatchTime) between 0 and 14 then ' 00'
-					when datePart(minute, lastBatchTime) between 15 and 29 then ' 15'
-					when datePart(minute, lastBatchTime) between 30 and 44 then ' 30'
-					when datePart(minute, lastBatchTime) between 45 and 60 then ' 45'
-					end +
-			case
-				when datePart(hour, lastBatchTime) >= 13
+				when ymd_hour >= 13
 				then 'p'
 				else 'a'
 			end
 			as axis_x,
-		sum(diskIO_delta) as axis_y
+		sum(diskIO) as axis_y
+		from mart_database_byHour (nolock)
+		where serverName = @cServerName
+			and dateAdd(hour, ymd_hour, ymd) >= @dStartDate
+		group by ymd, ymd_hour
+		order by ymd, ymd_hour
 
-		from #activity
-		group by convert(varchar(10), lastbatchTime, 120), datePart(hour, lastBatchTime), case
-					when datePart(minute, lastBatchTime) between 0 and 14 then ' 00'
-					when datePart(minute, lastBatchTime) between 15 and 29 then ' 15'
-					when datePart(minute, lastBatchTime) between 30 and 44 then ' 30'
-					when datePart(minute, lastBatchTime) between 45 and 60 then ' 45'
-					end
-		order by convert(varchar(10), lastbatchTime, 120), datePart(hour, lastBatchTime), case
-					when datePart(minute, lastBatchTime) between 0 and 14 then ' 00'
-					when datePart(minute, lastBatchTime) between 15 and 29 then ' 15'
-					when datePart(minute, lastBatchTime) between 30 and 44 then ' 30'
-					when datePart(minute, lastBatchTime) between 45 and 60 then ' 45'
-					end
-
-	delete #dataValues
-		from #dataValues a
-		join (
-			select setName, seriesName, min(sortOrder) as sortOrder
-				from #dataValues
-				group by setName, seriesName
-			) b on a.setName = b.setName
-				and a.seriesName = b.seriesName
-				and a.sortOrder = b.sortOrder
-
-	insert into #dataValues (setName, seriesName, axis_x, axis_y)
-	select a.setName, 'CPUTime' as seriesName, a.axis_x, 0 as axis_y
-		from (
-			select distinct setName, axis_x
-				from (select distinct setname from #dataValues) a, (select distinct axis_x from #dataValues) b
-			) a
-		left outer join #dataValues b on a.setName = b.setName
-			and a.axis_x = b.axis_x
-		where b.setName is null
 
 	insert into #results (overallLoad)
 	exec pr_generateGoogleChartsRequest @nWidth = @nGraphWidth, @nHeight = null, @bRelativeToTotal = 0
@@ -355,7 +202,5 @@ begin
 		from #results
 
 	drop table #dataValues
-	drop table #activity
 	drop table #results
 end
-GO

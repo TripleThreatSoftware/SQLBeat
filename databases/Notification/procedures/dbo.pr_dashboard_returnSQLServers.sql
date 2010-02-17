@@ -1,6 +1,6 @@
 USE [Notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_dashboard_returnSQLServers]    Script Date: 01/25/2010 14:09:15 ******/
+/****** Object:  StoredProcedure [dbo].[pr_dashboard_returnSQLServers]    Script Date: 02/17/2010 11:25:13 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -102,14 +102,12 @@ begin
 	insert into @uniqueUsers (serverName, uniqueUsers, activeDatabases)
 	select
 		a.serverName,
-		count(distinct isnull(a.login, '') + isnull(a.hostname, '') + convert(varchar(20), a.spid)) as uniqueUsers,
+		sum(numUsers) as uniqueUsers,
 		count(distinct isnull(a.dbname, '')) as activeDatabases
 
-		from processLog a (nolock)
+		from mart_database_byHour a (nolock)
 		join #results b on a.serverName = b.serverName
-		where a.ymd >= dateAdd(hour, -1, getDate())
-			and a.spid > 52
-			and a.hostname <> @@serverName
+		where dateAdd(hour, ymd_hour, a.ymd) >= dateAdd(hour, -1, getDate())
 			and a.dbName not in ('master', 'model', 'msdb', 'tempdb', 'pubs', 'distribution')
 		group by a.serverName
 

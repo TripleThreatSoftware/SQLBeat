@@ -1,4 +1,6 @@
-/****** Object:  StoredProcedure [dbo].[pr_graph_connectionsByHour]    Script Date: 05/19/2009 13:59:45 ******/
+USE [Notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_graph_connectionsByHour]    Script Date: 02/17/2010 11:27:52 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -10,7 +12,7 @@ GO
 -- select * from tmp_results
 -- drop table tmp_results
 
-CREATE procedure [dbo].[pr_graph_connectionsByHour] (@cServerName varchar(100), @nGraphWidth int = 800)
+ALTER procedure [dbo].[pr_graph_connectionsByHour] (@cServerName varchar(100), @nGraphWidth int = 800)
 as
 begin
 
@@ -71,4 +73,3 @@ begin
 
 	drop table #dataValues
 end
-GO

@@ -1,8 +1,13 @@
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[pr_rpt_intensiveProcessSummary]') AND type in (N'P', N'PC'))
-BEGIN
-EXEC dbo.sp_executesql @statement = N'-- exec pr_rpt_intensiveProcessSummary null, null, null, null, null, null, null, null, null
+USE [Configuration]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_rpt_intensiveProcessSummary]    Script Date: 02/17/2010 14:52:46 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- exec pr_rpt_intensiveProcessSummary null, null, null, null, null, null, null, null, null
 
-CREATE procedure [pr_rpt_intensiveProcessSummary] (@dStartDate dateTime, @dEndDate dateTime,
+ALTER procedure [dbo].[pr_rpt_intensiveProcessSummary] (@dStartDate dateTime, @dEndDate dateTime,
 	@nPagefileBytesThreshold decimal(5,2), @nPoolNonPagedBytesThreshold decimal(5,2),
 	@nPoolPagedBytesThreshold decimal(5,2), @nPrivatebytesThreshold decimal(5,2),
 	@nVirtualBytesThreshold decimal(5,2), @nIOWriteBytesPerSecondThreshold decimal(5,2),
@@ -20,7 +25,7 @@ begin
 	set @nIOWriteBytesPerSecondThreshold = isnull(@nIOWriteBytesPerSecondThreshold, .15)
 	set @nIOReadBytesPerSecondThreshold = isnull(@nIOReadBytesPerSecondThreshold, .15)
 
-	declare @processes table (serverName varchar(200), instance int, ymd dateTime, processName varchar(200),
+	create table #processes (serverName varchar(200), instance int, ymd dateTime, processName varchar(200),
 		pagefileBytes decimal(20,0), poolNonPagedBytes decimal(20,0), poolPagedBytes decimal(20,0), privateBytes decimal(20,0),
 		virtualBytes decimal(20,0), ioWriteBytesPerSec decimal(20,0), ioReadBytesPerSec decimal(20,0))
 
@@ -34,29 +39,26 @@ begin
 		IOReadBytesPerSec_min decimal(20,0), IOReadBytesPerSec_max decimal(20,0), IOReadBytesPerSec_avg decimal(20,0))
 
 	-- busy processes
-	insert into @processes
+	insert into #processes
 	select
 		c.serverName,
 		a.instance,
-		f.ymd,
-		max(case when e.keyName = ''name'' then keyValue else '''' end) as processName,
-		convert(decimal(20,0), max(case when e.keyName = ''PageFileBytes'' then keyValue else null end)) as PageFileBytes,
-		convert(decimal(20,0), max(case when e.keyName = ''PoolNonpagedBytes'' then keyValue else null end)) as PoolNonpagedBytes,
-		convert(decimal(20,0), max(case when e.keyName = ''PoolPagedBytes'' then keyValue else null end)) as PoolPagedBytes,
-		convert(decimal(20,0), max(case when e.keyName = ''PrivateBytes'' then keyValue else null end)) as PrivateBytes,
-		convert(decimal(20,0), max(case when e.keyName = ''VirtualBytes'' then keyValue else null end)) as VirtualBytes,
-		convert(decimal(20,0), max(case when e.keyName = ''IOWriteBytesPersec'' then keyValue else null end)) as IOWriteBytesPersec,
-		convert(decimal(20,0), max(case when e.keyName = ''IOReadBytesPersec'' then keyValue else null end)) as IOReadBytesPersec
+		a.ymd,
+		a.processName,
+		a.PageFileBytes,
+		a.PoolNonpagedBytes,
+		a.PoolPagedBytes,
+		a.PrivateBytes,
+		a.VirtualBytes,
+		a.IOWriteBytesPersecond,
+		a.IOReadBytesPersecond
 
-		from runs_data a
-		join notification..dm_servers c on a.ukey_server = c.ukey
-		join dm_counters d on a.ukey_counter = d.ukey
-			and d.counterName in (''Win32_PerfFormattedData_PerfProc_Process'', ''Win32_Process'')
-		join dm_keyNames e on a.ukey_keyName = e.ukey
-		join runs f on a.ukey_run = f.ukey
-			and f.ymd >= @dStartDate
-			and f.ymd < dateAdd(day, 1, @dEndDate)
-		group by c.serverName, a.instance, f.ymd
+		from runningProcessLog a (nolock)
+		join notification..dm_servers c (nolock) on a.ukey_server = c.ukey
+		where a.ymd >= @dStartDate
+			and a.ymd <= @dEndDate
+
+	create index ix_tmp_processes on #processes (serverName, ymd, processName) with fillfactor = 60
 
 	insert into @processSummary
 	select serverName,
@@ -91,7 +93,7 @@ begin
 		max(IOReadBytesPersec) as IOReadBytesPersec_max,
 		convert(decimal(20,0), avg(IOReadBytesPersec)) as IOReadBytesPersec_avg
 
-		from @processes
+		from #processes
 
 		group by serverName,
 			processName
@@ -183,15 +185,15 @@ begin
 
 		from (
 			select serverName, max(ymd) as ymd
-				from @processes
+				from #processes
 				group by serverName
 			) a
-		join @processes b on a.serverName = b.serverName
+		join #processes b on a.serverName = b.serverName
 			and a.ymd = b.ymd
-			and b.processName <> ''_Total''
-		join @processes c on a.serverName = c.serverName
+			and b.processName <> '_Total'
+		join #processes c on a.serverName = c.serverName
 			and a.ymd = c.ymd
-			and c.processName = ''_Total''
+			and c.processName = '_Total'
 
 			and (
 				(convert(decimal(20,2), c.PageFileBytes) <> 0
@@ -218,57 +220,5 @@ begin
 			b.processName,
 			b.instance
 
+	drop table #processes
 end
-'
-END
-GO
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[pr_rpt_processorUtilization]') AND type in (N'P', N'PC'))
-BEGIN
-EXEC dbo.sp_executesql @statement = N'CREATE procedure [pr_rpt_processorUtilization]
-as
-begin
-
-	-- cpu load
-	select serverName, processor,
-		min(processorLoad) as minValue,
-		max(processorLoad) as maxValue,
-		avg(processorLoad) as avgValue,
-		count(*) as numReadings
-
-		from (
-			select
-				f.ymd,
-				c.serverName,
-				a.instance,
-				max(case when e.keyName = ''name'' then keyValue + ''\'' else '''' end) + max(case when e.keyName = ''deviceID'' then keyValue else '''' end) as processor,
-				max(case when e.keyName = ''loadPercentage'' then convert(int, keyValue) else 0 end) as processorLoad
-
-				from runs_data a
-				join notification..dm_servers c on a.ukey_server = c.ukey
-				join dm_counters d on a.ukey_counter = d.ukey
-					and d.counterName = ''Win32_Processor''
-				join dm_keyNames e on a.ukey_keyName = e.ukey
-					and e.keyName in (''LoadPercentage'', ''name'', ''deviceID'')
-				join runs f on a.ukey_run = f.ukey
-					and f.ymd >= dateAdd(week, -1, getDate())
-
-				group by f.ymd,
-					c.serverName,
-					a.instance
-			) a
-		group by serverName, processor
-		having count(*) >= 3
-		order by serverName, processor
-
-end
-'
-END
-GO
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO

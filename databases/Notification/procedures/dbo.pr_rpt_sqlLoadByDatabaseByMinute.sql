@@ -1,9 +1,11 @@
-/****** Object:  StoredProcedure [dbo].[pr_rpt_sqlLoadByDatabaseByMinute]    Script Date: 05/19/2009 13:59:45 ******/
+USE [Notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_rpt_sqlLoadByDatabaseByMinute]    Script Date: 02/17/2010 12:35:57 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE procedure [dbo].[pr_rpt_sqlLoadByDatabaseByMinute] (@cServerName varchar(100), @dStartDate dateTime, @dEndDate dateTime)
+ALTER procedure [dbo].[pr_rpt_sqlLoadByDatabaseByMinute] (@cServerName varchar(100), @dStartDate dateTime, @dEndDate dateTime)
 as
 begin
 --	declare @cServerName varchar(100)
@@ -98,4 +100,3 @@ begin
 	drop table #activity
 
 end
-GO

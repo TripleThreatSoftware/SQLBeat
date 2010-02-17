@@ -1,8 +1,3 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-
 -- select top 100 * from runs_log order by ymd desc
 -- exec pr_processRunResults 37
 -- select top 100 * from notification..drivespacelog order by ukey desc
@@ -319,6 +314,7 @@ begin
 				and instanceName not like '%Virtual Disk Service%'
 				and instanceName not like '%seclogon%'
 				and instanceName not like '%aelookupsvc%'
+				and instanceName not like '%MSIServer%'
 
 				and instanceName not like '%netmeeting%'
 				and instanceName not like '%secondary logon%'
@@ -489,6 +485,32 @@ begin
 			and f.keyName in ('LoadPercentage', 'name', 'deviceID')
 		group by b.ukey, a.instanceName
 
+	insert into runningProcessLog (ukey_server, ymd, instance, processName, threadCount, percentProcessorTime, pageFileBytes, poolNonpagedBytes,
+		poolPagedBytes, privateBytes, virtualBytes, ioWriteBytesPerSecond, ioReadBytesPerSecond)
+	select
+		c.ukey,
+		@dLastRun,
+		a.instance,
+		max(case when e.keyName = 'name' then keyValue else '' end) as processName,
+
+		convert(decimal(20,0), max(case when e.keyName = 'ThreadCount' then keyValue else null end)) as ThreadCount,
+		convert(decimal(20,0), max(case when e.keyName = 'PercentProcessorTime' then keyValue else null end)) as PercentProcessorTime,
+
+		convert(decimal(20,0), max(case when e.keyName = 'PageFileBytes' then keyValue else null end)) as PageFileBytes,
+		convert(decimal(20,0), max(case when e.keyName = 'PoolNonpagedBytes' then keyValue else null end)) as PoolNonpagedBytes,
+		convert(decimal(20,0), max(case when e.keyName = 'PoolPagedBytes' then keyValue else null end)) as PoolPagedBytes,
+		convert(decimal(20,0), max(case when e.keyName = 'PrivateBytes' then keyValue else null end)) as PrivateBytes,
+		convert(decimal(20,0), max(case when e.keyName = 'VirtualBytes' then keyValue else null end)) as VirtualBytes,
+		convert(decimal(20,0), max(case when e.keyName = 'IOWriteBytesPersec' then keyValue else null end)) as IOWriteBytesPersec,
+		convert(decimal(20,0), max(case when e.keyName = 'IOReadBytesPersec' then keyValue else null end)) as IOReadBytesPersec
+
+		from #thisRun a
+		join notification..dm_servers c on a.ukey_server = c.ukey
+		join dm_counters d on a.ukey_counter = d.ukey
+			and d.counterName in ('Win32_PerfFormattedData_PerfProc_Process', 'Win32_Process')
+		join dm_keyNames e on a.ukey_keyName = e.ukey
+		group by c.ukey, a.instance
+
 
 --	-- changes to hardware
 --	insert into #messageStage (serverName, subject, message)
@@ -600,3 +622,4 @@ begin
 
 	insert into runs_log (message, ukey_group) values ('PRR: Done!', @nUkeyGroup)
 end
+GO

@@ -713,6 +713,8 @@ begin
 				and programName not like '%SQLAGENT%'
 				and programName not like '%repl%'
 
+				and (cpuTime > 10 or diskIO > 10)
+
 		update #processes
 			set hostname = b.hostname,
 				login = b.login
