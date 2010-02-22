@@ -4,10 +4,12 @@ SET QUOTED_IDENTIFIER ON
 GO
 
 -- create table eventLog_stage_hist (ukey_group int, ymd dateTime default getDate(), step varchar(200))
--- pr_processEventLogMessages 35
+-- pr_processEventLogMessages 1
 -- select * from eventLog_history where servername = 'prooradb06' order by ymd desc
 -- select * from eventLog_stage
 -- select * from notificationLog_stage
+-- update dm_servers set lastEventLogCheck = null
+-- select * from dm_servers
 
 ALTER procedure [dbo].[pr_processEventLogMessages] (@nUkeyGroup int)
 as
@@ -20,18 +22,41 @@ begin
 		from eventLog_stage a
 		left outer join dm_servers b (nolock) on (a.computerName = b.serverName or a.computerName = isnull(b.friendlyName, ''))
 		where b.ukey is null
+			and a.monitorDate < dateAdd(hour, -12, getDate())
 
+	delete
+		from eventLog_stage with (rowlock) where logType = ''
 
 	--*********************************************************************************************************************
 	-- Get rid of duplicates
 	--*********************************************************************************************************************
 
-	update eventLog_stage with (rowlock)
-		set timeWritten = convert(dateTime, left(replace(timeWritten, '''', ''), 8) + ' ' + substring(replace(timeWritten, '''', ''),9,2) + ':' + substring(replace(timeWritten, '''', ''),11,2), 112)
+	begin try
+		-- get rid of anything with a bad timeWritten field
+		delete eventLog_stage with (rowlock)
+			from eventLog_stage a
+			join dm_servers b (nolock) on (a.computerName = b.serverName or a.computerName = isnull(b.friendlyName, ''))
+			where not (
+				left(timeWritten, 1) = ''''
+				and isdate(left(replace(timeWritten, '''', ''), 8) + ' ' + substring(replace(timeWritten, '''', ''),9,2) + ':' + substring(replace(timeWritten, '''', ''),11,2)) = 1
+				)
+
+		update eventLog_stage with (rowlock)
+			set timeWritten = convert(varchar(20), convert(dateTime, left(replace(timeWritten, '''', ''), 8) + ' ' + substring(replace(timeWritten, '''', ''),9,2) + ':' + substring(replace(timeWritten, '''', ''),11,2), 112), 120)
+			from eventLog_stage a
+			join dm_servers b (nolock) on (a.computerName = b.serverName or a.computerName = isnull(b.friendlyName, ''))
+				and b.ukey_group = @nUkeyGroup
+	end try
+	begin catch
+		insert into eventLog_history (notes, ukey_group) values ('Found error converting dateTime', @nUkeyGroup)
+	end catch
+
+	-- ditch anything that did not properly convert to a date
+	delete eventLog_stage with (rowlock)
 		from eventLog_stage a
 		join dm_servers b (nolock) on (a.computerName = b.serverName or a.computerName = isnull(b.friendlyName, ''))
-			and b.ukey_group = @nUkeyGroup
-		where left(timeWritten, 1) = ''''
+--			and b.ukey_group = @nUkeyGroup
+		where isnumeric(left(timeWritten, 1)) = 0
 
 	select *,
 		convert(varchar(8000), '') as emailMessage,
@@ -57,7 +82,7 @@ begin
 				from #eventLog
 			) b on a.serverName = b.computerName
 
-	delete #eventLog with (rowlock)
+	delete #eventLog
 		from #eventLog a
 		join eventLog b (nolock) on isnull(a.computerName, '') = isnull(b.computerName, '')
 			and isnull(a.logType, '') = isnull(b.logType, '')
@@ -94,6 +119,8 @@ begin
 			and message not like '%setting database option%'
 			and message not like '%is marked restoring%'
 			and message not like '%starting up database%'
+
+			and message not like '%message delivery%'
 
 			and message not like '%autoreconnect failed%'
 			and message not like '%unloaded user%registry%'
