@@ -1,8 +1,8 @@
-/****** Object:  StoredProcedure [dbo].[pr_checkTableSizes]    Script Date: 05/19/2009 13:59:45 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 --
 --create table tableSizeLog (ymd dateTime default getDate(), serverName varchar(200),
 --	databaseName varchar(200), tableName varchar(200), rows varchar(100), reserved varchar(50), data varchar(50), indexSize varchar(50), unused varchar(50))
@@ -14,7 +14,7 @@ GO
 --update dm_servers set tableSizeCheck = 1, tableSizeCheckMinuteInterval = 720 where isSQLBox = 1
 --go
 
-CREATE procedure [dbo].[pr_checkTableSizes]
+ALTER procedure [dbo].[pr_checkTableSizes]
 as
 begin
 	set nocount on
@@ -26,7 +26,7 @@ begin
 	declare @cPassword varchar(100)
 	declare @cThisServerName varchar(200)
 
-	set @cThisServerName = (select settingValue from dm_settings where settingName = 'Current machine name')
+	set @cThisServerName = (select settingValue from dm_settings (nolock) where settingName = 'Current machine name')
 
 	set @cServerName = ''
 
@@ -34,12 +34,16 @@ begin
 
 	while exists (
 		select *
-			from notification.dbo.dm_servers
+			from notification.dbo.dm_servers  (nolock)
 			where serverName > @cServerName
 				and isEnabled = 1
 				and tableSizeCheck = 1
 				and (lastTableSizeCheck is null or dateDiff(minute, lastTableSizeCheck, getDate()) > isnull(tableSizeCheckMinuteInterval, 5))
 				and isServerPingable = 1
+
+				and right(convert(varchar(20), getDate(), 120), 8) >= right(convert(varchar(20), maintenanceWindowStart, 120), 8)
+				and right(convert(varchar(20), getDate(), 120), 8) <= right(convert(varchar(20), maintenanceWindowStop, 120), 8)
+
 		)
 	begin
 
@@ -48,12 +52,15 @@ begin
 			@nUkeyServer = ukey,
 			@cUserName = userName,
 			@cPassword = password
-			from notification.dbo.dm_servers
+			from notification.dbo.dm_servers (nolock)
 			where serverName > @cServerName
 				and isEnabled = 1
 				and tableSizeCheck = 1
 				and (lastTableSizeCheck is null or dateDiff(minute, lastTableSizeCheck, getDate()) > isnull(tableSizeCheckMinuteInterval, 5))
 				and isServerPingable = 1
+				and right(convert(varchar(20), getDate(), 120), 8) >= right(convert(varchar(20), maintenanceWindowStart, 120), 8)
+				and right(convert(varchar(20), getDate(), 120), 8) <= right(convert(varchar(20), maintenanceWindowStop, 120), 8)
+
 			order by servername
 
 		if @cUserName is not null
@@ -89,9 +96,8 @@ begin
 
 		truncate table #history
 
-		update dm_servers set lastTableSizeCheck = getDate() where ukey = @nUkeyServer
+		update dm_servers with (rowlock) set lastTableSizeCheck = getDate() where ukey = @nUkeyServer
 	end
 
 	drop table #history
 end
-GO
