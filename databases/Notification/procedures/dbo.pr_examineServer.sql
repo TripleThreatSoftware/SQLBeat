@@ -50,6 +50,7 @@ begin
 	declare @nNumSuccess int
 	declare @nNumFailure int
 	declare @nNumAlerts int
+	declare @nNumOldAlerts int
 
 	declare @nRunStamp bigint
 	declare @nLowSpaceThreshold bigint
@@ -417,6 +418,8 @@ begin
 			print @cSQLString
 		EXECUTE(@cProcedureName)
 
+		delete from #orphanedUsers where userName = 'dbo'
+
 		insert into #results (message, severity, subject)
 		select
 			'User ' + isnull(userName, 'N/A') + ' is orphaned within [' + isnull(dbName, 'N/A') + '].' as message,
@@ -429,7 +432,7 @@ begin
 	-- SQL Error Log
 	--*********************************************************************************************************************
 
-	if @cVersion like '%2005%' or @cVersion like '%2008%'
+	if replace(@cVersion, space(1), space(0)) like '%sqlserver2005%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2008%'
 	begin
 		create table #sqlErrors (ymd dateTime, processInfo varchar(100), logMessage varchar(8000), nastyLine varchar(max), ukey int identity)
 
@@ -533,7 +536,7 @@ begin
 
 		create clustered index ix_tmp_processes on #processes (spid) with fillfactor = 80
 
-		if @cVersion like '%2005%' or @cVersion like '%2008%'
+		if replace(@cVersion, space(1), space(0)) like '%sqlserver2005%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2008%'
 		begin
 			create table #processActivity (spid int, cpuTime bigint, pagesInMemory bigint, reads bigint, writes bigint, logicalReads bigint)
 			create table #processLocks (spid int, numLocks bigint)
@@ -2208,7 +2211,7 @@ begin
 	-- CPU and Disk queues
 	--*********************************************************************************************************************
 
-	if (@cVersion like '%server 2005%' or @cVersion like '%server 2008%')
+	if replace(@cVersion, space(1), space(0)) like '%sqlserver2005%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2008%'
 	begin
 		create table #cpuTasks (cpuNumber varchar(20), currentTasks int, waitingTasks int)
 
@@ -2234,10 +2237,29 @@ begin
 
 		set @nNumAlerts = (select count(*) from notificationLog (nolock) where serverName = @cServerName and subject like '%tasks waiting%' and ymd >= dateAdd(minute, -10, getDate()))
 
+		-- if we regularly see alerts at this time, deprioritize these
+		set @nNumOldAlerts = (
+			select count(*)
+				from v_notificationLog_all
+				where serverName = @cServerName
+					and subject like '%tasks waiting%'
+					and (
+						(
+							ymd >= dateAdd(minute, -15, dateAdd(day, -1, getDate()))
+							and ymd <= dateAdd(minute, 15, dateAdd(day, -1, getDate()))
+							)
+						or (
+							ymd >= dateAdd(minute, -15, dateAdd(week, -1, getDate()))
+							and ymd <= dateAdd(minute, 15, dateAdd(week, -1, getDate()))
+
+							)
+						)
+				)
+
 		insert into #results (severity, subject, message)
 		select
 			case
-				when @bIsMaintenancePeriod = 1 then 3
+				when @bIsMaintenancePeriod = 1 or @nNumOldAlerts > 0 then 3
 				when @nNumAlerts > 0 and waitingTasks > 5 then 1
 				else 2 end,
 			'CPU ' + convert(varchar(20), cpuNumber) + ' has ' + convert(varchar(20), waitingTasks) + ' tasks waiting.',
@@ -2290,11 +2312,30 @@ begin
 
 		set @nNumAlerts = (select count(*) from notificationLog (nolock) where serverName = @cServerName and subject like '%requests waiting%' and ymd >= dateAdd(minute, -15, getDate()))
 
+		-- if we regularly see alerts at this time, deprioritize these
+		set @nNumOldAlerts = (
+			select count(*)
+				from v_notificationLog_all
+				where serverName = @cServerName
+					and subject like '%requests waiting%'
+					and (
+						(
+							ymd >= dateAdd(minute, -15, dateAdd(day, -1, getDate()))
+							and ymd <= dateAdd(minute, 15, dateAdd(day, -1, getDate()))
+							)
+						or (
+							ymd >= dateAdd(minute, -15, dateAdd(week, -1, getDate()))
+							and ymd <= dateAdd(minute, 15, dateAdd(week, -1, getDate()))
+
+							)
+						)
+				)
+
 		insert into #results (severity, subject, message)
 		select
 			-- weight based on how long and whether this is the first alert in the last 10 minutes
 			case
-				when @bIsMaintenancePeriod = 1 then 3
+				when @bIsMaintenancePeriod = 1 or @nNumOldAlerts > 0 then 3
 				when msWaiting > 20000 and @nNumAlerts > 2 then 1
 				else 2 end as severity,
 			convert(varchar(20), isnull(a.numRequests, 0)) + ' requests ' +
