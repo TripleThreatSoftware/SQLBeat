@@ -1,5 +1,9 @@
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 ---- exec pr_rpt_websiteavailability null, null
-alter procedure [dbo].[pr_rpt_websiteavailability] (@dStartDate dateTime, @dEndDate dateTime)
+ALTER procedure [dbo].[pr_rpt_websiteavailability] (@dStartDate dateTime, @dEndDate dateTime)
 as
 begin
 	--declare @dStartDate dateTime, @dEndDate dateTime
@@ -23,7 +27,7 @@ begin
 	select ukey_url, sum(minutesOffline) as minutesOffline
 		from (
 			select a.ukey_url, b.outageStop,
-				convert(bigint, ceiling((convert(decimal(10,2), dateDiff(millisecond, min(a.outageStart), b.outageStop))/1000.00)/60.00)) as  minutesOffline
+				convert(bigint, ceiling((convert(decimal(20,2), dateDiff(millisecond, min(a.outageStart), b.outageStop))/1000.00)/60.00)) as  minutesOffline
 				from @websiteOutages a
 				left outer join (
 					select a.ukey_url, a.outageStart, min(b.ymd) as outageStop
@@ -74,4 +78,3 @@ begin
 		join websiteMonitor.dbo.monitoredURLs c (nolock) on a.ukey_url = c.ukey
 		order by friendlyName
 end
-GO
