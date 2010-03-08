@@ -1713,10 +1713,10 @@ begin
 				'Job [' + jobName + '], ' +
 				'which usually runs in ' + isnull(convert(varchar(20), expectedRunningSeconds), '') + ' seconds, ' +
 				'has been running for ' + convert(varchar(20), secondsRunning) + ' seconds. ' + char(13) + char(13) +
-				'Start time: ' + convert(varchar(20), startTime) + char(13) +
-				'Current step: ' + a.currentStepName + char(13) +
-				'Current step text: ' + char(13) + a.currentStepText + char(13) +
-				'Status: ' + isnull(runStatus, 'N/A')
+				'Start time: ' + convert(varchar(20), startTime) + char(13) + char(13) +
+				'<b>Current step:</b> ' + a.currentStepName + char(13) +
+				'<b>Current step text:</b> ' + char(13) + a.currentStepText + char(13) +
+				'<b>Status</b>: <br>' + isnull(runStatus, 'N/A')
 				, 8000)	as message,
 			-- if runtime > 2x, then it's a critical alert
 			-- otherwise, sit on it
@@ -1742,9 +1742,9 @@ begin
 				'which has no runtime history, ' +
 				'has been running for ' + convert(varchar(20), secondsRunning) + ' seconds. ' + char(13) + char(13) +
 				'Start time: ' + convert(varchar(20), startTime) + char(13) +
-				'Current step: ' + a.currentStepName + char(13) +
-				'Current step text: ' + char(13) + a.currentStepText + char(13) +
-				'Status: ' + isnull(runStatus, 'N/A')
+				'<b>Current step:</b> ' + a.currentStepName + char(13) +
+				'<b>Current step text:</b> ' + char(13) + a.currentStepText + char(13) +
+				'<b>Status:</b> <br>' + isnull(runStatus, 'N/A')
 				, 8000)	as message,
 			-- if runtime > 2x, then it's a critical alert
 			-- otherwise, sit on it
