@@ -3,6 +3,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
+
 ALTER procedure [dbo].[pr_monitorSQLStatistics]
 as
 begin
@@ -14,6 +15,8 @@ begin
 	declare @nUkeyServer int
 	declare @nRunStamp bigint
 	declare @cVersion varchar(2000)
+	declare @cSubject varchar(8000)
+	declare @cMessage varchar(8000)
 
 	set @cProcedureName = 'pr_notificationTemp_statCheck'
 	set @nRunStamp = (select dbo.fn_returnRunStamp(getDate()))
@@ -78,11 +81,21 @@ begin
 		if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
 			execute('drop procedure ' + @cProcedureName)
 
-		exec sp_executeSQL @cSQLString
+		begin try
+			exec sp_executeSQL @cSQLString
 
-		EXECUTE(@cProcedureName)
+			EXECUTE(@cProcedureName)
+		end try
+		begin catch
+			set @cSubject = 'Failed to collect basic SQL statistics from ' + @cServerName
+			set @cMessage = 'Failed to collect basic SQL statistics from ' + @cServerName + '.<br>' +
+				'<b>Error Message:</b><br>' + isnull(error_message(), 'No detail available.') + '<br>' +
+				'<b>SQL Code:</b><br>' + isnull(@cSQLString, 'N/A')
 
-		if @cVersion like '%2005%' or @cVersion like '%2008%'
+			insert into notificationLog_stage (subject, message, serverName, severity) values (@cSubject, @cMessage, @cServerName, 2)
+		end catch
+
+		if @cVersion like '%sql server 2005%' or @cVersion like '%sql server 2008%'
 		begin
 
 			create table #memory ([size] bigint, [base] bigint)
@@ -104,7 +117,17 @@ begin
 						FROM sys.dm_os_virtual_address_dump
 						WHERE region_allocation_base_address  = 0x0 '')'
 
-			exec sp_executeSQL @cSQLString
+			begin try
+				exec sp_executeSQL @cSQLString
+			end try
+			begin catch
+				set @cSubject = 'Failed to collect SQL memory statistics from ' + @cServerName
+				set @cMessage = 'Failed to collect SQL memory statistics from ' + @cServerName + '.<br>' +
+					'<b>Error Message:</b><br>' + isnull(error_message(), 'No detail available.') + '<br>' +
+					'<b>SQL Code:</b><br>' + isnull(@cSQLString, 'N/A')
+
+				insert into notificationLog_stage (subject, message, serverName, severity) values (@cSubject, @cMessage, @cServerName, 2)
+			end catch
 
 			insert into performanceLog_stage (serverName, [objectName], [counterName], [instanceName], counterValue, counterType, runStamp)
 			select @cServerName, 'SQLBeat Statistics', 'Total Available Memory (kb)', '', SUM(Size*Free)/1024, '', @nRunStamp
@@ -169,9 +192,19 @@ begin
 						WHERE (single_pages_kb + multi_pages_kb + virtual_memory_reserved_kb + virtual_memory_committed_kb + awe_allocated_kb + shared_memory_reserved_kb + shared_memory_committed_kb) > 0
 						'')'
 
-			delete from #clerks where clerkName like '%acrUserStore%'
+			begin try
+				exec sp_executeSQL @cSQLString
+			end try
+			begin catch
+				set @cSubject = 'Failed to collect SQL memory clerk statistics from ' + @cServerName
+				set @cMessage = 'Failed to collect SQL memory clerk statistics from ' + @cServerName + '.<br>' +
+					'<b>Error Message:</b><br>' + isnull(error_message(), 'No detail available.') + '<br>' +
+					'<b>SQL Code:</b><br>' + isnull(@cSQLString, 'N/A')
 
-			exec sp_executeSQL @cSQLString
+				insert into notificationLog_stage (subject, message, serverName, severity) values (@cSubject, @cMessage, @cServerName, 2)
+			end catch
+
+			delete from #clerks where clerkName like '%acrUserStore%'
 
 			insert into performanceLog_stage (serverName, [objectName], [counterName], [instanceName], counterValue, counterType, runStamp)
 			select @cServerName, 'Memory Clerks:' + rtrim(ltrim(clerkType)), clerkName, 'Single Pages (kb)', singlePages, '', @nRunStamp from #clerks
@@ -202,7 +235,17 @@ begin
 						SELECT physical_memory_in_bytes / 1024 as physicalMemory, virtual_memory_in_bytes / 1024 as virtualMemory,	bpool_committed, bpool_commit_target, bpool_visible
 							FROM sys.dm_os_sys_info  '')'
 
-			exec sp_executeSQL @cSQLString
+			begin try
+				exec sp_executeSQL @cSQLString
+			end try
+			begin catch
+				set @cSubject = 'Failed to collect SQL buffer pool statistics from ' + @cServerName
+				set @cMessage = 'Failed to collect SQL buffer pool statistics from ' + @cServerName + '.<br>' +
+					'<b>Error Message:</b><br>' + isnull(error_message(), 'No detail available.') + '<br>' +
+					'<b>SQL Code:</b><br>' + isnull(@cSQLString, 'N/A')
+
+				insert into notificationLog_stage (subject, message, serverName, severity) values (@cSubject, @cMessage, @cServerName, 2)
+			end catch
 
 			insert into performanceLog_stage (serverName, [objectName], [counterName], [instanceName], counterValue, counterType, runStamp)
 			select @cServerName, 'SQLBeat Statistics', 'Buffer Pool', 'Physical Memory (kb)', physicalMemory, '', @nRunStamp from #memorySummary
@@ -227,7 +270,17 @@ begin
 				select *
 					from openQuery([' + @cServerName + '], ''select [type], sum(PAGES_ALLOCATED_COUNT) as pagesAllocated from SYS.DM_OS_MEMORY_OBJECTS group by [type]'')'
 
-			exec sp_executeSQL @cSQLString
+			begin try
+				exec sp_executeSQL @cSQLString
+			end try
+			begin catch
+				set @cSubject = 'Failed to collect SQL memory consumption statistics from ' + @cServerName
+				set @cMessage = 'Failed to collect SQL memory consumption statistics from ' + @cServerName + '.<br>' +
+					'<b>Error Message:</b><br>' + isnull(error_message(), 'No detail available.') + '<br>' +
+					'<b>SQL Code:</b><br>' + isnull(@cSQLString, 'N/A')
+
+				insert into notificationLog_stage (subject, message, serverName, severity) values (@cSubject, @cMessage, @cServerName, 2)
+			end catch
 
 			insert into performanceLog_stage (serverName, [objectName], [counterName], [instanceName], counterValue, counterType, runStamp)
 			select @cServerName, 'SQLBeat Statistics', 'Memory Pages Allocated', [type], pagesAllocated, '', @nRunStamp from #memoryConsumed

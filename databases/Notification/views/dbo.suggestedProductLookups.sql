@@ -1,0 +1,35 @@
+create view suggestedProductLookups as select * from AppDb_log.dbo.suggestedProductLookups
+GO
+use AppDb_log
+GO
+CREATE CLUSTERED INDEX [ix_suggestedProductLookups_ukey] ON [dbo].[suggestedProductLookups]
+(
+	[ukey] ASC
+)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 60) ON [PRIMARY]
+GO
+CREATE NONCLUSTERED INDEX [ix_suggestedProductLookups_lookupGUID_ukey] ON [dbo].[suggestedProductLookups]
+(
+	[lookupGUID] ASC,
+	[ukey] ASC
+)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 60) ON [PRIMARY]
+GO
+CREATE NONCLUSTERED INDEX [ix_suggestedProductLookups_lookupGUID_ymd_website] ON [dbo].[suggestedProductLookups]
+(
+	[lookupGUID] ASC,
+	[ymd] ASC,
+	[ukey_website] ASC
+)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 80) ON [PRIMARY]
+GO
+CREATE NONCLUSTERED INDEX [ix_suggestedProductLookups_ymd_lookupGUID_website] ON [dbo].[suggestedProductLookups]
+(
+	[ymd] ASC,
+	[lookupGUID] ASC,
+	[ukey_website] ASC
+)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 80) ON [PRIMARY]
+GO
+CREATE NONCLUSTERED INDEX [ix_suggestedProductLookups_ymd_ukey] ON [dbo].[suggestedProductLookups]
+(
+	[ymd] ASC,
+	[ukey] ASC
+)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 60) ON [PRIMARY]
+GO

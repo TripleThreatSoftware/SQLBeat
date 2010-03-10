@@ -4,12 +4,10 @@ SET QUOTED_IDENTIFIER ON
 GO
 
 -- create table eventLog_stage_hist (ukey_group int, ymd dateTime default getDate(), step varchar(200))
--- pr_processEventLogMessages 1
+-- pr_processEventLogMessages 37
 -- select * from eventLog_history where servername = 'prooradb06' order by ymd desc
 -- select * from eventLog_stage
 -- select * from notificationLog_stage
--- update dm_servers set lastEventLogCheck = null
--- select * from dm_servers
 
 ALTER procedure [dbo].[pr_processEventLogMessages] (@nUkeyGroup int)
 as
@@ -24,8 +22,7 @@ begin
 		where b.ukey is null
 			and a.monitorDate < dateAdd(hour, -12, getDate())
 
-	delete
-		from eventLog_stage with (rowlock) where logType = ''
+	delete from eventLog_stage with (rowlock) where logType = ''
 
 	--*********************************************************************************************************************
 	-- Get rid of duplicates
@@ -36,6 +33,7 @@ begin
 		delete eventLog_stage with (rowlock)
 			from eventLog_stage a
 			join dm_servers b (nolock) on (a.computerName = b.serverName or a.computerName = isnull(b.friendlyName, ''))
+				and b.ukey_group = @nUkeyGroup
 			where not (
 				left(timeWritten, 1) = ''''
 				and isdate(left(replace(timeWritten, '''', ''), 8) + ' ' + substring(replace(timeWritten, '''', ''),9,2) + ':' + substring(replace(timeWritten, '''', ''),11,2)) = 1
@@ -55,7 +53,7 @@ begin
 	delete eventLog_stage with (rowlock)
 		from eventLog_stage a
 		join dm_servers b (nolock) on (a.computerName = b.serverName or a.computerName = isnull(b.friendlyName, ''))
---			and b.ukey_group = @nUkeyGroup
+			and b.ukey_group = @nUkeyGroup
 		where isnumeric(left(timeWritten, 1)) = 0
 
 	select *,
