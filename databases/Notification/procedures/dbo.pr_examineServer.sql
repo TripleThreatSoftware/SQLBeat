@@ -1,3 +1,8 @@
+/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 03/17/2010 11:22:00 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 --select top 100 * from notificationLog_history order by ymd desc
 -- exec pr_examineServer 'sqlcluster01', 600
 -- select architecture, * from dm_servers
@@ -1479,6 +1484,7 @@ begin
 						currentStepText = left(b.command, 1000)
 					from #runningJobs a
 					join [' + @cServerName + '].msdb.dbo.sysjobsteps b on a.job_id = b.job_id
+						and a.current_step = b.step_id
 					where isnull(a.current_step, 0) > 0
 
 			end'
@@ -1576,10 +1582,15 @@ begin
 
 			select top 3
 				@cThisMessage = @cThisMessage +
-				'<b>' + isnull(b.stepName, 'N/A') + '</b> @ ' + isnull(convert(varchar(20), a.ymd, 120), 'N/A') + ' <br>' +
-					'Runtime: ' + convert(varchar(20), isnull(a.runningSeconds, 0)) + 's<br>' +
-					'Outcome: ' + case when a.isSuccess = 1 then 'OK' else isnull(a.stepOutcome, 'N/A') end + '<br>' +
-					case when a.isSuccess = 1 then '' else 'Step Text:' + isnull(b.stepCommand, 'N/A') end + '<br>'
+				'<table><tr><th colspan="2">' + isnull(b.stepName, 'N/A') + '</th><th width="150px">' + isnull(convert(varchar(20), a.ymd, 120), 'N/A') + '</th></tr>' +
+					'<tr><td width="10px"></td><td colspan="2">Runtime: ' + convert(varchar(20), isnull(a.runningSeconds, 0)) + 's</td></tr>' +
+					'<tr><td></td><td colspan="2">Outcome: ' + case when a.isSuccess = 1 then 'OK' else isnull(a.stepOutcome, 'N/A') end + '</td></tr>' +
+					case when a.isSuccess = 1
+						then ''
+						else '<tr><td></td><td colspan="2"><b>Step Text:</b></td></tr>' +
+							'<tr><td></td><td colspan="2">' + isnull(b.stepCommand, 'N/A') + '</td></tr>'
+						end +
+					'</table>'
 				from jobStepHistory a (nolock)
 				join dm_serverJobSteps b (nolock) on a.ukey_jobStep = b.ukey
 					and a.ukey_job = b.ukey_job
@@ -1713,9 +1724,10 @@ begin
 				'Job [' + jobName + '], ' +
 				'which usually runs in ' + isnull(convert(varchar(20), expectedRunningSeconds), '') + ' seconds, ' +
 				'has been running for ' + convert(varchar(20), secondsRunning) + ' seconds. ' + char(13) + char(13) +
-				'Start time: ' + convert(varchar(20), startTime) + char(13) + char(13) +
-				'<b>Current step:</b> ' + a.currentStepName + char(13) +
-				'<b>Current step text:</b> ' + char(13) + a.currentStepText + char(13) +
+				'Start time: ' + convert(varchar(20), startTime, 120) + '<br><br>' +
+				'<table border="0"><tr><th colspan="2">' + isnull(a.currentStepName, 'N/A') + '</th><th width="150px"></th></tr>' +
+					'<tr><td></td><td colspan="2">' + isnull(a.currentStepText, 'N/A') + '</td></tr>' +
+				'</table><br>' +
 				'<b>Status</b>: <br>' + isnull(runStatus, 'N/A')
 				, 8000)	as message,
 			-- if runtime > 2x, then it's a critical alert
@@ -1742,8 +1754,9 @@ begin
 				'which has no runtime history, ' +
 				'has been running for ' + convert(varchar(20), secondsRunning) + ' seconds. ' + char(13) + char(13) +
 				'Start time: ' + convert(varchar(20), startTime) + char(13) +
-				'<b>Current step:</b> ' + a.currentStepName + char(13) +
-				'<b>Current step text:</b> ' + char(13) + a.currentStepText + char(13) +
+				'<table border="0"><tr><th colspan="2">' + isnull(a.currentStepName, 'N/A') + '</th><th width="150px"></th></tr>' +
+					'<tr><td></td><td colspan="2">' + isnull(a.currentStepText, 'N/A') + '</td></tr>' +
+				'</table><br>'+
 				'<b>Status:</b> <br>' + isnull(runStatus, 'N/A')
 				, 8000)	as message,
 			-- if runtime > 2x, then it's a critical alert
@@ -1879,11 +1892,14 @@ begin
 			else
 			begin
 
-				select @cThisMessage = @cThisMessage +
-					'==<b>' + isnull(b.stepName, 'N/A') + '</b> @ ' + convert(varchar(20), a.ymd, 120) + ' <br>' +
-						'Runtime: ' + convert(varchar(20), isnull(a.runningSeconds, 0)) + 's<br>' +
-						'Outcome: ' + case when a.isSuccess = 1 then 'OK' else isnull(a.stepOutcome, 'N/A') end + '<br>' +
-						case when a.isSuccess = 1 then '' else 'Step Text:' + isnull(b.stepCommand, 'N/A') end + '<br>'
+				select @cThisMessage = @cThisMessage + '<br><br>' +
+					'<table border="0"><tr><th colspan="3">' + isnull(b.stepName, 'N/A') + '</th></tr>' +
+						'<tr><td width="10px"></td><td>Start Time:</td><td>' + convert(varchar(20), a.ymd, 120) + ' </td></tr>' +
+						'<tr><td></td><td>Runtime   :</td><td>' + convert(varchar(20), isnull(a.runningSeconds, 0)) + 's</td></tr>' +
+						'<tr><td></td><td>Outcome   :</td><td>' + case when a.isSuccess = 1 then 'OK' else isnull(a.stepOutcome, 'N/A') end + '</td></tr>' +
+						case when a.isSuccess = 1
+							then ''
+							else '<tr><td></td><td>Step Text:</td><td>' + isnull(b.stepCommand, 'N/A') end + '</td></tr></table>'
 					from jobStepHistory a (nolock)
 					join dm_serverJobSteps b (nolock) on a.ukey_jobStep = b.ukey
 						and b.ukey_server = @nUkeyServer

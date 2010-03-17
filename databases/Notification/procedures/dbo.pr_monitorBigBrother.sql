@@ -1,3 +1,6 @@
+USE [Notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_monitorBigBrother]    Script Date: 03/17/2010 10:42:08 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -6,6 +9,7 @@ GO
 -- update dm_servers set serviceCheck = 1 where isSQLBox = 1 and detailedCheck = 1
 
 -- select top 100 * from messagesSent order by ymd desc
+-- select top 100 * from notificationLog order by ymd desc
 
 ALTER       procedure [dbo].[pr_monitorBigBrother]
 as
@@ -40,11 +44,15 @@ begin
 	declare @dLastSuccess dateTime
 	declare @dLastFailure dateTime
 	declare @dEndTime dateTime
+	declare @dLastCheck dateTime
 
 	set @nUkeyServer = -1
 
 	-- if we need to watch this server, flip this bit on
-	set @bMonitorProcesses = 1
+	if exists (select top 1 settingValue from dm_settings (nolock) where settingName = 'Watch SQLBeat running processes' and settingValue = '1')
+		set @bMonitorProcesses = 1
+	else
+		set @bMonitorProcesses = 0
 
 	-- insert into hist_monitorBigBrother (stepName) values ('Starting')
 
@@ -842,7 +850,7 @@ begin
 		set @cThisJob = ''
 
 		while exists (
-			select top 1 SPID
+			select top 1 jobName
 				from #runningJobs a
 				where jobName > @cThisJob
 					and isSystemJob = 0
@@ -875,7 +883,7 @@ begin
 					)
 				order by jobName
 
-			if @nThisSPID is not null
+			if isnull(@nThisSPID, 0) > 0
 			begin
 				set @cSQLString = 'kill ' + convert(varchar(20), @nThisSPID)
 				exec sp_executeSQL @cSQLString
@@ -886,16 +894,14 @@ begin
 					'Job [' + @cThisJob + '] running as SPID ' + convert(varchar(20), @nThisSPID) + ' killed.',
 					1)
 			end
-			else
-			begin
-				exec msdb..sp_stop_job @job_name = @cThisJob
 
-				insert into #results (message, severity, subject, isLongRunningJob) values (
-					'Job [' + @cThisJob + '] sent a STOP command.',
-					3,
-					'Job [' + @cThisJob + '] sent a STOP command at ' + convert(varchar(19), getDate(), 120) + '.',
-					1)
-			end
+			exec msdb..sp_stop_job @job_name = @cThisJob
+
+			insert into #results (message, severity, subject, isLongRunningJob) values (
+				'Job [' + @cThisJob + '] sent a STOP command.',
+				3,
+				'Job [' + @cThisJob + '] sent a STOP command at ' + convert(varchar(19), getDate(), 120) + '.',
+				1)
 		end
 	end
 
@@ -1198,7 +1204,9 @@ begin
 
 	select
 		a.serverName,
-		sum(case when isSuccess = 0 then 1 else 0 end) as numFailures
+		sum(case when isSuccess = 0 then 1 else 0 end) as numFailures,
+		max(case when isSuccess = 0 then startTime else null end) as latestFailure,
+		max(case when isSuccess = 1 then startTime else null end) as latestSuccess
 		into #failingServers
 		from #detailedChecks a
 		join dm_servers b (nolock) on a.serverName = b.serverName
@@ -1206,7 +1214,11 @@ begin
 		where startTime >= dateAdd(minute, -60, getDate())
 		group by a.serverName
 		having sum(case when isSuccess = 1 then 1 else 0 end) = 0
-			and sum(case when isSuccess = 0 then 1 else 0 end) >= 2
+			and sum(case when isSuccess = 0 then 1 else 0 end) >= 3
+			and (
+				max(case when isSuccess = 0 then startTime else null end) > max(case when isSuccess = 1 then startTime else null end)
+				or max(case when isSuccess = 1 then startTime else null end) is null
+				)
 
 	set @nNumFailure = @@rowcount
 
@@ -1219,7 +1231,14 @@ begin
 		select @cThisMessage = @cThisMessage + serverName + ': ' + convert(varchar(20), numFailures) + ' failures.<br>'
 			from #failingServers
 
-		insert into #results (serverName, subject, message, severity) values (@@serverName, @cThisSubject, @cThisMessage, 2)
+		insert into #results (serverName, subject, message, severity)
+		select serverName,
+			'SQL Detailed Checks disabled after ' + convert(varchar(20), numFailures) + ' consecutive failures' as subject,
+			'SQL Detailed Checks disabled after ' + convert(varchar(20), numFailures) + ' consecutive failures.<br>' +
+				'Last success: ' + convert(varchar(20), latestSuccess, 120) + '<br>' +
+				'Last failure: ' + convert(varchar(20), latestFailure, 120)	as message,
+			1
+			from #failingServers
 
 		update dm_servers with (rowlock)
 			set detailedCheck = 0
@@ -1405,73 +1424,78 @@ begin
 	-- Log file size
 	--*********************************************************************************************************************
 
-	declare @cThisDatabase varchar(100)
+	set @dLastCheck = (select max(ymd) from databaseFileSizeLog (nolock) where serverName = @@servername)
 
-	create table #databaseNames (dbname varchar(100))
-	create table #fileSizes (dbname varchar(100), objectname varchar(100), fileName varchar(100), size bigint, isLog bit default 0, fileID int)
-
-	insert into #databaseNames
-	select [name]
-		from master.dbo.sysdatabases (nolock)
-		where [name] not in ('master', 'model', 'msdb', 'northwind')
-			and (status & 32) <> 32 -- loading
-			and (status & 64) <> 64 -- prerecovery
-			and (status & 128) <> 128 -- recovery
-			and (status & 512) <> 512 -- offline
-			and (status & 4096) <> 4096 -- single user
-
-	while exists (select top 1 * from #databaseNames)
+	if isnull(@dLastCheck, '') = '' or dateDiff(minute, @dLastCheck, getDate()) > 90
 	begin
-		select top 1 @cThisDatabase = dbName from #databaseNames
-		set @cSQLString = 'SELECT ' +
-			'''' + @cThisDatabase + ''' as dbname, ' +
-			'left(name, 100) AS objectName, ' +
-			'left(fileName, 100) AS fileName, ' +
-			'([size]*8)/1024, fileID ' +
-			'FROM [' + @cThisDatabase + '].dbo.sysfiles '
+		declare @cThisDatabase varchar(100)
 
-		begin try
-			insert into #fileSizes (dbname, objectName, fileName, size, fileID)
-			exec sp_executeSQL @cSQLString
-		end try
-		begin catch
-			if error_message() like '%in the middle of a restore%'
-			begin
-				delete from #databaseNames where dbName = @cThisDatabase
-				continue
-			end
-		end catch
+		create table #databaseNames (dbname varchar(100))
+		create table #fileSizes (dbname varchar(100), objectname varchar(100), fileName varchar(100), size bigint, isLog bit default 0, fileID int)
 
-		delete from #databaseNames where dbName = @cThisDatabase
+		insert into #databaseNames
+		select [name]
+			from master.dbo.sysdatabases (nolock)
+			where [name] not in ('master', 'model', 'msdb', 'northwind')
+				and (status & 32) <> 32 -- loading
+				and (status & 64) <> 64 -- prerecovery
+				and (status & 128) <> 128 -- recovery
+				and (status & 512) <> 512 -- offline
+				and (status & 4096) <> 4096 -- single user
+
+		while exists (select top 1 * from #databaseNames)
+		begin
+			select top 1 @cThisDatabase = dbName from #databaseNames
+			set @cSQLString = 'SELECT ' +
+				'''' + @cThisDatabase + ''' as dbname, ' +
+				'left(name, 100) AS objectName, ' +
+				'left(fileName, 100) AS fileName, ' +
+				'([size]*8)/1024, fileID ' +
+				'FROM [' + @cThisDatabase + '].dbo.sysfiles '
+
+			begin try
+				insert into #fileSizes (dbname, objectName, fileName, size, fileID)
+				exec sp_executeSQL @cSQLString
+			end try
+			begin catch
+				if error_message() like '%in the middle of a restore%'
+				begin
+					delete from #databaseNames where dbName = @cThisDatabase
+					continue
+				end
+			end catch
+
+			delete from #databaseNames where dbName = @cThisDatabase
+		end
+		drop table #databaseNames
+
+		update #fileSizes
+			set isLog = 1
+			where objectName like '%log%' or fileName like '%log%'
+
+		insert into databaseFileSizeLog (serverName, dbname, objectname, [fileName], [size], isLog, fileID)
+		select @@serverName, dbName, objectName, [fileName], [size], isLog, fileID
+			from #fileSizes
+
+		insert into #results (message, severity, subject, isLogSize)
+		select 'Database ' + isnull(rtrim(dbName), '' ) + ' ' +
+				'size (' + convert(varchar(20), totalSize) + 'mb) ' +
+				'is about to reach the MSDE cap of 2000mb.',
+			3 as severity,
+			'Database ' + isnull(rtrim(dbName), '' ) + ' is about to reach MSDE limits.',
+			1 as isLogSize
+			from (
+				select dbName,
+					sum([size]) as totalSize
+					from #fileSizes
+					where isLog = 0
+					group by dbname
+				) a
+			where totalSize >= 1800
+				and @cVersion like '%desktop engine%'
+
+		drop table #fileSizes
 	end
-	drop table #databaseNames
-
-	update #fileSizes
-		set isLog = 1
-		where objectName like '%log%' or fileName like '%log%'
-
-	insert into databaseFileSizeLog (serverName, dbname, objectname, [fileName], [size], isLog, fileID)
-	select @@serverName, dbName, objectName, [fileName], [size], isLog, fileID
-		from #fileSizes
-
-	insert into #results (message, severity, subject, isLogSize)
-	select 'Database ' + isnull(rtrim(dbName), '' ) + ' ' +
-			'size (' + convert(varchar(20), totalSize) + 'mb) ' +
-			'is about to reach the MSDE cap of 2000mb.',
-		3 as severity,
-		'Database ' + isnull(rtrim(dbName), '' ) + ' is about to reach MSDE limits.',
-		1 as isLogSize
-		from (
-			select dbName,
-				sum([size]) as totalSize
-				from #fileSizes
-				where isLog = 0
-				group by dbname
-			) a
-		where totalSize >= 1800
-			and @cVersion like '%desktop engine%'
-
-	drop table #fileSizes
 
 	-- insert into hist_monitorBigBrother (stepName) values ('Log size checked')
 
@@ -1540,7 +1564,7 @@ begin
 
 			where a.serverName is not null
 				and isnull(a.message, '') <> 'END'
-				and dateDiff(minute, a.ymd, getDate()) > 60
+				and dateDiff(minute, a.ymd, getDate()) > 45
 				and e.[name] is not null
 
 		insert into #results (subject, message, severity, serverName)
@@ -1553,31 +1577,31 @@ begin
 			3 as severity, serverName
 			from #stuckConfigCheck
 
-		-- set the server to sleep that stuck us
-		update dm_servers with (rowlock)
-			set configurationCheckSleepUntil = dateAdd(hour, 2, getDate())
-			from dm_servers a
-			join #stuckConfigCheck b on a.serverName = b.serverName
+--		-- set the server to sleep that stuck us
+--		update dm_servers with (rowlock)
+--			set configurationCheckSleepUntil = dateAdd(hour, 2, getDate())
+--			from dm_servers a
+--			join #stuckConfigCheck b on a.serverName = b.serverName
 
 		set @cThisJob = ''
 
-	--	while exists (select top 1 jobName from #stuckConfigCheck where jobName > @cThisJob and minutesStuck > case when dateDiff(day, lastConfigurationCheck, getDate()) > 1 then 90 else 60 end)
-	--	begin
-	--		select top 1 @cThisJob = jobName ,
-	--			@dStartTime = startTime
-	--			from #stuckConfigCheck
-	--			where jobName > @cThisJob
-	--				and minutesStuck > case when dateDiff(day, lastConfigurationCheck, getDate()) > 1 then 90 else 60 end
-	--			order by jobName
-	--
-	--		exec msdb..sp_stop_job @job_name = @cThisJob
-	--
-	--		insert into #results (message, severity, subject) values
-	--			(
-	--				'Job ' + @cThisJob + ', started at ' + convert(varchar(20), @dStartTime) + ', sent a STOP command at ' + convert(varchar(20), getDate(), 120) + '.',
-	--				2,
-	--				'Job ' + @cThisJob + ', started at ' + convert(varchar(20), @dStartTime) + ', sent a STOP command.')
-	--	end
+		while exists (select top 1 jobName from #stuckConfigCheck where jobName > @cThisJob and minutesStuck > 60)
+		begin
+			select top 1 @cThisJob = jobName ,
+				@dStartTime = startTime
+				from #stuckConfigCheck
+				where jobName > @cThisJob
+					and minutesStuck > 60
+				order by jobName
+
+			exec msdb..sp_stop_job @job_name = @cThisJob
+
+			insert into #results (message, severity, subject) values
+				(
+					'Job ' + @cThisJob + ', started at ' + convert(varchar(20), @dStartTime) + ', sent a STOP command at ' + convert(varchar(20), getDate(), 120) + '.',
+					3,
+					'Job ' + @cThisJob + ', started at ' + convert(varchar(20), @dStartTime) + ', sent a STOP command.')
+		end
 
 		drop table #stuckConfigCheck
 	end
@@ -1652,12 +1676,90 @@ begin
 
 	-- insert into hist_monitorBigBrother (stepName) values ('EventLog monitor checked')
 
+	--*********************************************************************************************************************
+	-- Check on event log monitor failures
+	--*********************************************************************************************************************
+
+	select serverName,
+		replace(notes, serverName + ': ', '') as notes,
+		count(*) as numFailures,
+		min(ymd) as earliest,
+		max(ymd) as latest,
+		convert(bit, 0) as disableChecks
+		into #eventLogFailures
+		from eventLog_history (nolock)
+		where notes like '%error%'
+			and charindex('type=error', notes) = 0
+			and charindex(':', notes) > 0
+			and ymd >= dateAdd(hour, -1, getDate())
+			and notes not like '%Timeout expired %'
+		group by serverName, notes
+
+	update #eventLogFailures
+		set disableChecks = 1
+		from #eventLogFailures a
+		join (
+			select serverName, sum(numFailures) as numFailures
+				from #eventLogFailures
+				where notes not like '%timeout%'
+				group by serverName
+				having sum(numfailures) >= 2
+			) b on a.serverName = b.serverName
+
+	-- if it's successfully read since the last failure, do not disable
+	update #eventLogFailures
+		set disableChecks = 0
+		from #eventLogfailures a
+		join (
+			select computerName, max(monitorDate) as ymd
+				from eventLog (nolock)
+				where monitorDate >= dateAdd(minute, -90, getDate())
+				group by computerName
+			) b on a.serverName = b.computerName
+				and a.latest < b.ymd
+		where a.disableChecks = 1
+
+	delete #eventLogFailures
+		from #eventLogFailures a
+		join dm_servers b on a.serverName = b.serverName
+			and b.eventLogCheck = 0
+
+	insert into notificationLog_stage (subject, message, severity, isEventLog, serverName)
+	select
+		'EventLog checks have failed ' + convert(varchar(20), sum(numFailures)) + ' times for ' + serverName + ' at ' + right(convert(varchar(20), max(latest), 120), 8) as subject,
+		'Server ' + serverName + ' has experienced ' + convert(varchar(20), sum(numFailures)) + ' failures between ' + convert(varchar(20), min(earliest), 120) + ' and ' + convert(varchar(20), max(latest), 120) + '. ' +
+			'As a result, further Event Log checks have been DISABLED.<br><br>' +
+			'The observed error was: ' + isnull(max(notes), '') as message,
+		2 as severity,
+		1 as isEventLog,
+		serverName
+		from #eventLogFailures
+		where disableChecks = 1
+		group by serverName
+
+--	-- put the benign ones to sleep for a bit
+--	update dm_servers
+--		set eventLogCheckSleepUntil = dateAdd(hour, 1, getDate())
+--		from dm_servers a
+--		join #eventLogFailures b on a.serverName = b.serverName
+
+--	insert into eventLog_history (notes, ukey_group) values ('Failures checked for', @nUkeyGroup)
+
+	update dm_servers with (rowlock)
+		set eventLogCheck = 0
+		from dm_servers a
+		join #eventLogFailures b on a.serverName = b.serverName
+			and b.disableChecks = 1
+		where a.eventLogCheck = 1
+
+--	insert into eventLog_history (notes, ukey_group) values ('Servers disabled', @nUkeyGroup)
+
 
 	--*********************************************************************************************************************
 	-- CPU and Disk queues
 	--*********************************************************************************************************************
 
-	if (@cVersion like '%server 2005%' or @cVersion like '%server 2008%')
+	if exists (select top 1 settingValue from dm_settings (nolock) where settingName = 'Watch SQLBeat CPU and Disk queues' and settingValue = '1')
 	begin
 		create table #cpuTasks (cpuNumber varchar(20), currentTasks int, waitingTasks int)
 

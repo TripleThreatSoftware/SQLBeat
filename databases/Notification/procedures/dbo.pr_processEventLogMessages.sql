@@ -1,3 +1,6 @@
+USE [Notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_processEventLogMessages]    Script Date: 03/17/2010 10:53:53 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -46,7 +49,7 @@ begin
 				and b.ukey_group = @nUkeyGroup
 	end try
 	begin catch
-		insert into eventLog_history (notes, ukey_group) values ('Found error converting dateTime', @nUkeyGroup)
+		insert into eventLog_history (notes, ukey_group) values ('Found error converting dateTime in update of eventLog_stage', @nUkeyGroup)
 	end catch
 
 	-- ditch anything that did not properly convert to a date
@@ -55,6 +58,7 @@ begin
 		join dm_servers b (nolock) on (a.computerName = b.serverName or a.computerName = isnull(b.friendlyName, ''))
 			and b.ukey_group = @nUkeyGroup
 		where isnumeric(left(timeWritten, 1)) = 0
+			or isdate(timeWritten) = 0
 
 	select *,
 		convert(varchar(8000), '') as emailMessage,
@@ -73,11 +77,12 @@ begin
 	end
 
 	update dm_servers with (rowlock)
-		set lastEventLogCheck = getDate()
+		set lastEventLogCheck = b.monitorDate
 		from dm_servers a
 		join (
-			select distinct computerName
+			select computerName, max(monitorDate) as monitorDate
 				from #eventLog
+				group by computerName
 			) b on a.serverName = b.computerName
 
 	delete #eventLog
@@ -95,9 +100,14 @@ begin
 	-- Add to long term tables
 	--*********************************************************************************************************************
 
-	insert into eventLog (logType, category, computerName, message, sourcename, timeWritten, type, auser, monitorDate)
-	select logType, category, computerName, message, sourcename, convert(dateTime, timeWritten), type, auser, monitorDate
-		from #eventLog a (nolock)
+	begin try
+		insert into eventLog (logType, category, computerName, message, sourcename, timeWritten, type, auser, monitorDate)
+		select logType, category, computerName, message, sourcename, convert(dateTime, timeWritten), type, auser, monitorDate
+			from #eventLog a (nolock)
+	end try
+	begin catch
+		insert into eventLog_history (notes, ukey_group) values ('Found error converting dateTime in adding to eventLog', @nUkeyGroup)
+	end catch
 
 	insert into eventLog_history (notes, ukey_group) values ('Records added to EVENTLOG', @nUkeyGroup)
 
@@ -113,6 +123,7 @@ begin
 			and message not like '%backup%'
 			and message not like '%restore%'
 			and message not like '%dtc%'
+			and message not like '%exceeded time limits%'
 			and message not like '%cachestore flush%'
 			and message not like '%setting database option%'
 			and message not like '%is marked restoring%'
@@ -297,78 +308,5 @@ begin
 
 	insert into eventLog_history (notes, ukey_group) values ('Deleted records from EVENTLOG_STAGE', @nUkeyGroup)
 
-	--*********************************************************************************************************************
-	-- Check on event log monitor failures
-	--*********************************************************************************************************************
-
-	-- oranetayp2: Error writing application event detail. Timeout expired
-
-	select serverName, replace(notes, serverName + ': ', '') as notes,
-		count(*) as numFailures,
-		min(ymd) as earliest,
-		max(ymd) as latest,
-		convert(bit, 0) as disableChecks
-		into #eventLogFailures
-		from eventLog_history (nolock)
-		where notes like '%error%'
-			and charindex('type=error', notes) = 0
-			and charindex(':', notes) > 0
-			and ymd >= dateAdd(hour, -2, getDate())
-			and notes not like '%Timeout expired %'
-			and notes not like '%Timeout expired %'
-			and ukey_group = @nUkeyGroup
-		group by serverName, notes
-
-	update #eventLogFailures
-		set disableChecks = 1
-		where notes not like '%timeout%'
-			and (
-				notes like '%The remote server machine does not exist or is unavailable%'
-				or notes like '%RPC server%'
-				or notes like '%permission%'
-				or notes like '%access denied%'
-				or notes like '%access is denied%'
-				)
-			and numFailures >= 3
-
-	-- if it's successfully read since the last failure, do not disable
-	update #eventLogfailures
-		set disableChecks = 0
-		from #eventLogfailures a
-		join (
-			select computerName, max(monitorDate) as ymd
-				from eventLog (nolock)
-				where monitorDate >= dateAdd(minute, -30, getDate())
-				group by computerName
-			) b on a.serverName = b.computerName
-				and a.latest < b.ymd
-
-	insert into notificationLog_stage (subject, message, severity, isEventLog, serverName)
-	select
-		'EventLog checks have failed ' + convert(varchar(20), numFailures) + ' times for ' + serverName + ' at ' + right(convert(varchar(20), latest, 120), 8) as subject,
-		'Server ' + serverName + ' has experienced ' + convert(varchar(20), numFailures) + ' failures between ' + convert(varchar(20), earliest, 120) + ' and ' + convert(varchar(20), latest, 120) + '. As a result, further Event Log checks have been DISABLED.' + char(13) + char(13) + 'The observed error was: ' + isnull(notes, '') as message,
-		2 as severity,
-		1 as isEventLog,
-		serverName
-		from #eventLogFailures
-		where disableChecks = 1
-
---	-- put the benign ones to sleep for a bit
---	update dm_servers
---		set eventLogCheckSleepUntil = dateAdd(hour, 1, getDate())
---		from dm_servers a
---		join #eventLogFailures b on a.serverName = b.serverName
-
-	insert into eventLog_history (notes, ukey_group) values ('Failures checked for', @nUkeyGroup)
-
-	update dm_servers with (rowlock)
-		set eventLogCheck = 0
-		from dm_servers a
-		join #eventLogFailures b on a.serverName = b.serverName
-			and b.disableChecks = 1
-
-	insert into eventLog_history (notes, ukey_group) values ('Servers disabled', @nUkeyGroup)
-
-	drop table #eventLogFailures
 	drop table #eventLog
 end
