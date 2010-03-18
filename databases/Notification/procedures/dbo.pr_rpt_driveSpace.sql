@@ -1,10 +1,12 @@
-/****** Object:  StoredProcedure [dbo].[pr_rpt_driveSpace]    Script Date: 03/17/2010 10:23:11 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
--- select top 100 * from notificationLog order by ymd desc
--- select * from dm_drivespaceThresholds
+--SET ANSI_NULLS ON
+--GO
+--SET QUOTED_IDENTIFIER ON
+--GO
+
+
+
+---- select top 100 * from notificationLog order by ymd desc
+---- select * from dm_drivespaceThresholds
 
 ALTER procedure [dbo].[pr_rpt_driveSpace]
 as
@@ -15,7 +17,6 @@ begin
 	declare @cThisSubject varchar(2000)
 	declare @cServerName varchar(200)
 	declare @cDriveLetter varchar(1)
-	declare @nSeverity int
 
 	if not exists (select top 1 [name] from sysobjects where [name] = 'dm_drivespaceThresholds')
 	begin
@@ -64,16 +65,16 @@ begin
 		join driveSpaceLog c (nolock) on a.serverName = c.serverName
 			and a.driveLetter = c.driveLetter
 			and c.ymd = b.firstReading
-		left outer join (
+		join (
 			select distinct serverName, substring(subject, 7, 1) as driveLetter
 				from notificationLog (nolock)
 				where isDriveSpace = 1
-					and ymd >= dateAdd(hour, -12, getDate())
+					and ymd >= dateAdd(hour, -3, getDate())
 					and subject like '%is down to%'
 			) d on a.serverName = d.serverName
 				and a.driveLetter = d.driveLetter
-		where (c.driveSpace - a.driveSpace) < 25
-			and d.serverName is null
+		--where (c.driveSpace - a.driveSpace) < 25
+		--	and d.serverName is null
 
 	insert into notificationLog_stage (serverName, severity, subject, message, isDriveSpace)
 	select
@@ -106,11 +107,13 @@ begin
 
 	set @nThisUkey = 0
 
+
 	while exists (
 		select top 1 a.ukey
 			from dm_drivespaceThresholds a (nolock)
 			left outer join #drivespaceAlerts b on a.ukey_server = b.ukey_server
 				and a.driveLetter = b.driveLetter
+			join dm_servers c (nolock) on a.ukey_server = c.ukey
 			where a.ukey > @nThisUkey
 				and b.ukey is null
 		)
@@ -142,7 +145,7 @@ begin
 
 	set @dToday = convert(varchar(10), getDate(), 120)
 
-	declare @messages table (subject varchar(500), message varchar(8000), ukey int identity, serverName varchar(100), driveLetter varchar(1), severity int)
+	declare @messages table (subject varchar(500), message varchar(8000), ukey int identity, serverName varchar(100), driveLetter varchar(1))
 
 	declare @results table (serverName varchar(100), driveLetter varchar(1),
 		driveSpace_3 decimal(15,2), drivespace_7 decimal(15,2), driveSpace_14 decimal(15,2), driveSpace_today decimal(15,2),
@@ -205,15 +208,14 @@ begin
 				else (driveSpace_today / ((driveSpace_14 - driveSpace_today) / 14)) / 7 end)
 
 	-- low on time
-	insert into @messages (serverName, driveLetter, subject, message, severity)
+	insert into @messages (serverName, driveLetter, subject, message)
 	select serverName, driveLetter, 'Space on ' +  serverName + ' (' + driveLetter + ') down to ' + convert(varchar(20), driveSpace_today) + 'mb, '
 			 + convert(varchar(20), weeksLeft_14) + ' weeks.' as subject,
 		'Drive ' + driveLetter + ' on ' + serverName + ' has triggered an alert - at the rate of consumption observed over the last 14 days, there remains enough space for ' + convert(varchar(20), weeksLeft_14) + ' weeks.' + char(13) +
 			'14 Days: ' + isnull(convert(varchar(20), driveSpace_14), 'N/A') + 'mb' + char(13) +
 			'07 Days: ' + isnull(convert(varchar(20), driveSpace_7), 'N/A') + 'mb' + char(13) +
 			'03 Days: ' + isnull(convert(varchar(20), driveSpace_3), 'N/A') + 'mb' + char(13) +
-			'00 Days: ' + isnull(convert(varchar(20), driveSpace_today), 'N/A') + 'mb' + char(13),
-		case when weeksLeft_14 < 10 then 2 else 3 end
+			'00 Days: ' + isnull(convert(varchar(20), driveSpace_today), 'N/A') + 'mb' + char(13)
 		from @results
 		where weeksLeft_14 >= 0
 			and weeksLeft_14 < 10
@@ -228,7 +230,7 @@ begin
 			and a.driveLetter = b.driveLetter
 
 	-- consistent drop
-	insert into @messages (serverName, driveLetter, subject, message, severity)
+	insert into @messages (serverName, driveLetter, subject, message)
 	select serverName, driveLetter, 'Drop in space from ' +
 			convert(varchar(20), driveSpace_14) + 'mb to ' + convert(varchar(20), driveSpace_today) +
 			' on ' + serverName + ' (' + driveLetter + ') in the last two weeks.' as subject,
@@ -236,8 +238,7 @@ begin
 			'14 Days: ' + isnull(convert(varchar(20), driveSpace_14), 'N/A') + 'mb' + char(13) +
 			'07 Days: ' + isnull(convert(varchar(20), driveSpace_7), 'N/A') + 'mb' + char(13) +
 			'03 Days: ' + isnull(convert(varchar(20), driveSpace_3), 'N/A') + 'mb' + char(13) +
-			'00 Days: ' + isnull(convert(varchar(20), driveSpace_today), 'N/A') + 'mb' + char(13),
-		case when percentDrop_14 > 10 then 2 else 3 end
+			'00 Days: ' + isnull(convert(varchar(20), driveSpace_today), 'N/A') + 'mb' + char(13)
 		from @results
 		where percentDrop_3 > 5
 			and percentDrop_7 > 5
@@ -255,15 +256,14 @@ begin
 			and a.driveLetter = b.driveLetter
 
 	-- hard and fast drop
-	insert into @messages (serverName, driveLetter, subject, message, severity)
+	insert into @messages (serverName, driveLetter, subject, message)
 	select serverName, driveLetter, 'Drop in space from ' +
 			convert(varchar(20), driveSpace_3) + 'mb to ' + convert(varchar(20), driveSpace_today) +
 			' on ' + serverName + ' (' + driveLetter + ') in the last three days.' as subject,
 		'Drive ' + driveLetter + ' on ' + serverName + ' has triggered an alert - space fell by more than 10% in the last three days.' + char(13) +
 			'07 Days: ' + isnull(convert(varchar(20), driveSpace_7), 'N/A') + 'mb' + char(13) +
 			'03 Days: ' + isnull(convert(varchar(20), driveSpace_3), 'N/A') + 'mb' + char(13) +
-			'00 Days: ' + isnull(convert(varchar(20), driveSpace_today), 'N/A') + 'mb' + char(13),
-		2
+			'00 Days: ' + isnull(convert(varchar(20), driveSpace_today), 'N/A') + 'mb' + char(13)
 		from @results
 		where (
 				percentDrop_3 > 10
@@ -289,8 +289,7 @@ begin
 	while exists (select top 1 ukey from @messages where serverName > @cServerName)
 	begin
 		select top 1
-			@cServerName = serverName,
-			@nSeverity = severity
+			@cServerName = serverName
 			from @messages
 			where serverName > @cServerName
 			order by serverName
@@ -304,7 +303,7 @@ begin
 			where serverName = @cServerName
 
 		insert into notificationLog_stage (serverName, subject, message, severity, isDriveSpace)
-		select @cServerName, @cThisSubject, @cThisMessage, @nSeverity, 1
+		select @cServerName, @cThisSubject, @cThisMessage, 3, 1
 
 	end
 end
