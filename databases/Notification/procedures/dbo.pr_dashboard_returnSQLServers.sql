@@ -1,6 +1,3 @@
-USE [Notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_dashboard_returnSQLServers]    Script Date: 02/17/2010 11:25:13 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -38,8 +35,8 @@ begin
 				or @bIncludeInactiveServers = 1
 				)
 
-	if (select count(*) from #results where serverName = @@serverName) = 0
-		insert into #results (serverName) values (@@serverName)
+	--if (select count(*) from #results where serverName = @@serverName) = 0
+	--	insert into #results (serverName) values (@@serverName)
 
 	print convert(varchar(10), dateDiff(ms, @dStartDate, getDate())) + 'ms: Selected server list'
 
