@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 03/17/2010 11:22:00 ******/
+/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 03/24/2010 12:05:21 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -1016,56 +1016,56 @@ begin
 				and waitTime > 60000 * 20
 			having count(*) >= 4
 
-		-- if there's just a little bit of blocking, go easy
-		if (
-			select count(*)
-				from #processes a
-				left outer join #processes b on a.blockedBy = b.spid
-				where a.isBlocked = 1
-					and a.ignoreSpid = 0
-					and abs(dateDiff(second, b.lastBatchTime, a.lastBatchTime)) >= @nBlockingSecondsThreshold
-			) <= 2
-		begin
-			-- here we have blocking, but it's no more than two SPIDs so we consider how long blocking has been running
-			insert into #results (message, severity, subject, isBlocking)
-			select distinct left('A process which belongs to SPID ' + isnull(convert(varchar(20), a.spid), 'A') + '(' + isnull(a.hostname, '') + ':' + isnull(a.login, '') + ') ' +
-				'is being blocked in the ' + isnull(a.dbName, '') + ' database ' +
-				'by SPID ' + isnull(convert(varchar(20), b.spid), 'B') + '(' + isnull(b.hostname, '') + ':' + isnull(b.login, '') + '). ' + char(13) + char(13) +
-				'********************************************' + char(13) +
-				'Blockee Code (' + isnull(rtrim(a.command), '') + '): ' + char(13) +
-				'Batch Start: ' + convert(varchar(20), a.lastBatchTime, 120) + char(13) +
-				'********************************************' + char(13) +
-					left(isnull(a.buffercontents, ''), 500) + char(13) + char(13) +
-				'********************************************' + char(13) +
-				'Blocker Code (' + isnull(rtrim(b.command), '') + '): ' + char(13) +
-				'Batch Start: ' + convert(varchar(20), b.lastBatchTime, 120) + char(13) +
-				'********************************************' + char(13) +
-					left(isnull(b.bufferContents, ''), 500) + char(13) + char(13) +
-				'********************************************' + char(13) +
-				'Blockee locks: ' + char(13) +
-				'********************************************' + char(13) +
-					isnull(a.locks, '') + char(13) +
-				'********************************************' + char(13) +
-				'Blocker locks: ' + char(13) +
-				'********************************************' + char(13) +
-					isnull(b.locks, '')
-				, 2000),
-				2 as severity,
-				'User ' + isnull(b.login, '') + ' (' + isnull(convert(varchar(20), b.spid), 'B') + ') ' +
-					'began blocking in ' + isnull(a.dbName, '') + ' ' +
-					'at ' + right(convert(varchar(20), isnull(b.lastBatchTime, ''), 120), 8) + '. ' as subject,
-				1 as isBlocking
-				from #processes a
-				left outer join #processes b on a.blockedBy = b.spid
-				where a.isBlocked = 1
-	--				and not (isnull(a.locks, '') = '' and isnull(b.locks, '') = '')
-	--				and not (isnull(a.locks, '') not like '%waiting%' and isnull(b.locks, '') not like '%waiting%')
-					and a.blockedBy <> ''
-					and a.ignoreSPID = 0
-					and abs(dateDiff(second, b.lastBatchTime, a.lastBatchTime)) >= @nBlockingSecondsThreshold
-		end
-		else
-		begin
+--		-- if there's just a little bit of blocking, go easy
+--		if (
+--			select count(*)
+--				from #processes a
+--				left outer join #processes b on a.blockedBy = b.spid
+--				where a.isBlocked = 1
+--					and a.ignoreSpid = 0
+--					and abs(dateDiff(second, b.lastBatchTime, a.lastBatchTime)) >= @nBlockingSecondsThreshold
+--			) <= 2
+--		begin
+--			-- here we have blocking, but it's no more than two SPIDs so we consider how long blocking has been running
+--			insert into #results (message, severity, subject, isBlocking)
+--			select distinct left('A process which belongs to SPID ' + isnull(convert(varchar(20), a.spid), 'A') + '(' + isnull(a.hostname, '') + ':' + isnull(a.login, '') + ') ' +
+--				'is being blocked in the ' + isnull(a.dbName, '') + ' database ' +
+--				'by SPID ' + isnull(convert(varchar(20), b.spid), 'B') + '(' + isnull(b.hostname, '') + ':' + isnull(b.login, '') + '). ' + char(13) + char(13) +
+--				'********************************************' + char(13) +
+--				'Blockee Code (' + isnull(rtrim(a.command), '') + '): ' + char(13) +
+--				'Batch Start: ' + convert(varchar(20), a.lastBatchTime, 120) + char(13) +
+--				'********************************************' + char(13) +
+--					left(isnull(a.buffercontents, ''), 500) + char(13) + char(13) +
+--				'********************************************' + char(13) +
+--				'Blocker Code (' + isnull(rtrim(b.command), '') + '): ' + char(13) +
+--				'Batch Start: ' + convert(varchar(20), b.lastBatchTime, 120) + char(13) +
+--				'********************************************' + char(13) +
+--					left(isnull(b.bufferContents, ''), 500) + char(13) + char(13) +
+--				'********************************************' + char(13) +
+--				'Blockee locks: ' + char(13) +
+--				'********************************************' + char(13) +
+--					isnull(a.locks, '') + char(13) +
+--				'********************************************' + char(13) +
+--				'Blocker locks: ' + char(13) +
+--				'********************************************' + char(13) +
+--					isnull(b.locks, '')
+--				, 8000),
+--				2 as severity,
+--				'User ' + isnull(b.login, '') + ' (' + isnull(convert(varchar(20), b.spid), 'B') + ') ' +
+--					'began blocking in ' + isnull(a.dbName, '') + ' ' +
+--					'at ' + right(convert(varchar(20), isnull(b.lastBatchTime, ''), 120), 8) + '. ' as subject,
+--				1 as isBlocking
+--				from #processes a
+--				left outer join #processes b on a.blockedBy = b.spid
+--				where a.isBlocked = 1
+--	--				and not (isnull(a.locks, '') = '' and isnull(b.locks, '') = '')
+--	--				and not (isnull(a.locks, '') not like '%waiting%' and isnull(b.locks, '') not like '%waiting%')
+--					and a.blockedBy <> ''
+--					and a.ignoreSPID = 0
+--					and abs(dateDiff(second, b.lastBatchTime, a.lastBatchTime)) >= @nBlockingSecondsThreshold
+--		end
+--		else
+--		begin
 			-- here, we have a lot of blocking and we're very concerned
 			insert into #results (message, severity, subject, isBlocking)
 			select distinct left('A process which belongs to SPID ' + isnull(convert(varchar(20), a.spid), 'A') + '(' + isnull(a.hostname, '') + ':' + isnull(a.login, '') + ') ' +
@@ -1089,7 +1089,7 @@ begin
 				'Blocker locks: ' + char(13) +
 				'********************************************' + char(13) +
 					isnull(b.locks, '')
-				, 2000),
+				, 8000),
 				1 as severity,
 				'User ' + isnull(b.login, '') + ' (' + isnull(convert(varchar(20), b.spid), 'B') + ') ' +
 					'began blocking in ' + isnull(a.dbName, '') + ' ' +
@@ -1100,7 +1100,7 @@ begin
 				where a.isBlocked = 1
 					and a.blockedBy <> ''
 					and a.ignoreSPID = 0
-		end
+--		end
 
 		-- wild
 		insert into #results (message, severity, subject, isLongRunningProcess)
@@ -1117,7 +1117,7 @@ begin
 								convert(decimal(10,2), sum(isnull(cpuTime, 0)) - sum(isnull(lastCPU, 0))) /
 								convert(decimal(10,2),
 									dateDiff(second,
-										min(isnull(case when datePart(year, lastData) = 1900 or isnull(lastData, '') = '' then lastBatchTime else lastData end, '')),
+										min(isnull(case when datePart(year, lastData) = 1900 or isnull(lastData, '') = '' then isnull(lastBatchTime, getDate()) else lastData end, '')),
 										getDate()
 										)
 									)
@@ -1132,7 +1132,7 @@ begin
 								convert(decimal(10,2), sum(isnull(diskio, 0)) - sum(isnull(lastDisk, 0))) /
 								convert(decimal(10,2),
 									dateDiff(second,
-										min(isnull(case when datePart(year, lastData) = 1900 or isnull(lastData, '') = '' then lastBatchTime else lastData end, '')),
+										min(isnull(case when datePart(year, lastData) = 1900 or isnull(lastData, '') = '' then isnull(lastBatchTime, getDate()) else lastData end, '')),
 										getDate()
 										)
 									)
@@ -1160,7 +1160,7 @@ begin
 				'Executing (' + rtrim(isnull(command, '')) + ') : ' + char(13) +
 				'********************************************' + char(13) +
 					isnull(buffercontents, '')
-				, 2000) as message,
+				, 8000) as message,
 
 			-- weight the severity based on how long it's been running, and whether or not it's business hours
 			case
@@ -1194,7 +1194,7 @@ begin
 		select left(
 				'User ' + isnull(blockingUser, 'N/A') + ' (' + convert(varchar(20), isnull(blockingSPID, '')) + ') ' +
 				'has been blocking in the last (' + convert(varchar(20), count(distinct ymd)) + ') polls.'
-				, 2000) as message,
+				, 8000) as message,
 			2 as severity,
 			'SPID ' + convert(varchar(20), isnull(blockingSPID, '')) + ' ' +
 			'is blocking ' + convert(varchar(20), count(distinct blockedSPID)) + ' SPIDs ' +
@@ -1942,7 +1942,7 @@ begin
 --			set a.message = left(
 --					a.message + char(13) +
 --					'Step "' + isnull(c.activity, 'N/A') + '" ' + case when c.succeeded <> 1 then 'failed' else 'succeeded' end + ': ' + char(13) + c.message + char(13) + char(13)
---					, 2000)
+--					, 8000)
 --			from #jobHistory a
 --			join #maintenancePlanFailures c on a.job_id = c.job_id
 --				and c.start_time >= a.startTime

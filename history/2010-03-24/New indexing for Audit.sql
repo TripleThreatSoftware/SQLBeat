@@ -1,0 +1,4 @@
+drop index auditData_objectText.ix_auditDataObjectText_current_serverName_databaseName_objectName_objectText
+go
+
+create index ix_auditDataObjectText_current_serverName_databaseName_objectName_objectText_xtype_colid on auditData_objectText (isCurrent, serverName, databaseName, objectName) include (objectText, xtype, colID) with fillfactor = 70

@@ -1,12 +1,57 @@
-create procedure pr_rpt_eventLog (@nUkeyServer int, @nNumHours int = 48)
+--select * from dm_servers where servername = 'appcln02'
+--GO
+--select *
+--	from eventLog
+--	where message not like '%login succeeded%'
+--			and [type] not in ('Information', 'Warning')
+--			and sourceName not in ('TermServDevices', 'PrintSpooler', 'Print', 'W32Time', 'SceCli', 'AutoEnrollment', 'MsGina', 'Microsoft-Windows-TerminalServices-Printers')
+--			and message not like '%web proxy auto-discovery%'
+--			and message <> ''
+
+-- exec pr_rpt_eventLog 0, 48, 'sqlcluster01'
+ALTER procedure [dbo].[pr_rpt_eventLog] (@nUkeyServer int = 0, @nNumHours int = 48, @cServerName varchar(200) = '')
 as
 begin
 	declare @cComputerName varchar(200)
-	set @cComputerName = (select top 1 serverName from dm_servers where ukey = @nUkeyServer)
+	declare @dMaxViewData dateTime
 
-	select timeWritten, sourceName, category, message
+	if isnull(@cServerName, '') = ''
+		set @cComputerName = (select top 1 serverName from dm_servers where ukey = @nUkeyServer)
+	else
+		set @cComputerName = @cServerName
+
+	set @dMaxViewData = (select max(timeWritten) from v_eventLog_all where computerName = @cComputerName)
+
+	declare @results table (serverName varchar(200), timeWritten dateTime, sourceName varchar(1000), category varchar(1000), message varchar(8000), auser varchar(500))
+
+	insert into @results
+	select
+		computerName as serverName, timeWritten, sourceName, category, message, auser
 		from eventLog (nolock)
 		where timeWritten >= dateAdd(hour, -@nNumHours, getDate())
-			and computerName = @cComputerName
+			and (computerName = @cComputerName or isnull(@cComputerName, '') = '')
+			and message not like '%login succeeded%'
+			and [type] not in ('Information', 'Warning')
+			and sourceName not in ('TermServDevices', 'PrintSpooler', 'Print', 'W32Time', 'SceCli', 'AutoEnrollment', 'MsGina', 'Microsoft-Windows-TerminalServices-Printers')
+			and message not like '%web proxy auto-discovery%'
+			and message <> ''
+			and timeWritten > @dMaxViewData
+
+	insert into @results
+	select
+		computerName as serverName, timeWritten, sourceName, category, message, auser
+		from v_eventLog_all (nolock)
+		where timeWritten >= dateAdd(hour, -@nNumHours, getDate())
+			and (computerName = @cComputerName or isnull(@cComputerName, '') = '')
+			and message not like '%login succeeded%'
+			and [type] not in ('Information', 'Warning')
+			and sourceName not in ('TermServDevices', 'PrintSpooler', 'Print', 'W32Time', 'SceCli', 'AutoEnrollment', 'MsGina', 'Microsoft-Windows-TerminalServices-Printers')
+			and message not like '%web proxy auto-discovery%'
+			and message <> ''
+			and timeWritten < @dMaxViewData
+
+	select *
+		from @results
 		order by timeWritten desc
+
 end

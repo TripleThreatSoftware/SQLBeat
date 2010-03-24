@@ -1,8 +1,12 @@
-/****** Object:  StoredProcedure [dbo].[pr_checkFragmentation]    Script Date: 05/19/2009 13:59:45 ******/
+USE [Notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_checkFragmentation]    Script Date: 03/24/2010 09:11:45 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
+
 --create table fragmentationLog (ukey int identity, ukey_group int, ukey_server int, ymd dateTime, dbName varchar(200), objectName varchar(200),
 --	indexName varchar(200), [rows] bigint, extents bigint, extentSwitches bigint, scanDensity decimal(20,5))
 --
@@ -11,7 +15,7 @@ GO
 -- exec pr_checkFragmentation 2
 --
 
-CREATE  procedure [dbo].[pr_checkFragmentation] (@nServerGroup int)
+ALTER  procedure [dbo].[pr_checkFragmentation] (@nServerGroup int)
 as
 begin
 
@@ -45,6 +49,8 @@ begin
 			where serverName > @cServerName
 				and isEnabled = 1
 				and fragmentationCheck = 1
+				and detailedCheck = 1
+				and isSQLBox = 1
 				and ukey_group = @nServerGroup
 				and (lastFragmentationCheck is null or dateDiff(minute, lastFragmentationCheck, getDate()) > isnull(fragmentationCheckMinuteInterval, 5))
 				and right(convert(varchar(20), getDate(), 120), 8) >= right(convert(varchar(20), maintenanceWindowStart, 120), 8)
@@ -63,6 +69,8 @@ begin
 			where serverName > @cServerName
 				and isEnabled = 1
 				and fragmentationCheck = 1
+				and detailedCheck = 1
+				and isSQLBox = 1
 				and ukey_group = @nServerGroup
 				and (lastFragmentationCheck is null or dateDiff(minute, lastFragmentationCheck, getDate()) > isnull(fragmentationCheckMinuteInterval, 5))
 				and right(convert(varchar(20), getDate(), 120), 8) >= right(convert(varchar(20), maintenanceWindowStart, 120), 8)
@@ -123,7 +131,7 @@ begin
 			'Credentials (' + isnull(@cUserName, '') + '/' + isnull(@cPassword, '') + ') supplied for ' + isnull(@cFriendlyName, @cServerName) + ' invalid.' as subject,
 			'Fragmentation scan failed for "' + isnull(@cFriendlyName, @cServerName) + '" as "' + isnull(@cUserName, '') + '/' + isnull(@cPassword, '') + '" with the following error: ' + char(13) +
 				isnull(resultLine, 'NULL MESSAGE') as message,
-			2 as severity,
+			3 as severity,
 			isnull(@cFriendlyName, @cServerName) as serverName
 			from #results
 			where resultLine like '%login failed%'
@@ -146,7 +154,7 @@ begin
 			'Fragmentation scan of ' + isnull(@cFriendlyName, @cServerName) + ' failed.' as subject,
 			'Fragmentation scan failed for "' + isnull(@cFriendlyName, @cServerName) + '" as "' + isnull(@cUserName, '') + '/' + isnull(@cPassword, '') + '" with the following error: ' + char(13) +
 				isnull(resultLine, 'NULL MESSAGE') as message,
-			2 as severity,
+			3 as severity,
 			isnull(@cFriendlyName, @cServerName) as serverName
 			from #results
 			where resultLine not like '%login failed%'
@@ -161,4 +169,3 @@ begin
 
 	drop table #results
 end
-GO

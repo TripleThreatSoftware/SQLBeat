@@ -1,6 +1,6 @@
 USE [Notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_monitorBigBrother]    Script Date: 03/17/2010 10:42:08 ******/
+/****** Object:  StoredProcedure [dbo].[pr_monitorBigBrother]    Script Date: 03/24/2010 08:53:37 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -1542,6 +1542,16 @@ begin
 
 	if exists (select top 1 [name] from master..sysdatabases where [name] = 'Configuration')
 	begin
+		insert into #results (subject, message, severity, serverName)
+		select
+			'Server architecture is not set',
+			'Server architecture is required for WMI to connect; currently it is set to "' + isnull(convert(varchar(20), architecture), 'N/A') + '".',
+			2, serverName
+			from dm_servers (nolock)
+			where isEnabled = 1
+				and configurationCheck = 1
+				and isnull(architecture, '') not in (32, 64)
+
 		select g.ukey as ukey_server, a.serverName, c.groupName, isnull(a.message, 'N/A') as notes, a.ymd,
 			isnull(g.lastConfigurationCheck, dateAdd(week, -3, getDate())) as lastConfigurationCheck,
 			convert(int, dateDiff(minute, a.ymd, getDate()) / 5) * 5 as minutesStuck,
@@ -1611,6 +1621,16 @@ begin
 	--*********************************************************************************************************************
 	-- Check on the event log monitor stuckness
 	--*********************************************************************************************************************
+
+	insert into #results (subject, message, severity, serverName)
+	select
+		'Server architecture is not set',
+		'Server architecture is required for Windows EventLog Checks; currently it is set to "' + isnull(convert(varchar(20), architecture), 'N/A') + '".',
+		2, serverName
+		from dm_servers (nolock)
+		where isEnabled = 1
+			and eventLogCheck = 1
+			and isnull(architecture, '') not in (32, 64)
 
 	select g.ukey as ukey_server, a.serverName, c.groupName, isnull(notes, 'N/A') as notes, a.ymd,
 		isnull(g.lastEventLogCheck, dateAdd(week, -3, getDate())) as lastEventLogCheck,
@@ -1693,6 +1713,8 @@ begin
 			and charindex(':', notes) > 0
 			and ymd >= dateAdd(hour, -1, getDate())
 			and notes not like '%Timeout expired %'
+			and notes not like '%object required%'
+			and notes not like '%only one usage%'
 		group by serverName, notes
 
 	update #eventLogFailures
