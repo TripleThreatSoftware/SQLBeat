@@ -1,6 +1,6 @@
 USE [Notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_monitorBigBrother]    Script Date: 03/24/2010 08:53:37 ******/
+/****** Object:  StoredProcedure [dbo].[pr_monitorBigBrother]    Script Date: 03/31/2010 10:48:21 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -1715,6 +1715,7 @@ begin
 			and notes not like '%Timeout expired %'
 			and notes not like '%object required%'
 			and notes not like '%only one usage%'
+			and notes not like '%row of size%'
 		group by serverName, notes
 
 	update #eventLogFailures

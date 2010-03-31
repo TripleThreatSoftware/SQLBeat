@@ -1,0 +1,355 @@
+Function Main()
+	dim nNumEvents
+	dim cErrorMessage
+	dim cLastServer
+
+	on error resume next
+	Const wbemFlagReturnImmediately = &h10
+	Const wbemFlagForwardOnly = &h20
+	Const wbemConnectFlagUseMaxWait = 128
+
+	Set oConnection= CreateObject("ADODB.Connection")
+
+	oConnection.commandtimeout = 10
+	oConnection.connectionTimeOut = 10
+
+	Set orsLog = CreateObject("ADODB.Recordset")
+	Set orsServerList = CreateObject("ADODB.Recordset")
+
+	'oConnection.Open = "Provider=SQLOLEDB.1;Data Source=(local);Initial Catalog=notification;user id =  'sqlnotification';password='REDACTED' "
+	oConnection.Open = "Provider=SQLNCLI;Server=SQLBeat;Database=notification;Uid=sqlnotification;Pwd=REDACTED"
+
+	Set oStageRecord = CreateObject("ADODB.Command")
+	Set oStageRecord.ActiveConnection = oConnection
+	oStageRecord.CommandText = "pr_stageEventLogData"
+	oStageRecord.CommandType = 4
+	oStageRecord.Parameters.Append oStageRecord.CreateParameter("@cLogType", 200, 1, 100)
+	oStageRecord.Parameters.Append oStageRecord.CreateParameter("@cCategory", 200, 1, 200)
+	oStageRecord.Parameters.Append oStageRecord.CreateParameter("@cComputerName", 200, 1, 200)
+	oStageRecord.Parameters.Append oStageRecord.CreateParameter("@cMessage", 200, 1, 8000)
+	oStageRecord.Parameters.Append oStageRecord.CreateParameter("@cSourceName", 200, 1, 200)
+	oStageRecord.Parameters.Append oStageRecord.CreateParameter("@cTimeWritten", 200, 1, 200)
+	oStageRecord.Parameters.Append oStageRecord.CreateParameter("@cType", 200, 1, 200)
+	oStageRecord.Parameters.Append oStageRecord.CreateParameter("@cAUser", 200, 1, 200)
+
+	cSQLString = "Select servername, " + _
+		"dbo.fn_returnUTCDate(dateAdd(hour, -72, isnull(lastEventLogCheck, dateAdd(day, -3, getDate())))) as startDate, " + _
+		"wmiUserName, wmiPassword, architecture " + _
+		"from dm_servers (nolock) " + _
+		"where isServerPingable = 1 " + _
+			"and eventLogCheck = 1 " + _
+			"and isEnabled = 1 " + _
+			"and (eventLogCheckSleepUntil is null or getDate() > eventLogCheckSleepUntil) " + _
+			"and (" + _
+				"lastEventLogCheck is null " + _
+				"or dateDiff(minute, lastEventLogCheck, getDate()) > isnull(eventLogCheckMinuteInterval, 5)" + _
+			") " + _
+			"and ukey_group = " & DTSGlobalVariables("ukey_group").value
+
+	orsServerList.Open cSQLString, oConnection, 3,1
+
+	cSQLString = "insert into eventlog_history(notes) values ('Event Log Monitoring Started')"
+	orsLog.Open cSQLString, oConnection, 1, 1
+
+	cLastServer = ""
+
+	do while not orsServerList.EOF
+		cServerName= orsServerList("ServerName")
+		cWMIUserName = orsServerList("wmiUserName")
+		cWMIPassword = orsServerList("wmiPassword")
+		dStartDate = orsServerList("startDate")
+		nArchitecture = orsServerList("architecture")
+		cErrorMessage = ""
+
+		if cServerName = cLastServer then
+			exit do
+		end if
+
+		cLastServer = cServerName
+
+		Set oEvents=nothing
+
+		err.clear
+
+		cSQLString="insert into eventlog_history (notes, serverName, ukey_group) values ('"+ cServerName+ ": Connecting to WINMGMTS object as " + cWMIUserName + "', '" + cServerName + "', " + CStr(DTSGlobalVariables("ukey_group").value) + ")"
+		orsLog.Open cSQLString, oConnection,1,1
+
+		Set oContext = CreateObject("WbemScripting.SWbemNamedValueSet")
+		oContext.Add "__ProviderArchitecture", nArchitecture
+		oContext.Add "__RequiredArchitecture", TRUE
+
+		Set objSWbemLocator = CreateObject("WbemScripting.SWbemLocator")
+		Set oWMI = objSWbemLocator.ConnectServer(cServerName, "/root/cimv2", cWMIUserName, cWMIPassword,,, wbemConnectFlagUseMaxWait, oContext)
+		'If isObject(oWMI) = True then
+		'	oWMI.Security_.ImpersonationLevel = 3
+		'End if
+
+		if err.number <> 0 then
+			cErrorMessage = err.description
+			if isnull(cErrorMessage) = true then
+				cErrorMessage = "BAD MESSAGE"
+			end if
+
+			cSQLString="insert into eventlog_history (notes, serverName, ukey_group) values ('" + cServerName+  ": Error " + cErrorMessage  + " ', '" + cServerName + "', " + CStr(DTSGlobalVariables("ukey_group").value) + ")"
+			orsLog.Open cSQLString, oConnection,1,1
+			err.clear
+		else
+			cSQLString="insert into eventlog_history (notes, serverName, ukey_group) values ('"+ cServerName+ ": WMI object created', '" + cServerName + "', " + CStr(DTSGlobalVariables("ukey_group").value) + ")"
+			orsLog.Open cSQLString, oConnection,1,1
+
+			cWMIString = "SELECT * " & _
+					"FROM Win32_NTLogEvent " & _
+					"WHERE LogFile = 'Application'  " & _
+						"and ( Type ='Warning' or Type='Error' or sourceName='ClusSvc' or sourceName = 'raidisk' or sourceName = 'Server Agents' or sourceName = 'Application Popup' or sourceName = 'USER32') " & _
+						"and TimeWritten >='"+ dStartDate +"'"
+
+'			cSQLString="insert into eventlog_history (notes, serverName, ukey_group) values ('"+ cServerName+ ": Querying Application log. " + replace(cWMIString, "'", "") + ".', '" + cServerName + "', " + CStr(DTSGlobalVariables("ukey_group").value) + ")"
+'			orsLog.Open cSQLString, oConnection,1,1
+
+			set oEvents = oWMI.ExecQuery(cWMIString)
+
+			if err.number <> 0 then
+				cErrorMessage = replace(err.description, "'", "")
+				if isnull(cErrorMessage) = true then
+					cErrorMessage = "BAD MESSAGE"
+				end if
+
+				cSQLString="insert into eventlog_history (notes, serverName, ukey_group) values ('" + cServerName+  ": Error " + cErrorMessage  + " ', '" + cServerName + "', " + CStr(DTSGlobalVariables("ukey_group").value) + ")"
+				orsLog.Open cSQLString, oConnection,1,1
+				err.clear
+			else
+
+				nNumEvents = oEvents.count
+
+				if isnull(nNumEvents) = true then
+					nNumEvents = 0
+				end if
+
+				cSQLString="insert into eventlog_history (notes, serverName, ukey_group) values ('"+ cServerName+ ": application log retrieved " + cstr(nNumEvents) + " events', '" + cServerName + "', " + CStr(DTSGlobalVariables("ukey_group").value) + ")"
+				orsLog.Open cSQLString, oConnection,1,1
+				err.clear
+
+				For Each objEvent in oEvents
+					 cSQLString=""
+					 cEventDate=""
+					 cUserName ="N/A"
+					 cMessage =" "
+					 cLogFile = ""
+					 cCategory = ""
+					 cComputerName = ""
+					 cSourceName = ""
+					 cEventType = ""
+
+					 if IsNull(objEvent.User) = false Then
+						cUserName = Left(objEvent.User, 200)
+					 End if
+
+					 If IsNull(objEvent.Message) = false Then
+					 	cMessage = Left(replace(objEvent.Message,"'"," "), 8000)
+					 End If
+
+					 If IsNull(objEvent.TimeWritten) = false Then
+					 	cEventDate = "'" + cstr(objEvent.TimeWritten) + "'"
+					 End If
+
+					 If IsNull(objEvent.Logfile) = false Then
+					 	cLogFile = Left(objEvent.Logfile, 100)
+					 End If
+
+					 If IsNull(objEvent.Category) = false Then
+					 	cCategory = Left(Cstr(objEvent.Category), 200)
+					 End If
+
+					 If IsNull(objEvent.ComputerName) = false Then
+					 	cComputerName = Left(objEvent.ComputerName, 200)
+					 End If
+
+					 If IsNull(objEvent.SourceName) = false Then
+					 	cSourceName = Left(objEvent.SourceName, 200)
+					 End If
+
+					 If IsNull(objEvent.Type) = false Then
+					 	cEventType = Left(objEvent.Type, 200)
+					 End If
+
+					 If err.number <>0 then
+						cErrorMessage = err.description
+						if isnull(cErrorMessage) = true then
+							cErrorMessage = "BAD MESSAGE"
+						end if
+
+						cSQLString="insert into eventlog_history (notes, serverName, ukey_group) values ('" + cServerName+  ": Error building application event fieldsl. " + cErrorMessage  + " ', '" + cServerName + "', " + CStr(DTSGlobalVariables("ukey_group").value) + ")"
+						orsLog.Open cSQLString, oConnection,1,1
+						err.clear
+					End If
+
+					oStageRecord("@cLogType") = cLogFile
+					oStageRecord("@cCategory") = cCategory
+					oStageRecord("@cComputerName") = cComputerName
+					oStageRecord("@cMessage") = cMessage
+					oStageRecord("@cSourceName") = cSourceName
+					oStageRecord("@cTimeWritten") = cEventDate
+					oStageRecord("@cType") = cEventType
+					oStageRecord("@cAUser") = cUserName
+					oStageRecord.Execute
+
+					 If err.number <>0 then
+						cErrorMessage = err.description
+						if isnull(cErrorMessage) = true then
+							cErrorMessage = "BAD MESSAGE"
+						end if
+
+						cSQLString="insert into eventlog_history (notes, serverName, ukey_group) values ('" + cServerName+  ": Error writing application event detail. " + cErrorMessage  + " ', '" + cServerName + "', " + CStr(DTSGlobalVariables("ukey_group").value) + ")"
+						orsLog.Open cSQLString, oConnection,1,1
+						err.clear
+					End If
+				 Next
+
+				cSQLString="insert into eventlog_history (notes, serverName, ukey_group) values ('"+ cServerName+ ": application log parsed', '" + cServerName + "', " + CStr(DTSGlobalVariables("ukey_group").value) + ")"
+				orsLog.Open cSQLString, oConnection,1,1
+			end if
+
+			Set oEvents=nothing
+			err.clear
+
+			cWMIString = "SELECT * " + _
+				"FROM Win32_NTLogEvent " + _
+				"WHERE Logfile = 'System' " + _
+					"and ( " + _
+						"Type ='Warning' or Type='Error' or SourceName = 'EventLog' or sourceName='ClusSvc' or sourceName = 'raidisk' or sourceName = 'Server Agents' or sourceName = 'Application Popup' or sourceName = 'USER32' " + _
+					") " + _
+					"and TimeWritten >='"+ dStartDate +"'"
+
+'			cSQLString="insert into eventlog_history (notes, serverName, ukey_group) values ('"+ cServerName+ ": Querying System log. " + replace(cWMIString, "'", "") + ".', '" + cServerName + "', " + CStr(DTSGlobalVariables("ukey_group").value) + ")"
+'			orsLog.Open cSQLString, oConnection,1,1
+
+			set oEvents = oWMI.ExecQuery(cWMIString)
+
+			if err.number <>0 then
+				cErrorMessage = replace(err.description, "'", "")
+				if isnull(cErrorMessage) = true then
+					cErrorMessage = "BAD MESSAGE"
+				end if
+
+				cSQLString="insert into eventlog_history (notes, serverName, ukey_group) values ('" + cServerName+  ": Error " + cErrorMessage  + " ', '" + cServerName + "', " + CStr(DTSGlobalVariables("ukey_group").value) + ")"
+				orsLog.Open cSQLString, oConnection,1,1
+				err.clear
+			else
+
+				nNumEvents = oEvents.count
+
+				if isnull(nNumEvents) = true then
+					nNumEvents = 0
+				end if
+
+				cSQLString="insert into eventlog_history (notes, serverName, ukey_group) values ('"+ cServerName+ ": system log retrieved " + cstr(nNumEvents) + " events', '" + cServerName + "', " + CStr(DTSGlobalVariables("ukey_group").value) + ")"
+				orsLog.Open cSQLString, oConnection,1,1
+
+				For Each objEvent in oEvents
+					 cSQLString=""
+					 cEventDate=""
+					 cUserName ="N/A"
+					 cMessage =" "
+					 cLogFile = ""
+					 cCategory = ""
+					 cComputerName = ""
+					 cSourceName = ""
+					 cEventType = ""
+
+					 if IsNull(objEvent.User) = false Then
+						cUserName = Left(objEvent.User, 200)
+					 End if
+
+					 If IsNull(objEvent.Message) = false Then
+					 	cMessage = Left(replace(objEvent.Message,"'"," "), 8000)
+					 End If
+
+					 If IsNull(objEvent.TimeWritten) = false Then
+					 	cEventDate = "'" + cstr(objEvent.TimeWritten) + "'"
+					 End If
+
+					 If IsNull(objEvent.Logfile) = false Then
+					 	cLogFile = Left(objEvent.Logfile, 100)
+					 End If
+
+					 If IsNull(objEvent.Category) = false Then
+					 	cCategory = Left(Cstr(objEvent.Category), 200)
+					 End If
+
+					 If IsNull(objEvent.ComputerName) = false Then
+					 	cComputerName = Left(objEvent.ComputerName, 200)
+					 End If
+
+					 If IsNull(objEvent.SourceName) = false Then
+					 	cSourceName = Left(objEvent.SourceName, 200)
+					 End If
+
+					 If IsNull(objEvent.Type) = false Then
+					 	cEventType = Left(objEvent.Type, 200)
+					 End If
+
+					oStageRecord("@cLogType") = cLogFile
+					oStageRecord("@cCategory") = cCategory
+					oStageRecord("@cComputerName") = cComputerName
+					oStageRecord("@cMessage") = cMessage
+					oStageRecord("@cSourceName") = cSourceName
+					oStageRecord("@cTimeWritten") = cEventDate
+					oStageRecord("@cType") = cEventType
+					oStageRecord("@cAUser") = cUserName
+					oStageRecord.Execute
+
+
+					 If err.number <>0 then
+						cErrorMessage = err.description
+						if isnull(cErrorMessage) = true then
+							cErrorMessage = "BAD MESSAGE"
+						end if
+
+						cSQLString="insert into eventlog_history (notes, serverName, ukey_group) values ('" + cServerName+  ": Error writing system event detail. " + cErrorMessage  + " ', '" + cServerName + "', " + CStr(DTSGlobalVariables("ukey_group").value) + ")"
+						orsLog.Open cSQLString, oConnection,1,1
+						err.clear
+					End If
+				Next
+
+				cSQLString="insert into eventlog_history (notes, serverName, ukey_group) values ('"+ cServerName+ ": system log parsed', '" + cServerName + "', " + CStr(DTSGlobalVariables("ukey_group").value) + ")"
+				orsLog.Open cSQLString, oConnection,1,1
+
+			end if
+		end if
+		if err.number <> 0 then
+			cErrorMessage = err.description
+			if isnull(cErrorMessage) = true then
+				cErrorMessage = "BAD MESSAGE"
+			end if
+
+			cSQLString="insert into eventlog_history (notes, serverName, ukey_group) values ('" + cServerName+  ": Error " + cErrorMessage  + " ', '" + cServerName + "', " + CStr(DTSGlobalVariables("ukey_group").value) + ")"
+			orsLog.Open cSQLString, oConnection,1,1
+			err.clear
+		end if
+
+		cSQLString="insert into eventlog_history (notes, serverName, ukey_group) values ('" + cServerName + ":  Examination Completed', '" + cServerName + "', " + CStr(DTSGlobalVariables("ukey_group").value) + ")"
+		orsLog.Open cSQLString, oConnection,1,1
+
+		'If cErrorMessage = "" Then
+			cSQLString="update dm_servers set lastEventLogCheck = getDate() where serverName = '" + cServerName + "' and isEnabled = 1 and eventLogCheck = 1"
+			orsLog.Open cSQLString, oConnection,1,1
+		'End If
+
+		orsServerList.movenext
+
+		if err.number <> 0 then
+			cErrorMessage = err.description
+			if isnull(cErrorMessage) = true then
+				cErrorMessage = "BAD MESSAGE"
+			end if
+
+			cSQLString="insert into eventlog_history (notes, serverName, ukey_group) values ('" + cServerName+  ": Error " + cErrorMessage  + " ', '" + cServerName + "', " + CStr(DTSGlobalVariables("ukey_group").value) + ")"
+			orsLog.Open cSQLString, oConnection,1,1
+			err.clear
+		end if
+	loop
+
+	oConnection.close
+
+	Main = DTSTaskExecResult_Success
+End Function

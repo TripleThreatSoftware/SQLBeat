@@ -1,6 +1,6 @@
 USE [Notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_processEventLogMessages]    Script Date: 03/17/2010 10:53:53 ******/
+/****** Object:  StoredProcedure [dbo].[pr_processEventLogMessages]    Script Date: 03/31/2010 10:33:35 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
