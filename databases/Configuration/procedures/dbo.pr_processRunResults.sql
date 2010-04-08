@@ -1,3 +1,8 @@
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
 -- select top 100 * from runs_log order by ymd desc
 -- exec pr_processRunResults 37
 -- select top 100 * from notification..drivespacelog order by ukey desc
@@ -315,6 +320,7 @@ begin
 				and instanceName not like '%seclogon%'
 				and instanceName not like '%aelookupsvc%'
 				and instanceName not like '%MSIServer%'
+				and instanceName not like '%Windows Error Reporting Service%'
 
 				and instanceName not like '%netmeeting%'
 				and instanceName not like '%secondary logon%'
@@ -622,4 +628,3 @@ begin
 
 	insert into runs_log (message, ukey_group) values ('PRR: Done!', @nUkeyGroup)
 end
-GO
