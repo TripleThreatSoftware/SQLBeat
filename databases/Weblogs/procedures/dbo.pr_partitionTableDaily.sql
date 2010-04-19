@@ -629,7 +629,7 @@ create table [' + @cArchiveTableName + '_' + @cToday + '] (' + @cTableStructure 
 
 					set @cSQLString = '
 use [' + @cDatabaseName + ']
-' + case when @@version not like '%server 2008%' then 'backup log ['' + @@cDatabaseName + ''] with truncate_only' else '' end + '
+' + case when @@version not like '%server 2008%' then 'backup log ['' + @cDatabaseName + ''] with truncate_only' else '' end + '
 --exec sp_spaceUsed @updateusage = ''TRUE''
 dbcc shrinkfile(2,1)'
 

@@ -180,14 +180,15 @@ begin
 	update #partitionTables
 		set basename = case
 			when charindex('200', tablename) > 0 then stuff(tablename, charindex('200', tablename), 8, '')
+			when charindex('20', tablename) > 0 then stuff(tablename, charindex('20', tablename), 9, '')
 			else tablename
 			end
 		where tableName not like '%week%'
 
 	update #partitionTables
-		set baseName = substring(tablename, 1, charindex('_200', tablename) - 1)
+		set baseName = substring(tablename, 1, charindex('_20', tablename) - 1)
 		where tablename like '%week%'
-			and charindex('_200', tablename) > 1
+			and charindex('_20', tablename) > 1
 
 	update #partitionTables
 		set baseName = left(baseName, len(baseName) - charindex('_', reverse(baseName)))
@@ -245,7 +246,7 @@ begin
 
 		select top 1 @cThisViewName = viewname from #partitionViews
 
---		print 'Processing view: ' + @cThisViewName
+		print 'Processing view: ' + @cThisViewName
 
 		-- and figure out which archive databases have tables which would contribute to the larger view
 		truncate table #viewTables
@@ -549,21 +550,21 @@ begin
 	 			--print '15: ' + @cVeryLongString15
 			end
 
--- 			print @cVeryLongString1
--- 			print @cVeryLongString2
--- 			print @cVeryLongString3
--- 			print @cVeryLongString4
--- 			print @cVeryLongString5
--- 			print @cVeryLongString6
--- 			print @cVeryLongString7
--- 			print @cVeryLongString8
--- 			print @cVeryLongString9
--- 			print @cVeryLongString10
--- 			print @cVeryLongString11
--- 			print @cVeryLongString12
--- 			print @cVeryLongString13
--- 			print @cVeryLongString14
--- 			print @cVeryLongString15
+ 			--print @cVeryLongString1
+ 			--print @cVeryLongString2
+ 			--print @cVeryLongString3
+ 			--print @cVeryLongString4
+ 			--print @cVeryLongString5
+ 			--print @cVeryLongString6
+ 			--print @cVeryLongString7
+ 			--print @cVeryLongString8
+ 			--print @cVeryLongString9
+ 			--print @cVeryLongString10
+ 			--print @cVeryLongString11
+ 			--print @cVeryLongString12
+ 			--print @cVeryLongString13
+ 			--print @cVeryLongString14
+ 			--print @cVeryLongString15
 
 			exec(@cVeryLongString1
 				+ @cVeryLongString2
