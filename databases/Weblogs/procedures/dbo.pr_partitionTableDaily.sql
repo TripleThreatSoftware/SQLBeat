@@ -1,3 +1,8 @@
+/****** Object:  StoredProcedure [dbo].[pr_partitionTableDaily]    Script Date: 04/20/2010 13:32:45 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 -- The keyFieldList variable should not contain ymd_id or ymd fields
 ALTER   procedure [dbo].[pr_partitionTableDaily] (@cTableName varchar(100), @cDateField varchar(100), @cKeyfieldList varchar(100), @lMakeUkey bit)
 as
@@ -629,7 +634,7 @@ create table [' + @cArchiveTableName + '_' + @cToday + '] (' + @cTableStructure 
 
 					set @cSQLString = '
 use [' + @cDatabaseName + ']
-' + case when @@version not like '%server 2008%' then 'backup log ['' + @cDatabaseName + ''] with truncate_only' else '' end + '
+' + case when @@version not like '%server 2008%' then 'backup log [' + @cDatabaseName + '] with truncate_only' else '' end + '
 --exec sp_spaceUsed @updateusage = ''TRUE''
 dbcc shrinkfile(2,1)'
 
