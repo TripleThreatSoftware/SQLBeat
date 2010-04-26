@@ -119,7 +119,7 @@ begin
 		where left([name], len(db_name())) = db_name()
 			and [name] <> db_name()
 			and dbo.fn_returnDigits([name], 0) > 0
-			and [name] not in ('master', 'model', 'msdb', 'northwind')
+			and [name] not in ('master', 'model', 'msdb', 'northwind', 'reporting')
 			and (
 				status in (0, 8)
 				or (not status % 32 = 0 and not status % 64 = 0 and not status % 128 = 0 and not status % 512 = 0)
@@ -248,6 +248,9 @@ begin
 
 		print 'Processing view: ' + @cThisViewName
 
+		if exists (select top 1 [name] from sysobjects where [name] = 'hist_partitionTableDaily')
+			insert into hist_partitionTableDaily (stepName) values ('Processing view')
+
 		-- and figure out which archive databases have tables which would contribute to the larger view
 		truncate table #viewTables
 		insert into #viewTables
@@ -293,6 +296,9 @@ begin
 		--***********************************************************************************************
 		-- This makes the _lastMonth view
 
+		if exists (select top 1 [name] from sysobjects where [name] = 'hist_partitionTableDaily')
+			insert into hist_partitionTableDaily (stepName) values ('Creating lastmonth view')
+
 		set @cFullViewname = 'v_' + @cThisViewName + '_lastMonth'
 
 		set @cSQLString =
@@ -327,6 +333,9 @@ begin
 		--***********************************************************************************************
 		-- This makes the _thisMonth view
 
+		if exists (select top 1 [name] from sysobjects where [name] = 'hist_partitionTableDaily')
+			insert into hist_partitionTableDaily (stepName) values ('Creating thismonth view')
+
 		set @cFullViewname = 'v_' + @cThisViewName + '_thisMonth'
 
 		set @cSQLString =
@@ -354,6 +363,9 @@ begin
 
 		-- This makes the _thisMonth view
 		--***********************************************************************************************
+
+		if exists (select top 1 [name] from sysobjects where [name] = 'hist_partitionTableDaily')
+			insert into hist_partitionTableDaily (stepName) values ('Creating all view')
 
 
 		set @cFullViewName = 'v_' + @cThisViewName + '_all'
@@ -566,44 +578,58 @@ begin
  			--print @cVeryLongString14
  			--print @cVeryLongString15
 
-			exec(@cVeryLongString1
-				+ @cVeryLongString2
-				+ @cVeryLongString3
-				+ @cVeryLongString4
-				+ @cVeryLongString5
-				+ @cVeryLongString6
-				+ @cVeryLongString7
-				+ @cVeryLongString8
-				+ @cVeryLongString9
-				+ @cVeryLongString10
-				+ @cVeryLongString11
-				+ @cVeryLongString12
-				+ @cVeryLongString13
-				+ @cVeryLongString14
-				+ @cVeryLongString15
-				+ @cVeryLongString16
-				+ @cVeryLongString17
-				+ @cVeryLongString18
-				+ @cVeryLongString19
-				+ @cVeryLongString20
-				+ @cVeryLongString21
-				+ @cVeryLongString22
-				+ @cVeryLongString23
-				+ @cVeryLongString24
-				+ @cVeryLongString25
-				+ @cVeryLongString26
-				+ @cVeryLongString27
-				+ @cVeryLongString28
-				+ @cVeryLongString29
-				+ @cVeryLongString30
-				)
+			if exists (select top 1 [name] from sysobjects where [name] = 'hist_partitionTableDaily')
+				insert into hist_partitionTableDaily (stepName) values ('Creating all view')
 
+			if exists (select top 1 [name] from sysobjects where [name] = 'hist_partitionTableDaily')
+				insert into hist_partitionTableDaily (stepName) values (@cVeryLongString1)
+
+ 			begin try
+				exec(@cVeryLongString1
+					+ @cVeryLongString2
+					+ @cVeryLongString3
+					+ @cVeryLongString4
+					+ @cVeryLongString5
+					+ @cVeryLongString6
+					+ @cVeryLongString7
+					+ @cVeryLongString8
+					+ @cVeryLongString9
+					+ @cVeryLongString10
+					+ @cVeryLongString11
+					+ @cVeryLongString12
+					+ @cVeryLongString13
+					+ @cVeryLongString14
+					+ @cVeryLongString15
+					+ @cVeryLongString16
+					+ @cVeryLongString17
+					+ @cVeryLongString18
+					+ @cVeryLongString19
+					+ @cVeryLongString20
+					+ @cVeryLongString21
+					+ @cVeryLongString22
+					+ @cVeryLongString23
+					+ @cVeryLongString24
+					+ @cVeryLongString25
+					+ @cVeryLongString26
+					+ @cVeryLongString27
+					+ @cVeryLongString28
+					+ @cVeryLongString29
+					+ @cVeryLongString30
+					)
+			end try
+			begin catch
+				print 'Failed to create view'
+				print error_message()
+			end catch
 
 			-- then, once the table exists we need to be sure proper access rights are granted to it.
 			set @cSQLString = 'grant select on ' + @cFullViewName + ' to public ' + char(13) + char(10) + char(9) +
 				'grant insert on ' + @cFullViewName + ' to public ' + char(13) + char(10) + char(9) +
 				'grant update on ' + @cFullViewName + ' to public ' + char(13) + char(10) + char(9) +
 				'grant delete on ' + @cFullViewName + ' to public '
+
+			if exists (select top 1 [name] from sysobjects where [name] = 'hist_partitionTableDaily')
+				insert into hist_partitionTableDaily (stepName) values ('granting permissions')
 
 			exec(@cSQLString)
 	-- 		print @cSQLString
@@ -623,7 +649,10 @@ begin
 	drop table #alltablefields
 	drop table #dm_ymd
 
-	select 'Views created.'
+	print 'Views created.'
+
+		if exists (select top 1 [name] from sysobjects where [name] = 'hist_partitionTableDaily')
+			insert into hist_partitionTableDaily (stepName) values ('Done')
 
 	return 0
 
