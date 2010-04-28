@@ -1,0 +1,9 @@
+http://www.sqlteam.com/article/scheduling-jobs-in-sql-server-express
+
+http://www.sqlteam.com/article/scheduling-jobs-in-sql-server-express-2
+
+http://www.sqlteam.com/downloads/27002_SQLExpressScheduling_A2.sql
+
+http://www.example.com/technical/how-to-perform-an-unattended-installation-of-sql-server-2008-express/
+
+http://blogesh.wordpress.com/2008/09/23/silent-install-of-sql-server-2008/

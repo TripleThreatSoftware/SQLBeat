@@ -1,6 +1,6 @@
 USE [Notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_processEventLogMessages]    Script Date: 03/31/2010 10:33:35 ******/
+/****** Object:  StoredProcedure [dbo].[pr_processEventLogMessages]    Script Date: 04/28/2010 09:29:45 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -123,6 +123,7 @@ begin
 			and message not like '%backup%'
 			and message not like '%restore%'
 			and message not like '%dtc%'
+			and message not like '%12Hive%'
 			and message not like '%exceeded time limits%'
 			and message not like '%cachestore flush%'
 			and message not like '%setting database option%'
@@ -202,6 +203,11 @@ begin
 			and message not like '%the execute method of job definition%'
 
 			and message not like '%The Security System detected an authentication error for%'
+
+			and message not like '%performance library%'
+			and message not like '%extensible counter%'
+			and message not like '%flushed by the application%'
+
 
 			and isnull(message, '') <> ''
 

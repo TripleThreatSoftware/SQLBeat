@@ -1,3 +1,6 @@
+USE [Notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_processStagedAlerts]    Script Date: 04/28/2010 09:36:32 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -97,6 +100,7 @@ begin
 		from notificationLog_stage a
 		join notificationLog b on a.serverName = b.serverName
 			and a.subject = b.subject
+--			and a.message = b.message
 			and (
 				b.ymd >= dateAdd(hour, -2, getDate())
 				or a.ymd = b.ymd
@@ -112,6 +116,10 @@ begin
 		from notificationLog_stage a
 		join dm_servers b (nolock) on a.serverName = b.serverName
 		join dm_serverGroups c (nolock) on b.ukey_group = c.ukey
+
+	update notificationLog_stage
+		set severity = 2
+		where message like '%cannot obtain the schema%'
 
 --	update notificationLog_stage
 --		set severity = 2
@@ -142,16 +150,12 @@ begin
 		join dm_servers b (nolock) on a.serverName = b.serverName
 		where b.silenceUntil is not null
 			and getDate() < b.silenceUntil
-			and a.ukey >= @nMinUkey
-			and a.ukey <= @nMaxUkey
 
 	delete notificationLog_stage
 		from notificationLog_stage a
 		join dm_servers b (nolock) on a.serverName = b.serverName
 		where b.silenceUntil is not null
 			and getDate() < b.silenceUntil
-			and a.ukey >= @nMinUkey
-			and a.ukey <= @nMaxUkey
 
 	--***************************************************************************************************
 	-- Manual cleanup
@@ -217,8 +221,6 @@ begin
 				having dateDiff(minute, max(ymd), getDate()) >= 15
 			) b on a.serverName = b.serverName
 		where isConnectivity = 1
-			and a.ukey >= @nMinUkey
-			and a.ukey <= @nMaxUkey
 
 	delete notificationLog_stage
 		from notificationLog_stage a
@@ -230,8 +232,6 @@ begin
 				having dateDiff(minute, max(ymd), getDate()) >= 15
 			) b on a.serverName = b.serverName
 		where isConnectivity = 1
-			and a.ukey >= @nMinUkey
-			and a.ukey <= @nMaxUkey
 
 	--***************************************************************************************************
 	-- Get down to the business of sending
