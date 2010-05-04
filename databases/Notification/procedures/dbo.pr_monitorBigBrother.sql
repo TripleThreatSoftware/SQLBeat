@@ -1,6 +1,3 @@
-USE [Notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_monitorBigBrother]    Script Date: 03/31/2010 10:48:21 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -207,8 +204,11 @@ begin
 		--*********************************************************************************************************************
 		-- begin INPUTBUFFER: for each SPID, figure out what the last command they sent over is
 
+		declare @cSharedFolder varchar(500)
+		set @cSharedFolder = (select top 1 settingValue from notification.dbo.dm_settings where settingName = 'Shared Folder')
+
 		-- without password, for local boxes that'll accept sqladmin under windows authentication
-		set @cSQLString = 'osql -S' + @cServerName + ' -E -n -h-1 -w300 -dmaster -i"\\' + @cThisServerName + '\shared\all_user_activity.SQL"'
+		set @cSQLString = @cSharedFolder + '\osql -S' + @cServerName + ' -E -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\all_user_activity.SQL"'
 
 		insert into #userActivity (nastyLine)
 		exec master..xp_cmdShell @cSQLString
@@ -1410,7 +1410,7 @@ begin
 
 	insert into #results (message, severity, subject, isDriveSpace)
 	select 'Drive ' + driveLetter + ' is down to ' + convert(varchar(100), freeSpace) + 'mb free.',
-		3 as severity,
+		2 as severity,
 		'Drive ' + driveLetter + ' is down to ' + convert(varchar(100), freeSpace) + 'mb free.' as subject,
 		1 as isDriveSpace
 		from #drives

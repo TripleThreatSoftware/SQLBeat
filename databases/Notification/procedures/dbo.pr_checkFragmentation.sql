@@ -1,6 +1,3 @@
-USE [Notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_checkFragmentation]    Script Date: 03/24/2010 09:11:45 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -84,15 +81,18 @@ begin
 		if isnull(@nReturnStatus, 0) = 0
 			continue
 
+		declare @cSharedFolder varchar(500)
+		set @cSharedFolder = (select top 1 settingValue from notification.dbo.dm_settings where settingName = 'Shared Folder')
+
 		if isnull(@cUserName, '') <> ''
 		begin
 			-- with password
-			set @cSQLString = 'osql -S' + @cServerName + ' -U' + @cUserName + ' -P' + isnull(@cPassword, '') + ' -n -h-1 -w300 -dmaster -i"\\' + @cThisServerName + '\shared\fragmentation_check_and_fix.SQL"'
+			set @cSQLString = @cSharedFolder + '\osql -S' + @cServerName + ' -U' + @cUserName + ' -P' + isnull(@cPassword, '') + ' -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\fragmentation_check_and_fix.SQL"'
 		end
 		else
 		begin
 			-- without password under windows authentication
-			set @cSQLString = 'osql -S' + @cServerName + ' -E -n -h-1 -w300 -dmaster -i"\\' + @cThisServerName + '\shared\fragmentation_check_and_fix.SQL"'
+			set @cSQLString = @cSharedFolder + '\osql -S' + @cServerName + ' -E -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\fragmentation_check_and_fix.SQL"'
 		end
 
 		insert into #results (resultLine)

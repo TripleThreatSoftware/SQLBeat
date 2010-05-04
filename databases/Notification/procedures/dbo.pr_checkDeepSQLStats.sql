@@ -1,11 +1,12 @@
-truncate table deepSQLStats_unindexedTables
-truncate table deepSQLStats_indexesNotOptimal
-
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
 GO
 --***********************************************************************************************************************************************
 --***********************************************************************************************************************************************
 
-
+-- pr_checkDeepSQLStats
+-- update dm_servers set lastDeepSQL2005Check = null
 ALTER procedure [dbo].[pr_checkDeepSQLStats]
 as
 begin
@@ -53,19 +54,25 @@ begin
 				and (lastDeepSQL2005Check is null or dateDiff(minute, lastDeepSQL2005Check, getDate()) > isnull(deepSQL2005CheckMinuteInterval, 5))
 			order by serverName
 
+		declare @cSharedFolder varchar(500)
+		set @cSharedFolder = (select top 1 settingValue from notification.dbo.dm_settings where settingName = 'Shared Folder')
+
 		if @cUserName is not null
 		begin
 			-- with password
-			set @cSQLString = 'osql -S' + @cServerName + ' -U' + @cUserName + ' -P' + @cPassword + ' -n -h-1 -w300 -dmaster -i"\\' + @cThisServerName + '\shared\server_performance.SQL"'
+			set @cSQLString = @cSharedFolder + '\osql -S' + @cServerName + ' -U' + @cUserName + ' -P' + @cPassword + ' -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\server_performance.SQL"'
 		end
 		else
 		begin
 			-- without password, for local boxes that'll accept sqladmin under windows authentication
-			set @cSQLString = 'osql -S' + @cServerName + ' -E -n -h-1 -w300 -dmaster -i"\\' + @cThisServerName + '\shared\server_performance.SQL"'
+			set @cSQLString = @cSharedFolder + '\osql -S' + @cServerName + ' -E -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\server_performance.SQL"'
 		end
 
 		insert into #performance (nastyLine)
 		exec master..xp_cmdShell @cSQLString
+
+
+		print 'Found ' + convert(varchar(20), @@rowcount) + ' measures'
 
 		update #performance set nastyLine = rtrim(ltrim(replace(replace(replace(nastyLine, char(9), ''), char(13), ''), '  ', ' ')))
 
@@ -79,6 +86,7 @@ begin
 					or nastyLine like '%incorrect syntax%'
 					or nastyLine like '%sql native client%'
 					or nastyLine like '%login timeout expired%'
+					or nastyLine like '%incorrect%'
 					or nastyLine like '%could not open a connection%'
 			) > 0
 		begin
@@ -91,6 +99,9 @@ begin
 --					or nastyLine like '%incorrect syntax%'
 				order by ukey
 
+			print 'Error!'
+			print @cSQLString
+			print @cMessage
 
 			if (select count(*) from notificationLog where serverName = @cServerName and subject like '%deep sql scan failed%' and ymd >= dateAdd(hour, -3, getDate())) > 2
 			begin

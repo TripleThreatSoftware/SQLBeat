@@ -1,3 +1,8 @@
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
 ALTER  procedure [dbo].[pr_checkIntegrity] (@nServerGroup int)
 as
 begin
@@ -59,15 +64,18 @@ begin
 		if isnull(@nReturnStatus, 0) = 0
 			continue
 
+		declare @cSharedFolder varchar(500)
+		set @cSharedFolder = (select top 1 settingValue from notification.dbo.dm_settings where settingName = 'Shared Folder')
+
 		if isnull(@cUserName, '') <> ''
 		begin
 			-- with password
-			set @cSQLString = 'osql -S' + @cServerName + ' -U' + @cUserName + ' -P' + isnull(@cPassword, '') + ' -n -h-1 -w300 -dmaster -i"\\' + @cThisServerName + '\shared\check_all_databases.SQL"'
+			set @cSQLString = @cSharedFolder + '\osql -S' + @cServerName + ' -U' + @cUserName + ' -P' + isnull(@cPassword, '') + ' -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\check_all_databases.SQL"'
 		end
 		else
 		begin
 			-- without password under windows authentication
-			set @cSQLString = 'osql -S' + @cServerName + ' -E -n -h-1 -w300 -dmaster -i"\\' + @cThisServerName + '\shared\check_all_databases.SQL"'
+			set @cSQLString = @cSharedFolder + '\osql -S' + @cServerName + ' -E -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\check_all_databases.SQL"'
 		end
 
 		insert into #results (resultLine)
@@ -92,7 +100,7 @@ begin
 			'Integrity checks failed for "' + isnull(@cFriendlyName, @cServerName) + '.' + databaseName + '" as "' + isnull(@cUserName, '') + '/' + isnull(@cPassword, '') + '" with the following error: ' + char(13) +
 				isnull(resultLine, 'NULL MESSAGE') + char(13) + char(13) +
 				'Further checks of this server will be automatically DISABLED.' as message,
-			2 as severity,
+			3 as severity,
 			isnull(@cFriendlyName, @cServerName) as serverName
 			from #results
 			where resultLine like '%login failed%'

@@ -63,15 +63,18 @@ begin
 
 			order by servername
 
+		declare @cSharedFolder varchar(500)
+		set @cSharedFolder = (select top 1 settingValue from notification.dbo.dm_settings where settingName = 'Shared Folder')
+
 		if @cUserName is not null
 		begin
 			-- with password
-			set @cSQLString = 'osql -S' + @cServerName + ' -U' + @cUserName + ' -P' + @cPassword + ' -n -h-1 -w300 -dmaster -i"\\' + @cThisServerName + '\shared\all_table_sizes.SQL"'
+			set @cSQLString = @cSharedFolder + '\osql -S' + @cServerName + ' -U' + @cUserName + ' -P' + @cPassword + ' -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\all_table_sizes.SQL"'
 		end
 		else
 		begin
 			-- without password, for local boxes that will accept sqladmin under windows authentication
-			set @cSQLString = 'osql -S' + @cServerName + ' -E -n -h-1 -w300 -dmaster -i"\\' + @cThisServerName + '\shared\all_table_sizes.SQL"'
+			set @cSQLString = @cSharedFolder + '\osql -S' + @cServerName + ' -E -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\all_table_sizes.SQL"'
 		end
 
 		insert into #history (nastyLine)

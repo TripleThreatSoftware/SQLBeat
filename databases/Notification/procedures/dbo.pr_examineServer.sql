@@ -1,8 +1,3 @@
-/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 03/24/2010 12:05:21 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
 --select top 100 * from notificationLog_history order by ymd desc
 -- exec pr_examineServer 'sqlcluster01', 600
 -- select architecture, * from dm_servers
@@ -114,6 +109,9 @@ begin
 		where serverName = @cServerName
 
 	update dm_servers with (rowlock) set skipNextRun = 0 where serverName = @cServerName
+
+	declare @cSharedFolder varchar(500)
+	set @cSharedFolder = (select top 1 settingValue from notification.dbo.dm_settings where settingName = 'Shared Folder')
 
 	set @cServerNamePart = @cFriendlyName
 
@@ -741,12 +739,12 @@ begin
 		if @cUserName is not null
 		begin
 			-- with password, for stores
-			set @cSQLString = 'osql -S' + @cServerName + ' -U' + @cUserName + ' -P' + @cPassword + ' -n -h-1 -w300 -dmaster -i"\\' + @cThisServerName + '\shared\all_user_activity.SQL"'
+			set @cSQLString = @cSharedFolder + '\osql -S' + @cServerName + ' -U' + @cUserName + ' -P' + @cPassword + ' -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\all_user_activity.SQL"'
 		end
 		else
 		begin
 			-- without password, for local boxes that'll accept sqladmin under windows authentication
-			set @cSQLString = 'osql -S' + @cServerName + ' -E -n -h-1 -w300 -dmaster -i"\\' + @cThisServerName + '\shared\all_user_activity.SQL"'
+			set @cSQLString = @cSharedFolder + '\osql -S' + @cServerName + ' -E -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\all_user_activity.SQL"'
 		end
 
 		insert into #userActivity (nastyLine)

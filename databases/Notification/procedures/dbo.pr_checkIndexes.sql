@@ -2,6 +2,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 ALTER procedure [dbo].[pr_checkIndexes]
 as
 begin
@@ -60,15 +61,18 @@ begin
 		if isnull(@nReturnStatus, 0) = 0
 			continue
 
+		declare @cSharedFolder varchar(500)
+		set @cSharedFolder = (select top 1 settingValue from notification.dbo.dm_settings where settingName = 'Shared Folder')
+
 		if isnull(@cUserName, '') <> ''
 		begin
 			-- with password
-			set @cSQLString = 'osql -S' + @cServerName + ' -U' + @cUserName + ' -P' + isnull(@cPassword, '') + ' -n -h-1 -w300 -dmaster -i"\\' + @cThisServerName + '\shared\analyze_indexes.SQL"'
+			set @cSQLString = @cSharedFolder + '\osql -S' + @cServerName + ' -U' + @cUserName + ' -P' + isnull(@cPassword, '') + ' -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\analyze_indexes.SQL"'
 		end
 		else
 		begin
 			-- without password under windows authentication
-			set @cSQLString = 'osql -S' + @cServerName + ' -E -n -h-1 -w300 -dmaster -i"\\' + @cThisServerName + '\shared\analyze_indexes.SQL"'
+			set @cSQLString = @cSharedFolder + '\osql -S' + @cServerName + ' -E -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\analyze_indexes.SQL"'
 		end
 
 		insert into #performance (nastyLine)
@@ -89,7 +93,7 @@ begin
 				order by ukey
 
 			insert into notificationLog_stage (serverName, severity, subject, message)
-				values (@cServerName, 2, 'Index Analyzer failed at ' + convert(varchar(20), getDate()), @cMessage)
+				values (@cServerName, 3, 'Index Analyzer failed at ' + convert(varchar(20), getDate()), @cMessage)
 
 			continue
 		end
