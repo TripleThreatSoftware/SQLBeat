@@ -1,18 +1,6 @@
-CREATE PROC pr_addJobSchedule
-(
-	@nUkeyJobSchedule INT OUT,
-	@RunAtInSecondsFromMidnight INT,
-	@FrequencyType INT = 0,
-	@Frequency INT = 1,
-	@AbsoluteSubFrequency VARCHAR(100) = NULL,
-	@MontlyRelativeSubFrequencyWhich INT = NULL,
-	@MontlyRelativeSubFrequencyWhat INT = NULL
-)
-AS
-	SELECT @nUkeyJobSchedule = -1
-
-	INSERT INTO JobSchedules(FrequencyType, Frequency, AbsoluteSubFrequency, MontlyRelativeSubFrequencyWhich, MontlyRelativeSubFrequencyWhat, RunAtInSecondsFromMidnight)
-	SELECT @FrequencyType, @Frequency, @AbsoluteSubFrequency, @MontlyRelativeSubFrequencyWhich, @MontlyRelativeSubFrequencyWhat, @RunAtInSecondsFromMidnight
-
-	SELECT @nUkeyJobSchedule = SCOPE_IDENTITY()
+create procedure pr_addJobSchedule (@nUkeyJob int, @nHourStart int = -1, @nMinuteStart int = -1, @nEveryMinutes int = -1)
+as
+begin
+	insert into jobSchedules (ukey_job, hourStart, minuteStart, everyMinutes) values (@nUkeyJob, @nHourStart, @nMinuteStart, @nEveryMinutes)
+end
 GO

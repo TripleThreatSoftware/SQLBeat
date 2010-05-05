@@ -1,256 +1,429 @@
-/****** Object:  StoredProcedure [dbo].[pr_rpt_outageReport]    Script Date: 05/19/2009 13:59:45 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-CREATE procedure [dbo].[pr_rpt_outageReport]
+alter procedure [dbo].[pr_rpt_outageReport]
 as
 begin
+	set nocount on
 
 	-- First, detail on the time and duration of outages in the last week
 	declare @dStartDate dateTime
+	declare @dEndDate dateTime
 	declare @nThisUkey int
 	declare @cThisMessage varchar(8000)
 	declare @cThisSubject varchar(500)
-	set @dStartDate = dateAdd(week, -1, convert(varchar(10), getDate(), 120))
+	declare @dLatestViewData dateTime
+	declare @cServerName varchar(500)
+	declare @nCount int
 
-	select serverName, ymd as outageStart
-		into #outages
-		from pingLog
-		where
-			( isServerPingable = 0 or serverPingResults not like '%lost = 0%')
+	set @dStartDate = dateAdd(week, -1, getDate())
+
+	create table #tailDetail (ukey int identity, serverName varchar(200), eventDetail varchar(8000), startDate dateTime, endDate dateTime)
+
+	insert into #tailDetail (serverName, eventDetail, startDate, endDate)
+	select serverName, message , ymd, null
+		from notification.dbo.notificationLog (nolock)
+		where severity in (1,2)
+			and not (severity = 2 and (serverName like '%dev%' or serverName like '%uat%'))
+			and subject not like '%status report%'
+			and message not like '%cannot obtain the schema%'
+			and not isLongRunningProcess = 1
+			and not (subject like 'error%' and serverName = 'Portal Watcher')
+			and not subject like '%provisioning error%'
+			and not (serverName = 'heatsqllive' and isBlocking = 1)
+			and not subject like '%report server database is an invalid version%'
+			and not subject like '%virusscan%update failed%'
 			and ymd >= @dStartDate
+		order by ymd desc
 
-	select a.serverName, min(a.outageStart) as outageStart, b.outageStop, convert(varchar(50), null) as details
-		into #results
+
+	--*********************************************************************************************
+	-- Servers unpingable
+	--*********************************************************************************************
+	create table #outages (serverName varchar(100), startDate dateTime, endDate dateTime, pingsDown int)
+
+	select distinct serverName
+		into #activeServers
+		from notification.dbo.pingLog (nolock)
+		where isServerPingable = 0
+--		where (isServerPingable = 0 or serverPingResults not like '%lost = 0%')
+
+	set @dLatestViewData = (select max(ymd) from notification.dbo.v_pingLog_all)
+
+	insert into #outages (serverName, startDate, endDate)
+	select a.serverName, ymd as outageStart, null as endDate
+		from notification.dbo.v_pingLog_all a (nolock)
+		join #activeServers b on a.serverName = b.serverName
+--		where (a.isServerPingable = 0 or a.serverPingResults not like '%lost = 0%')
+		where a.isServerPingable = 0
+			and a.ymd >= @dStartDate
+
+	insert into #outages (serverName, startDate, endDate)
+	select serverName, startDate, endDate
+		from (
+			select a.serverName, ymd as startDate, null as endDate, isServerPingable
+				from notification.dbo.pingLog a (nolock)
+				join #activeServers b on a.serverName = b.serverName
+				where a.ymd >= @dStartDate
+					and a.ymd > @dLatestViewData
+			) a
+		where a.isServerPingable = 0
+
+	create clustered index ix_tmp_outages on #outages (servername, startDate) with fillfactor = 100
+
+	update #outages
+		set endDate = b.endDate
 		from #outages a
-		left outer join (
-			select a.serverName, a.outageStart, min(b.ymd) as outageStop
+		join (
+			select a.serverName, a.startDate,
+				min(b.ymd) as endDate
 				from #outages a
-				join pingLog b on a.serverName = b.serverName
+				join notification.dbo.v_pingLog_all b (nolock) on a.serverName = b.serverName
+					and b.ymd >= a.startDate
+					and b.ymd >= @dStartDate
 					and b.isServerPingable = 1
-					and b.ymd > a.outageStart
-				group by a.serverName, a.outageStart
+				group by a.serverName, a.startDate
 			) b on a.serverName = b.serverName
-				and a.outageStart = b.outageStart
-		group by a.serverName, b.outageStop
-		order by a.serverName, min(a.outageStart)
+				and a.startDate = b.startDate
 
-	select ukey_url, ymd as outageStart
-		into #websiteOutages
-		from websiteMonitor..monitoredURLs_history a
-		where a.ymd >= @dStartDate
-			and isAvailable = 0
+	update #outages
+		set endDate = b.endDate
+		from #outages a
+		join (
+			select a.serverName, a.startDate,
+				min(b.ymd) as endDate
+				from #outages a
+				join notification.dbo.pingLog b (nolock) on a.serverName = b.serverName
+					and b.ymd >= a.startDate
+					and b.ymd >= @dStartDate
+					and b.ymd >= @dLatestViewData
+					and b.isServerPingable = 1
+				group by a.serverName, a.startDate
+			) b on a.serverName = b.serverName
+				and a.startDate = b.startDate
+		where a.endDate is null
 
-	insert into #results (servername, outageStart, outageStop)
-	select distinct c.friendlyName, min(a.outageStart) as outageStart, b.outageStop
-		from #websiteOutages a
-		left outer join (
-			select a.ukey_url, a.outageStart, min(b.ymd) as outageStop
-				from #websiteOutages a
-				join websiteMonitor..monitoredURLs_history b on a.ukey_url = b.ukey_url
-					and b.isAvailable = 1
-					and b.ymd > a.outageStart
-				group by a.ukey_url, a.outageStart
-			) b on a.ukey_url = b.ukey_url
-				and a.outageStart = b.outageStart
-		join websiteMonitor..monitoredURLs c on a.ukey_url = c.ukey
+	update #outages
+		set pingsDown = b.pingsDown
+		from #outages a
+		join (
+			select a.serverName, a.startDate, count(*) as pingsDown
+				from #outages a
+				join notification.dbo.v_pingLog_all b on a.serverName = b.serverName
+					and b.ymd >= a.startDate
+					and b.ymd < a.endDate
+					and b.isServerPingable = 0
+				group by a.serverName, a.startDate
+			) b on a.serverName = b.serverName
+				and a.startDate = b.startDate
 
-		group by c.friendlyName, b.outageStop
-		order by c.friendlyName, min(a.outageStart)
+	update #outages
+		set pingsDown = isnull(a.pingsDown, 0) + b.pingsDown
+		from #outages a
+		join (
+			select a.serverName, a.startDate, count(*) as pingsDown
+				from #outages a
+				join notification.dbo.pingLog b on a.serverName = b.serverName
+					and b.ymd >= a.startDate
+					and b.ymd < a.endDate
+					and b.ymd >= @dLatestViewData
+					and b.isServerPingable = 0
+				group by a.serverName, a.startDate
+			) b on a.serverName = b.serverName
+				and a.startDate = b.startDate
 
-	insert into #results (servername, outageStart, outageStop, details)
-	select left(substring(subject, charindex('with ', subject) + 5, 99), charindex(' ', substring(subject, charindex('with ', subject) + 5, 99)) - 1) as serverName,
-		ymd as outageStart,
-		null as outageStop,
-		'Point Outage' as details
-		from notificationLog
-		where
-			serverName = (select settingValue from dm_settings where settingName = 'current machine name')
-			and subject like '%lost communication%'
-			and message not like '%transaction log%'
-			and message not like '%disk space%'
-			and ymd >= @dStartDate
-		order by ymd
+	delete from #outages where pingsDown = 1
 
-	-- Then, uptime summary for servers that have had outages
-	select a.friendlyName as serverName,
-		totalPings as connectionAttempts,
-		droppedPings as connectionFailures,
-		convert(decimal(10,2), convert(decimal(15,10), droppedPings)/convert(decimal(15,10), totalPings) * 100) as failureRate,
-		convert(decimal(10,2), convert(decimal(15,10), (totalPings - droppedPings))/convert(decimal(15,10), totalPings) * 100) as availability,
-		latestDrop, earliestData, latestData
+	--insert into #tailDetail (serverName, eventDetail, startDate, endDate, ukey_group, isConnectivity)
+	--select c.groupName,
+	--	convert(varchar(20), count(distinct a.serverName)) + ' servers were down ' +
+	--		'for ' + convert(varchar(20), sum(pingsDown)) + ' PING attempts, ' +
+	--		'a total of ' + convert(varchar(20), sum(dateDiff(minute, startDate, endDate))) + ' server minutes ' +
+	--		'beginning this hour.',
+	--	min(startDate), max(endDate),
+	--	c.ukey,
+	--	1
+	--	from #outages a
+	--	join notification..dm_servers b on a.serverName = b.serverName
+	--	join notification..dm_serverGroups c on b.ukey_group = c.ukey
+	--	group by c.ukey, c.groupName, convert(varchar(10), a.startDate, 120), datePart(hour, a.startDate)
+	--	having count(distinct a.serverName) >= 5
 
-		into #summary
+--	delete #outages
+--		from #outages a
+--		join notification..dm_servers b on a.serverName = b.serverName
+--		join (
+--			select c.ukey as ukey_group, min(a.startDate) as startDate, max(a.endDate) as endDate
+--				from #outages a
+--				join notification..dm_servers b on a.serverName = b.serverName
+--				join notification..dm_serverGroups c on b.ukey_group = c.ukey
+--				group by c.ukey, convert(varchar(10), a.startDate, 120), datePart(hour, a.startDate)
+--				having count(distinct a.serverName) >= 5
+--			) d on b.ukey_group = d.ukey_group
+--				and a.startDate >= d.startDate
+--				and a.endDate <= d.endDate
 
+	insert into #tailDetail (serverName, eventDetail, startDate, endDate)
+	select a.serverName,
+		case when dateDiff(minute, min(startDate), endDate) <= 1
+			then 'PING check momentarily failed at '
+			else 'Server unpingable at '
+			end +
+			convert(varchar(20), min(startDate), 120) +
+			case
+				when endDate is null then ', and is still OFFLINE'
+--				when dateDiff(minute, min(startDate), endDate) <= 1 then ''
+				when dateDiff(minute, min(startDate), endDate) < 60
+					then ' for ' + convert(varchar(20), dateDiff(minute, min(startDate), endDate)) + ' minutes'
+				else ' for ' + convert(varchar(20), convert(decimal(10,2), convert(decimal(10,2), dateDiff(minute, min(startDate), endDate))/60.00)) + ' hours(s)'
+				end as eventDetail,
+		min(a.startDate) as startDate,
+		endDate as endDate
+		from #outages a
+		join notification..dm_servers b on a.serverName = b.serverName
+		group by a.serverName, endDate
+		having dateDiff(minute, min(startDate), endDate) > 2
+
+
+
+	-- changes in state
+	insert into #tailDetail (serverName, eventDetail, startDate, endDate)
+	select d.keyName, a.currentState as oldState, a.ymd as startDate, b.ymd as endDate
 		from (
-			select
-				case when isnull(b.friendlyName, '') = '' then b.websiteURL else b.friendlyName end as friendlyName,
-				min(a.ymd) as earliestData,
-				max(a.ymd) as latestData,
-				min(case when a.isAvailable = 0 then a.ymd else null end) as earliestDrop,
-				max(case when a.isAvailable = 0 then a.ymd else null end) as latestDrop,
-				max(case when a.isAvailable = 1 then a.ymd else null end) as latestSuccess,
-				count(distinct case when a.isAvailable = 0 then a.ukey else null end) as droppedPings,
-				count(*) as totalPings
-				from websiteMonitor..monitoredURLs_history a
-				join websiteMonitor..monitoredURLs b on a.ukey_url = b.ukey
-					and b.isEnabled = 1
-				where a.ymd >= @dStartDate
-				group by case when isnull(b.friendlyName, '') = '' then b.websiteURL else b.friendlyName end
+			select a.ukey_stateKey, a.ymd, a.currentState, min(b.ukey) as ukey_stateChange
+				from (
+					select a.ukey_stateKey, a.ymd, a.currentState
+						from notification.dbo.stateLog a (nolock)
+						join notification.dbo.dm_stateValues b (nolock) on a.ukey_stateKey = b.ukey_stateKey
+							and a.currentState = b.[state]
+						where a.ymd >= @dStartDate
+					) a
+				left outer join notification.dbo.stateLog b (nolock) on a.ukey_stateKey = b.ukey_stateKey
+					and b.ymd > a.ymd
+--					and a.currentState <> b.currentState
+				group by a.ukey_stateKey, a.ymd, a.currentState
 			) a
-		where droppedPings > 0
+		join notification.dbo.stateLog b (nolock) on a.ukey_stateChange = b.ukey
+		join notification.dbo.dm_stateValues c (nolock) on b.ukey_stateKey = c.ukey_stateKey
+			and isnull(a.currentState, '') = isnull(c.state, '')
+			and c.isGood = 0
+--			-- must be bad for at least 2 minutes
+--			and dateDiff(minute, a.ymd, b.ymd) > 2
+		join notification.dbo.dm_stateKeys d (nolock) on b.ukey_stateKey = d.ukey
+		order by d.category, d.keyName, a.ymd
 
 
-	insert into #summary (serverName, connectionAttempts, connectionFailures, failureRate, availability, latestDrop, earliestData, latestData)
-	select a.friendlyName as serverName,
-		totalPings as connectionAttempts,
-		droppedPings as connectionFailures,
-		convert(decimal(10,2), convert(decimal(15,10), droppedPings)/convert(decimal(15,10), totalPings) * 100) as failureRate,
-		convert(decimal(10,2), convert(decimal(15,10), (totalPings - droppedPings))/convert(decimal(15,10), totalPings) * 100) as availability,
-		latestDrop, earliestData, latestData
-		from (
-			select
-				case when isnull(a.friendlyName, '') = '' then a.serverName else a.friendlyName end as friendlyName,
-				min(a.ymd) as earliestData,
-				max(a.ymd) as latestData,
-				min(case when a.isServerPingable = 0 or a.isSQLPingable = 0 or a.isRouterPingable = 0 then a.ymd else null end) as earliestDrop,
-				max(case when a.isServerPingable = 0 or a.isSQLPingable = 0 or a.isRouterPingable = 0 then a.ymd else null end) as latestDrop,
-				max(case when a.isServerPingable = 1 and a.isRouterPingable = 1 then a.ymd else null end) as latestSuccess,
-				count(distinct case when a.isServerPingable = 0 or a.isSQLPingable = 0 or a.isRouterPingable = 0 then a.ukey else null end) as droppedPings,
-				count(*) as totalPings,
-				avg(case when isnull(serverPingResults, '') <> '' then dbo.fn_returnDigits(substring(serverPingResults, dbo.fn_at(serverPingResults, 'time', 1), 10), 0) else 0 end) as serverPing1,
-				avg(case when isnull(serverPingResults, '') <> '' then dbo.fn_returnDigits(substring(serverPingResults, dbo.fn_at(serverPingResults, 'time', 2), 10), 0) else 0 end) as serverPing2,
-				avg(case when isnull(serverPingResults, '') <> '' then dbo.fn_returnDigits(substring(serverPingResults, dbo.fn_at(serverPingResults, 'time', 3), 10), 0) else 0 end) as serverPing3,
-				avg(case when isnull(serverPingResults, '') <> '' then dbo.fn_returnDigits(substring(serverPingResults, dbo.fn_at(serverPingResults, 'time', 4), 10), 0) else 0 end) as serverPing4
-				from pingLog a
-				where a.ymd >= @dStartDate
-				group by case when isnull(a.friendlyName, '') = '' then a.serverName else a.friendlyName end
-				having count(*) > 5
-			) a
-		where droppedPings > 0
+	-- this is covered by the stateLog checks
+	delete from #tailDetail where eventDetail = 'disk space below threshold'
+
+	if (select count(*) from #tailDetail where eventDetail like '%connections above threshold%') >= 5
+	begin
+		insert into #tailDetail (serverName, eventDetail, startDate, endDate)
+		select serverName,
+			'Between ' + convert(varchar(20), min(startDate), 120) + ' and ' + convert(varchar(20), max(endDate), 120) + ' connections were above defined thresholds',
+			min(startDate), max(endDate)
+			from #tailDetail
+			where eventDetail like '%connections above threshold%'
+			group by serverName, convert(varchar(10), startDate, 120), datePart(hour, startDate) / 4
+
+		delete from #tailDetail where (eventDetail like '%connections above threshold%') and eventDetail not like '%between%'
+	end
+
+	if (select count(*) from #tailDetail where eventDetail like '%temperature%') >= 5
+	begin
+		insert into #tailDetail (serverName, eventDetail, startDate, endDate)
+		select 'ALL',
+			'Between ' + convert(varchar(20), min(startDate), 120) + ' and ' + convert(varchar(20), max(endDate), 120) + ' ' + convert(varchar(20), count(distinct serverName)) + ' servers reported a thermal anomaly',
+			min(startDate), max(endDate)
+			from #tailDetail
+			where eventDetail like '%temperature%' or eventDetail like '%thermal%'
+			group by convert(varchar(10), startDate, 120), datePart(hour, startDate) / 4
+
+		delete from #tailDetail where (eventDetail like '%temperature%' or eventDetail like '%thermal%') and servername <> 'ALL'
+	end
+
+	if (select count(*) from #tailDetail where eventDetail like '%unable to report errors%') >= 5
+	begin
+		insert into #tailDetail (serverName, eventDetail, startDate, endDate)
+		select serverName,
+			'Between ' + convert(varchar(20), min(startDate), 120) + ' and ' + convert(varchar(20), max(endDate), 120) + ' ' + serverName + ' recorded ' + convert(varchar(20), count(*)) + ' severe errors.',
+			min(startDate), max(endDate)
+			from #tailDetail
+			where eventDetail like '%unable to report errors%'
+			group by serverName, convert(varchar(10), startDate, 120), datePart(hour, startDate) / 4
+
+		delete from #tailDetail where eventDetail like '%unable to report errors%' and eventDetail not like '%between%'
+	end
+
+	if (select count(*) from #tailDetail where eventDetail like '%jet database%') >= 5
+	begin
+		insert into #tailDetail (serverName, eventDetail, startDate, endDate)
+		select serverName,
+			'Between ' + convert(varchar(20), min(startDate), 120) + ' and ' + convert(varchar(20), max(endDate), 120) + ' ' + serverName + ' recorded ' + convert(varchar(20), count(*)) + ' JET database errors.',
+			min(startDate), max(endDate)
+			from #tailDetail
+			where eventDetail like '%jet database%'
+			group by serverName, convert(varchar(10), startDate, 120), datePart(hour, startDate) / 4
+
+		delete from #tailDetail where eventDetail like '%jet database%' and eventDetail not like '%between%'
+	end
+
+	if (
+		select count(*)
+			from #tailDetail
+			where eventDetail like '%insufficient system memory to run this query%'
+				or eventDetail like '%sqsrvres%'
+				or eventDetail like '%insufficient memory%'
+				or eventDetail like '%sql%assertion%'
+				or eventDetail like '%memory allocation%'
+		) >= 5
+	begin
+		insert into #tailDetail (serverName, eventDetail, startDate, endDate)
+		select serverName,
+			'Between ' + convert(varchar(20), min(startDate), 120) + ' and ' + convert(varchar(20), max(endDate), 120) + ' ' + serverName + ' recorded ' + convert(varchar(20), count(*)) + ' severe errors.',
+			min(startDate), max(endDate)
+			from #tailDetail
+			where eventDetail like '%insufficient system memory to run this query%'
+				or eventDetail like '%sqsrvres%'
+				or eventDetail like '%sql%assertion%'
+				or eventDetail like '%insufficient memory%'
+				or eventDetail like '%memory allocation%'
+			group by serverName, convert(varchar(10), startDate, 120)
+
+		delete from #tailDetail where (eventDetail like '%insufficient system memory to run this query%'
+				or eventDetail like '%sqsrvres%'
+				or eventDetail like '%sql%assertion%'
+				or eventDetail like '%insufficient memory%'
+				or eventDetail like '%memory allocation%')
+			and eventDetail not like '%between%'
+	end
+
+	if (select count(*) from #tailDetail where eventDetail like '%is not accessible%') >= 5
+	begin
+		insert into #tailDetail (serverName, eventDetail, startDate, endDate)
+		select serverName,
+			'Between ' + convert(varchar(20), min(startDate), 120) + ' and ' + convert(varchar(20), max(endDate), 120) + ' ' + serverName + ' was inaccessible ' + convert(varchar(20), count(*)) + ' times.',
+			min(startDate), max(endDate)
+			from #tailDetail
+			where eventDetail like '%is not accessible%'
+			group by serverName, convert(varchar(10), startDate, 120)
+
+		delete from #tailDetail where eventDetail like '%is not accessible%' and eventDetail not like '%between%'
+	end
+
+	if (select count(*) from #tailDetail where eventDetail like '%no longer accepting connections%') >= 5
+	begin
+		insert into #tailDetail (serverName, eventDetail, startDate, endDate)
+		select serverName,
+			'Between ' + convert(varchar(20), min(startDate), 120) + ' and ' + convert(varchar(20), max(endDate), 120) + ' ' + serverName + ' rejected at least ' + convert(varchar(20), count(*)) + ' connections.',
+			min(startDate), max(endDate)
+			from #tailDetail
+			where eventDetail like '%no longer accepting connections%'
+			group by serverName, convert(varchar(10), startDate, 120), datePart(hour, startDate) / 4
+
+		delete from #tailDetail where eventDetail like '%no longer accepting connections%' and eventDetail not like '%between%'
+	end
+
+	if (select count(*) from #tailDetail where eventDetail like '%rebooted%') >= 20
+	begin
+		insert into #tailDetail (serverName, eventDetail, startDate, endDate)
+		select serverName,
+			'Between ' + convert(varchar(20), min(startDate), 120) + ' and ' + convert(varchar(20), max(endDate), 120) + ' ' + serverName + ' rebooted at least once.',
+			min(startDate), max(endDate)
+			from #tailDetail
+			where eventDetail like '%rebooted%'
+			group by serverName, convert(varchar(10), startDate, 120), datePart(hour, startDate) / 4
+
+		delete from #tailDetail where eventDetail like '%rebooted%' and eventDetail not like '%between%'
+	end
+
+
+	delete from #tailDetail where eventDetail like '%url%is unavailable%'
+	delete from #tailDetail where eventDetail like '%server performance%'
+	delete from #tailDetail where eventDetail like '%rjohnson%'
+--	delete from #tailDetail where eventDetail like '%cpu utilization%'
+	delete from #tailDetail where eventDetail like '%applicationserveradministrationservicejob%'
+	delete from #tailDetail where eventDetail like '%sql automated alerts%'
+	delete from #tailDetail where eventDetail is null
+
+	set @nThisUkey = 0
+	while exists (select top 1 ukey from #tailDetail where (eventDetail like '%sql restart%' or eventDetail like '%rebooted%') and ukey > @nThisUkey)
+	begin
+		select top 1
+			@nThisUkey = ukey,
+			@dStartDate = startDate,
+			@cServerName = serverName,
+			@dEndDate = endDate
+			from #tailDetail
+			where (eventDetail like '%sql restart%' or eventDetail like '%rebooted%')
+				and ukey > @nThisUkey
+			order by ukey
+
+		set @nCount = (
+			select count(*)
+				from #tailDetail
+				where eventDetail like '%login failure%'
+					and startDate >= dateAdd(minute, -2, @dStartDate)
+					and startDate <= dateAdd(minute, 2, @dEndDate)
+					and serverName = @cServerName
+			)
+
+print 'Found ' + convert(varchar(20), @nCount) + ' login failures'
+
+		if @nCount > 1
+		begin
+			delete from #tailDetail
+				where eventDetail like '%login failure%'
+					and startDate >= dateAdd(minute, -2, @dStartDate)
+					and startDate <= dateAdd(minute, 2, @dEndDate)
+					and serverName = @cServerName
+
+			insert into #tailDetail (groupName, serverName, eventDetail, startDate, endDate, ukey_group)
+			select groupName, serverName,
+				convert(varchar(20), @nCount) + ' logins failed during restart' as eventDetail, startDate, endDate, ukey_group
+				from #tailDetail
+				where ukey = @nThisUkey
+		end
+
+
+		delete from #tailDetail
+			where (
+					eventDetail like '%network link down%'
+					or eventDetail like '%server temperature%'
+					or eventDetail like '%server%is not accessible%'
+					or eventDetail like '%raid%successful%'
+					)
+				and startDate >= dateAdd(minute, -2, @dStartDate)
+				and startDate <= dateAdd(minute, 2, @dEndDate)
+				and serverName = @cServerName
+
+	end
+
+	delete from #tailDetail where eventDetail like '%failed to make contact%'
 
 	--***********************************************************************************************************
 	-- Results
 	--***********************************************************************************************************
-	select identity(int) as ukey,
-		servername, outageStart, outageStop,
-		case when details is null
-			then case when outageStop is null
-				then 'Offline'
-				else 'Not PINGing for ' + convert(varchar(20), convert(int, ceiling((convert(decimal(10,2), dateDiff(millisecond, outageStart, outageStop))/1000.00)/60.00))) + ' minute(s)'
-				end
-			else details
-			end as details
-		into #detailOutput
-		from #results
-		where not (
-				dateDiff(day, outageStart, getDate()) > 5
-				and outageStop is null
-				and isnull(details, '') <> 'Point Outage'
-			)
-		order by outageStart, serverName
+--	set @dStartDate = dateAdd(week, -2, getDate())
 
-	select identity(int) as ukey,
-		serverName, connectionAttempts, connectionFailures, failureRate, availability, latestDrop,
-		convert(varchar(20), dateDiff(hour, isnull(latestDrop, earliestData), latestData)) + ' hours' as upTime
-		into #summaryOutput
-		from #summary
-		order by serverName
+	select distinct
+		isnull(isnull(b.friendlyName, b.serverName), a.serverName ) as serverName,
+		replace(replace(replace(replace(eventDetail, char(13), '<br>'), char(10), '<br>'), '<br><br>', '<br>'), '<br><br>', '<br>') as eventDetail,
+		startDate, endDate
+		from #tailDetail a
+		left outer join notification.dbo.dm_servers b on a.serverName = b.serverName
+		where startDate >= @dStartDate
+			and a.serverName not like '%dev%'
+--			and (
+--				c.ukey is null
+--				or c.isProduction = 1
+--				or c.groupName like '%uat%'
+--				)
+--			and not startDate between '2008-07-11 17:00:00.000' and '2008-07-13 23:59:59.000'
+			--and isnull(b.serverName, '') not in ('sis-gtid1', 'labmsproj01')
+		order by startDate, isnull(isnull(b.friendlyName, b.serverName), a.serverName )
 
-
-	set @nThisUkey = 0
-
-	while exists (select top 1 * from #detailOutput where ukey > @nThisUkey)
-	begin
-		set @cThisMessage = 'Outage details from ' + convert(varchar(20), @dStartDate, 120) + ' to present.' + char(13) + char(13) +
-				left('Server Name' + space(20), 20) + ' ' +
-				left('Begin' + space(19), 19) + ' ' +
-				left('End' + space(19), 19) + ' ' +
-				left('Details' + space(35), 35) + char(13) +
-
-				replicate('=', 20) + ' ' +
-				replicate('=', 19) + ' ' +
-				replicate('=', 19) + ' ' +
-				replicate('=', 35) + char(13)
-
-		select top 20
-			@cThisMessage = @cThisMessage +
-				left(serverName + space(20), 20) + ' ' +
-				left(convert(varchar(19), outageStart, 120) + space(19), 19) + ' ' +
-				left(isnull(convert(varchar(19), outageStop, 120), '') + space(19), 19) + ' ' +
-				left(details, 35) + char(13)
-			from #detailOutput
-			where ukey > @nThisUkey
-			order by ukey
-
-		set @cThisSubject = 'SQLBeat : Outage detail report (' + convert(varchar(20), @nThisUkey + 1) + ' - ' + convert(varchar(20), @nThisUkey + 20) + ')'
-
-		set @nThisUkey = @nThisUkey + 20
-
-		print @cThisSubject
-		print @cThisMessage
-
-		exec pr_sendMessage '', 'DBA', @cThisSubject, @cThisMessage
---		exec pr_sendMessage '', 'user@example.org', @cThisSubject, @cThisMessage
---		exec pr_sendMessage '', 'user@example.org', @cThisSubject, @cThisMessage
---		exec pr_sendMessage '', 'user@example.org', @cThisSubject, @cThisMessage
-	end
-
-	set @nThisUkey = 0
-
-	while exists (select top 1 * from #summaryOutput where ukey > @nThisUkey)
-	begin
-		set @cThisMessage = 'Outage summary for servers that have failed from ' + convert(varchar(20), @dStartDate, 120) + ' to present.' + char(13) + char(13) +
-				left('Server Name' + space(20), 20) + ' ' +
-				left('Attempts' + space(8), 8) + ' ' +
-				left('Failures' + space(8), 8) + ' ' +
-				left('Fail Rate' + space(9), 9) + ' ' +
-				left('Avail' + space(7), 7) + ' ' +
-				left('Last Drop' + space(19), 19) + ' ' +
-				left('Uptime' + space(10), 10) + char(13) +
-
-				replicate('=', 20) + ' ' +
-				replicate('=', 8) + ' ' +
-				replicate('=', 8) + ' ' +
-				replicate('=', 9) + ' ' +
-				replicate('=', 7) + ' ' +
-				replicate('=', 19) + ' ' +
-				replicate('=', 10) + char(13)
-
-		select top 20
-			@cThisMessage = @cThisMessage +
-				left(serverName + space(20), 20) + ' ' +
-				right(space(8) + convert(varchar(8), connectionAttempts), 8) + ' ' +
-				right(space(8) + convert(varchar(8), connectionFailures), 8) + ' ' +
-				right(space(8) + convert(varchar(8), failureRate), 8) + '% ' +
-				right(space(6) + convert(varchar(6), availability), 6) + '% ' +
-				left(isnull(convert(varchar(19), latestDrop, 120), 'CURRENTLY DOWN') + space(19), 19) + ' ' +
-				left(uptime, 10) + char(13)
-			from #summaryOutput
-			where ukey > @nThisUkey
-			order by ukey
-
-		set @cThisSubject = 'SQLBeat : Outage summary report (' + convert(varchar(20), @nThisUkey + 1) + ' - ' + convert(varchar(20), @nThisUkey + 20) + ')'
-
-		set @nThisUkey = @nThisUkey + 20
-
-		print @cThisSubject
-		print @cThisMessage
-
-		exec pr_sendMessage '', 'DBA', @cThisSubject, @cThisMessage
---		exec pr_sendMessage '', 'user@example.org', @cThisSubject, @cThisMessage
---		exec pr_sendMessage '', 'user@example.org', @cThisSubject, @cThisMessage
---		exec pr_sendMessage '', 'user@example.org', @cThisSubject, @cThisMessage
-	end
-
-
-	drop table #websiteOutages
-	drop table #results
 	drop table #outages
-	drop table #summary
-	drop table #summaryOutput
-	drop table #detailOutput
+	drop table #activeServers
+	drop table #tailDetail
+
+
 
 end
-GO

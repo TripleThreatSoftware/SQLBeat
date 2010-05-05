@@ -1,87 +1,76 @@
--- drop PROC pr_runScheduledJob
-CREATE PROC pr_runScheduledJob
-AS
-	declare @nRunNumber bigint
+create procedure pr_runScheduledJob
+as
+begin
+	declare @cConversationHandle uniqueidentifier
+	declare @nUkeyJob int
+	declare @dStartTime dateTime
+	declare @nRuntime bigint
+	declare @bIsSuccess bit
 
-	DECLARE @ConversationHandle UNIQUEIDENTIFIER,
-			@nUkey_scheduledJob INT, @nUkey_scheduledJobStep INT, @nUkeyJobSchedule INT,
-			@dYMD_lastRun DATETIME, @dYMD_nextRun DATETIME, @ValidFrom DATETIME
+	;RECEIVE TOP(1) @cConversationHandle = conversation_handle FROM ScheduledJobQueue
 
-	-- we don't need transactions since we don't want to put the job back in the queue if it fails
-	-- if that's desired transactions could be added but extra error checking would have to added
-	BEGIN TRY
-		-- receive only one message from the queue
-		;RECEIVE TOP(1) @ConversationHandle = conversation_handle FROM ScheduledJobQueue
+	if @@rowcount = 0
+		return
 
-		-- exit if no message in the queue
-		IF @@ROWCOUNT = 0
-			RETURN;
+	set @nUkeyJob = (select top 1 ukey from jobs with (nolock) where conversationHandle = @cConversationHandle)
 
-		-- get id of the scheduled job associated with the currently received conversation handle
-		SELECT	@nUkey_scheduledJob = SJ.ukey, @nUkeyJobSchedule = ukey_jobSchedule, @ValidFrom = ValidFrom, @nRunNumber = runNumber + 1
-		FROM	ScheduledJobs SJ
-		WHERE	ConversationHandle = @ConversationHandle AND IsEnabled = 1
+	if isnull(@nUkeyJob, 0) <> 0
+	begin
+		set @dStartTime = getDate()
+		set @bIsSuccess = 0
+		update jobs with (rowlock) set lastRun = getDate(), lastRunStatus = '', lastRunSuccess = null, currentStatus = 'Running' where ukey = @nUkeyJob
 
-		IF @@ROWCOUNT = 0
-		BEGIN
-			DECLARE @ConversationHandleString VARCHAR(36)
-			SELECT @ConversationHandleString = @ConversationHandle
-			RAISERROR ('Scheduled job for conversation handle "%s" does NOT EXISTS or is NOT ENABLED.', 16, 1, @ConversationHandleString);
-		END
+		insert into jobHistory (ukey_job, ukey_jobStep, isError, stepOutput) values (
+			@nUkeyJob, 0, 0, 'Starting')
 
-		if ISNULL(@nRunNumber, 0) = 0
-			set @nRunNumber = 1
+		begin try
+			update jobs with (rowlock) set lastRunStatus = '', lastRunSuccess = null where ukey = @nUkeyJob
 
-		insert into scheduledJobHistory (runNumber, ukey_job, ukey_jobStep, statusMessage, isSuccess) values (@nRunNumber, @nUkey_scheduledJob, 0, 'Starting', 1)
+			exec pr_job_runSteps @nUkeyJob, @bIsSuccess OUT
 
-		-- get the true time the job started executing
-		SELECT	@dYMD_lastRun = GETUTCDATE()
+			if @bIsSuccess = 1
+				update jobs with (rowlock) set lastRunStatus = '', lastRunSuccess = @bIsSuccess, currentStatus = null where ukey = @nUkeyJob
+			else
+				update jobs with (rowlock) set lastRunStatus = 'A step failed', lastRunSuccess = @bIsSuccess, currentStatus = null where ukey = @nUkeyJob
+		end try
+		begin catch
+			insert into jobHistory (ukey_job, ukey_jobStep, isError, stepOutput) values (
+				@nUkeyJob, 0, 1, ERROR_MESSAGE())
 
-		insert into scheduledJobHistory (runNumber, ukey_job, ukey_jobStep, statusMessage, isSuccess) values (@nRunNumber, @nUkey_scheduledJob, 0, 'Beginning steps', 1)
+			update jobs with (rowlock) set lastRunStatus = '', lastRunSuccess = 0, currentStatus = 'Failed' where ukey = @nUkeyJob
+		end catch
 
-		EXEC pr_runScheduledJobSteps @nUkey_scheduledJob, @nRunNumber
+		set @nRuntime = dateDiff(ms, @dStartTime, getDate())
+		insert into jobHistory (ukey_job, ukey_jobStep, isError, stepOutput, runtime) values (
+			@nUkeyJob, 0, 0, 'Done', @nRuntime)
 
-		insert into scheduledJobHistory (runNumber, ukey_job, ukey_jobStep, statusMessage, isSuccess) values (@nRunNumber, @nUkey_scheduledJob, 0, 'Done with steps', 1)
+		-- schedule the next runtime of this job
+		exec pr_job_start @nUkeyJob
+	end
 
-		IF @nUkeyJobSchedule = -1
-		BEGIN
-			-- if it's "run once" job, stop it
-			EXEC pr_stopScheduledJob @nUkey_scheduledJob
-			SELECT @dYMD_nextRun = NULL
+end
+GO
+IF EXISTS(SELECT * FROM sys.services WHERE NAME = N'//ScheduledJobService')
+	DROP SERVICE [//ScheduledJobService]
 
-			insert into scheduledJobHistory (runNumber, ukey_job, ukey_jobStep, statusMessage, isSuccess) values (@nRunNumber, @nUkey_scheduledJob, 0, 'No future run set', 1)
+IF EXISTS(SELECT * FROM sys.service_queues WHERE NAME = N'ScheduledJobQueue')
+	DROP QUEUE ScheduledJobQueue
 
-		END
-		ELSE
-		BEGIN
-			-- else restart the job to the next scheduled date
-			EXEC pr_startScheduledJob @nUkey_scheduledJob, @ConversationHandle
-
-			SELECT	-- get the valid from start time to calculate from
-					@dYMD_nextRun = CASE WHEN @ValidFrom > GETUTCDATE() THEN @ValidFrom ELSE GETUTCDATE() END,
-					-- get next run time based on our valid from starting time
-					@dYMD_nextRun = dbo.fn_getNextRunTime(@dYMD_nextRun, @nUkeyJobSchedule)
-
-			insert into scheduledJobHistory (runNumber, ukey_job, ukey_jobStep, statusMessage, isSuccess) values (@nRunNumber, @nUkey_scheduledJob, 0, 'Next runtime: ' + CONVERT(varchar(20), @dYMD_nextRun, 120), 1)
-		END
-		-- update the job Last run time.
-		UPDATE	ScheduledJobs
-		SET		ymd_lastRun = @dYMD_lastRun,
-				ymd_nextRun = @dYMD_nextRun,
-				runNumber = @nRunNumber
-		WHERE	ukey =  @nUkey_scheduledJob
-
-		insert into scheduledJobHistory (runNumber, ukey_job, ukey_jobStep, statusMessage, isSuccess) values (@nRunNumber, @nUkey_scheduledJob, 0, 'Done', 1)
-
-	END TRY
-	BEGIN CATCH
-		insert into scheduledJobHistory (runNumber, ukey_job, ukey_jobStep, statusMessage, isSuccess) values (@nRunNumber, @nUkey_scheduledJob, 0, ERROR_MESSAGE(), 0)
-
-		INSERT INTO SchedulingErrors (ErrorProcedure, ErrorLine, ErrorNumber, ErrorMessage, ErrorSeverity, ErrorState, ukey_scheduledJob, ukey_scheduledJobStep)
-		SELECT N'pr_runScheduledJob', ERROR_LINE(), ERROR_NUMBER(), ERROR_MESSAGE(), ERROR_SEVERITY(), ERROR_STATE(), @nUkey_scheduledJob, @nUkey_scheduledJobStep
-
-		-- if an error happens end our conversation if it exists
-		IF @nUkey_scheduledJob IS NOT NULL
-			EXEC pr_stopScheduledJob @nUkey_scheduledJob
-	END CATCH;
+IF EXISTS(SELECT * FROM sys.service_contracts  WHERE NAME = N'//ScheduledJobContract')
+	DROP CONTRACT [//ScheduledJobContract]
+GO
+-- CREATE a contract FOR the message
+CREATE CONTRACT [//ScheduledJobContract]
+	([http://schemas.microsoft.com/SQL/ServiceBroker/DialogTimer] SENT BY ANY)
+GO
+CREATE QUEUE ScheduledJobQueue
+	WITH STATUS = ON,
+	ACTIVATION (
+		PROCEDURE_NAME = pr_runScheduledJob,
+		MAX_QUEUE_READERS = 100,
+		EXECUTE AS SELF );
+GO
+CREATE SERVICE [//ScheduledJobService]
+	AUTHORIZATION dbo
+	ON QUEUE ScheduledJobQueue ([//ScheduledJobContract])
 GO
