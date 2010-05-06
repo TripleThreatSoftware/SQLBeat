@@ -13,6 +13,8 @@ as
 begin
 	set nocount on
 
+	return
+
 	declare @nMinutesBackToLook int
 	declare @cSQLString nvarchar(4000)
 	declare @cVersion varchar(500)

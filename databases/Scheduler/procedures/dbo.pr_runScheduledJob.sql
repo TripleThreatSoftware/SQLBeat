@@ -74,3 +74,7 @@ CREATE SERVICE [//ScheduledJobService]
 	AUTHORIZATION dbo
 	ON QUEUE ScheduledJobQueue ([//ScheduledJobContract])
 GO
+create index ix_jobHistory_ukeyJob_ukeyJobStep_ukey on jobHistory (ukey_job, ukey_jobStep, ukey) with fillfactor = 60
+GO
+create index ix_jobHistory_ukeyJob_isError on jobHistory (ukey_job, isError) with fillfactor = 60
+GO
