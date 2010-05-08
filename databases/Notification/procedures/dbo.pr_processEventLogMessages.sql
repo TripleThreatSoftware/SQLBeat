@@ -1,6 +1,3 @@
-USE [Notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_processEventLogMessages]    Script Date: 04/28/2010 09:29:45 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -84,6 +81,15 @@ begin
 				from #eventLog
 				group by computerName
 			) b on a.serverName = b.computerName
+
+
+	-- if there are a bunch of .net errors, freak out
+	if (select count(*) from #eventLog where [message] like '%an unhandled exception%' and timeWritten >= dateAdd(minute, -30, getDate())) >= 5
+	begin
+		update #eventLog
+			set severity = 1
+			where [message] like '%an unhandled exception%'
+	end
 
 	delete #eventLog
 		from #eventLog a
@@ -276,6 +282,7 @@ begin
 			and a.logType = b.logType
 			and a.message = b.message
 			and a.sourcename = b.sourceName
+
 
 	insert into notificationLog_stage (message, severity, subject, serverName, isEventLog, ymd)
 	select distinct
