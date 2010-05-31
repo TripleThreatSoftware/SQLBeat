@@ -11,6 +11,6 @@ begin
 	IF EXISTS (SELECT * FROM sys.conversation_endpoints WHERE conversation_handle = @cConversationHandle)
 		END CONVERSATION @cConversationHandle
 
-	update jobs with (rowlock) set conversationHandle = null, nextRun = null, isEnabled = 0 where ukey = @nUkeyJob
+	update jobs with (rowlock) set conversationHandle = null, nextRun = null, currentStatus = null where ukey = @nUkeyJob
 end
 GO
