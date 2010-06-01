@@ -1,3 +1,7 @@
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 --use notification
 --go
 
@@ -7,27 +11,26 @@
 --go
 --truncate table eventLog_history
 --go
-
--- select * from eventLog_history where ymd >= '2010-05-31 13:00:00.000' and ukey_group = 1 order by ukey_group, ymd
+-- select * from eventLog_history where ymd >= '2010-05-31 11:20:00.000' and ukey_group = 1 order by ukey_group, ymd
 -- pr_readWindowsEvents 1
 -- select lastEventLogCheck, serverName from dm_servers where isEnabled = 1 and eventLogCheck = 1 order by lastEventLogCheck
 -- select * from notificationLog_stage
- --update dm_servers set lastEventLogCheck = '2010-05-26' where servername = 'web03'
+ --update dm_servers set lastEventLogCheck = '5/26/2010 01:00:00 AM' where servername = 'web03'
  --delete from eventLog where timeWritten >= '2010-05-26'
 -- select * from eventLog_stage order by timeWritten desc
--- select top 500 * from eventLog order by monitorDate desc
+-- select top 500 * from eventLog order by timeWritten desc
 -- select top 100 * from notificationLog order by ymd desc
 -- exec pr_processEventLogMessages 30
 -- select * from dm_servers
 -- select top 500 * from notificationLog order by ymd desc
-alter procedure pr_readWindowsEvents (@nUkeyGroup int)
+ALTER procedure [dbo].[pr_readWindowsEvents] (@nUkeyGroup int)
 as
 begin
 
 	set nocount on
 
 	--declare @nUkeyGroup int
-	--set @nUkeyGroup = 30
+	--set @nUkeyGroup = 1
 
 	declare @cServerName varchar(500)
 	declare @cUserName varchar(100)
@@ -88,7 +91,7 @@ begin
 			@cServerName = serverName,
 			@cUserName = wmiUserName,
 			@cPassword = wmiPassword,
-			@dLastEventLogCheck = isnull(dateAdd(hour, -1, lastEventLogCheck), dateAdd(hour, -24, getDate()))
+			@dLastEventLogCheck = isnull(dateAdd(hour, -6, lastEventLogCheck), dateAdd(hour, -24, getDate()))
 			from dm_servers (nolock)
 			where serverName > @cServerName
 				and isServerPingable = 1
@@ -125,6 +128,8 @@ begin
 		update dm_servers set lastEventLogCheck = getDate() where serverName = @cServerName
 	end
 	create index ix_tmp_results on #results (ukey) with fillfactor = 90
+
+--select * from #results
 
 	set @nUkey = 0
 	set @cFieldName = ''
@@ -322,7 +327,7 @@ print 'String: ' + @cWideString
 			print 'Hit an error, continuing'
 		end catch
 
-		if isnull(@cWideString, '') <> '' and @cWideString <> '*/*/*'
+		if isnull(@cWideString, '') <> '' and @cWideString <> '*/*/*' and @cWideString <> 'Category: ' and @cWideString <> 'Category:'
 		begin
 
 			if @cWideString like '%rpc server is unavailable%'
@@ -341,7 +346,8 @@ print 'String: ' + @cWideString
 	end
 
 	insert into eventLog_stage (logType, category, computername, message, sourcename, timewritten, type, auser, monitordate)
-	select logFile, category, servername, message, sourceName + case when isnull(categoryString, '') <> '' then ': ' + categoryString else '' end, timeWritten, [type], [user], getDate()
+	select logFile, category, servername, message, sourceName + case when isnull(categoryString, '') <> '' then ': ' + categoryString else '' end,
+		dateAdd(hour, -dateDiff(hour, getDate(), getUTCDate()), timeWritten), [type], [user], getDate()
 		from #events
 
 	set @nRowCount = @@rowcount
