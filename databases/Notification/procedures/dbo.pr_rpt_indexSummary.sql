@@ -1,9 +1,9 @@
-/****** Object:  StoredProcedure [dbo].[pr_rpt_indexSummary]    Script Date: 05/19/2009 13:59:45 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE procedure [dbo].[pr_rpt_indexSummary] (@cServerName varchar(200) = '', @nNumHours int = 24)
+--exec pr_rpt_indexSummary 'web03', 168
+ALTER procedure [dbo].[pr_rpt_indexSummary] (@cServerName varchar(200) = '', @nNumHours int = 48)
 as
 begin
 	select serverName, max(ymd) as ymd
@@ -92,7 +92,7 @@ begin
 
 	select *
 		from #performanceSummary
-		order by (user_scans_24 * isnull(numRows, 1)) desc
+		order by serverName, databaseName, tableName, indexName
 
 
 	drop table #latestRun
@@ -101,4 +101,3 @@ begin
 	drop table #performanceSummary
 
 end
-GO
