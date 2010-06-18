@@ -1,4 +1,4 @@
-create procedure pr_job_enable (@nUkeyJob int)
+create procedure [dbo].[pr_job_enable] (@nUkeyJob int)
 as
 begin
 

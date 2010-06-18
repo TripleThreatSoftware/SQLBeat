@@ -7,10 +7,33 @@ ALTER procedure [dbo].[pr_monitorJobIntervals]
 as
 begin
 	declare @cSQLString nvarchar(4000)
+	declare @nUkeyJob int
 	create table #commands (commandText varchar(500))
 
 	if exists (select top 1 [name] from master.dbo.sysdatabases where [name] = 'Scheduler')
 	begin
+		declare @jobsToStart table (ukey_job int)
+
+		insert into @jobsToStart
+		select ukey
+			from scheduler.dbo.jobs (nolock)
+			where isEnabled = 1
+				and dateDiff(minute, nextRun, getDate()) > 60
+				and ukey not in (select distinct ukey_job from scheduler.dbo.jobHistory (nolock) where ymd >= dateAdd(hour, -1, getDate()))
+
+		set @nUkeyJob = 0
+
+		while exists (select top 1 ukey_job from @jobsToStart where ukey_job > @nUkeyJob)
+		begin
+			select top 1
+				@nUkeyJOb = ukey_job
+				from @jobsToStart
+				where ukey_job > @nUkeyJob
+				order by ukey_job
+
+			exec scheduler.dbo.pr_job_start @nUkeyJob
+		end
+
 		--*******************************************************************************************************************
 		-- SQL Detailed Check
 

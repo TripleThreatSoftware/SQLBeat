@@ -1,4 +1,4 @@
-create procedure pr_job_runSteps (@nUkeyJob int, @bIsSuccess bit OUT)
+create procedure [dbo].[pr_job_runSteps] (@nUkeyJob int, @bIsSuccess bit OUT)
 as
 begin
 	declare @nUkey int
@@ -112,4 +112,8 @@ begin
 		end
 	end
 end
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
 GO

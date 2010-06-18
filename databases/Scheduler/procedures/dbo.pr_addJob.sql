@@ -1,4 +1,4 @@
-create procedure pr_addJob (@cJobName varchar(200), @nUkeyJob int OUT)
+create procedure [dbo].[pr_addJob] (@cJobName varchar(200), @nUkeyJob int OUT)
 as
 begin
 	declare @cMessage varchar(8000)
@@ -20,4 +20,8 @@ begin
 	set @nUkeyJob = scope_identity()
 
 end
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
 GO

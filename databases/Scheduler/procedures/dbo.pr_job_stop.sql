@@ -1,4 +1,4 @@
-create procedure pr_job_stop (@nUkeyJob int)
+CREATE procedure [dbo].[pr_job_stop] (@nUkeyJob int)
 as
 begin
 	declare @cConversationHandle uniqueidentifier
@@ -13,4 +13,8 @@ begin
 
 	update jobs with (rowlock) set conversationHandle = null, nextRun = null, currentStatus = null where ukey = @nUkeyJob
 end
+GO
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
 GO
