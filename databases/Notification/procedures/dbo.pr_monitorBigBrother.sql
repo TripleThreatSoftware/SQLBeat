@@ -13,8 +13,6 @@ as
 begin
 	set nocount on
 
-	return
-
 	declare @nMinutesBackToLook int
 	declare @cSQLString nvarchar(4000)
 	declare @cVersion varchar(500)
@@ -1216,7 +1214,7 @@ begin
 		where startTime >= dateAdd(minute, -60, getDate())
 		group by a.serverName
 		having sum(case when isSuccess = 1 then 1 else 0 end) = 0
-			and sum(case when isSuccess = 0 then 1 else 0 end) >= 3
+			and sum(case when isSuccess = 0 then 1 else 0 end) >= 10
 			and (
 				max(case when isSuccess = 0 then startTime else null end) > max(case when isSuccess = 1 then startTime else null end)
 				or max(case when isSuccess = 1 then startTime else null end) is null
@@ -1713,7 +1711,7 @@ begin
 		where notes like '%error%'
 			and charindex('type=error', notes) = 0
 			and charindex(':', notes) > 0
-			and ymd >= dateAdd(hour, -1, getDate())
+			and ymd >= dateAdd(hour, -2, getDate())
 			and notes not like '%Timeout expired %'
 			and notes not like '%object required%'
 			and notes not like '%only one usage%'
@@ -1728,7 +1726,7 @@ begin
 				from #eventLogFailures
 				where notes not like '%timeout%'
 				group by serverName
-				having sum(numfailures) >= 2
+				having sum(numfailures) >= 10
 			) b on a.serverName = b.serverName
 
 	-- if it's successfully read since the last failure, do not disable
@@ -1854,7 +1852,7 @@ begin
 		isJobFailure, isLogShippingJobFailure, isLongRunningJob, isBlocking, isLongRunningProcess,
 		isDriveSpace, isLogSize, isEventLog, serverName, ymd)
 	select message,
-		3 as severity,
+		severity,
 		subject,
 		isJobFailure, isLogShippingJobFailure, isLongRunningJob, isBlocking, isLongRunningProcess,
 		isDriveSpace, isLogSize, isEventLog, isnull(serverName, @@serverName), ymd

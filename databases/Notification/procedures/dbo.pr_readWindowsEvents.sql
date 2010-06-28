@@ -327,21 +327,21 @@ print 'String: ' + @cWideString
 			print 'Hit an error, continuing'
 		end catch
 
-		if isnull(@cWideString, '') <> '' and @cWideString <> '*/*/*' and @cWideString <> 'Category: ' and @cWideString <> 'Category:'
-		begin
+		--if isnull(@cWideString, '') <> '' and @cWideString <> '*/*/*' and @cWideString <> 'Category: ' and @cWideString <> 'Category:'
+		--begin
 
-			if @cWideString like '%rpc server is unavailable%'
-			begin
-				insert into notificationLog_stage (serverName, subject, message, severity) values (@cServerName, @cWideString, @cWideString, 3)
+		--	if @cWideString like '%rpc server is unavailable%'
+		--	begin
+		--		insert into notificationLog_stage (serverName, subject, message, severity) values (@cServerName, @cWideString, @cWideString, 3)
 
-				delete from #results where serverName = @cServerName
-			end
-			else
-				insert into notificationLog_stage (serverName, subject, message, severity) values (@cServerName, @cWideString, @cWideString, 3)
+		--		delete from #results where serverName = @cServerName
+		--	end
+		--	else
+		--		insert into notificationLog_stage (serverName, subject, message, severity) values (@cServerName, @cWideString, @cWideString, 3)
 
-			-- here, we have an error
-			print '   ERROR: ' + @cWideString
-		end
+		--	-- here, we have an error
+		--	print '   ERROR: ' + @cWideString
+		--end
 
 	end
 
