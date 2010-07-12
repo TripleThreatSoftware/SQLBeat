@@ -1580,15 +1580,12 @@ begin
 
 			select top 3
 				@cThisMessage = @cThisMessage +
-				'<table><tr><th colspan="2">' + isnull(b.stepName, 'N/A') + '</th><th width="150px">' + isnull(convert(varchar(20), a.ymd, 120), 'N/A') + '</th></tr>' +
-					'<tr><td width="10px"></td><td colspan="2">Runtime: ' + convert(varchar(20), isnull(a.runningSeconds, 0)) + 's</td></tr>' +
-					'<tr><td></td><td colspan="2">Outcome: ' + case when a.isSuccess = 1 then 'OK' else isnull(a.stepOutcome, 'N/A') end + '</td></tr>' +
-					case when a.isSuccess = 1
-						then ''
-						else '<tr><td></td><td colspan="2"><b>Step Text:</b></td></tr>' +
-							'<tr><td></td><td colspan="2">' + isnull(b.stepCommand, 'N/A') + '</td></tr>'
-						end +
-					'</table>'
+					'<tr>' +
+						'<td><b>' + isnull(b.stepName, 'N/A') + '</b></td>' +
+						'<td align="center">' + convert(varchar(20), isnull(a.runningSeconds, 0)) + 's</td>' +
+						'<td align="center">' + case when a.isSuccess = 1 then 'OK' else '<font color="red"><b>' + isnull(a.stepOutcome, 'N/A') end  + '</b></font></td>' +
+						'<td align="center">' + isnull(convert(varchar(20), a.ymd, 120), 'N/A') + '</td>' +
+					'</tr>'
 				from jobStepHistory a (nolock)
 				join dm_serverJobSteps b (nolock) on a.ukey_jobStep = b.ukey
 					and a.ukey_job = b.ukey_job
@@ -1599,6 +1596,14 @@ begin
 					and c.job_id = @cJobID
 				where a.ukey_server = @nUkeyServer
 				order by a.ymd desc
+
+			set @cThisMessage =
+				'<table width="100%" cellspacing="0" cellpadding="0"  border="0" style="font-family:Courier; font-size: x-small;">' +
+					'<tr>' +
+						'<th>Step</th><th>Runtime</th><th>Outcome</th><th>Start Time</th>' +
+					'</tr>' +
+					@cThisMessage +
+				'</table>'
 
 			update #runningJobs
 				set runStatus = @cThisMessage
@@ -1722,10 +1727,10 @@ begin
 				'Job [' + jobName + '], ' +
 				'which usually runs in ' + isnull(convert(varchar(20), expectedRunningSeconds), '') + ' seconds, ' +
 				'has been running for ' + convert(varchar(20), secondsRunning) + ' seconds. ' + char(13) + char(13) +
-				'Start time: ' + convert(varchar(20), startTime, 120) + '<br><br>' +
-				'<table border="0"><tr><th colspan="2">' + isnull(a.currentStepName, 'N/A') + '</th><th width="150px"></th></tr>' +
-					'<tr><td></td><td colspan="2">' + isnull(a.currentStepText, 'N/A') + '</td></tr>' +
-				'</table><br>' +
+				'Start time: ' + convert(varchar(20), startTime, 120) + '<br>' +
+				'Current Step: <b>' + isnull(a.currentStepName, 'N/A') + '</b><br>' +
+				'Current Step Text: <br>' +
+					'<div style="border: 1px; border-style: dashed; border-color: #bababa; font-family:Courier; font-size: x-small; margin: 0px; margin-left: 10px; padding: 5px;">' + isnull(a.currentStepText, 'N/A') + '</div><br>' +
 				'<b>Status</b>: <br>' + isnull(runStatus, 'N/A')
 				, 8000)	as message,
 			-- if runtime > 2x, then it's a critical alert
@@ -1751,11 +1756,11 @@ begin
 				'Job [' + jobName + '], ' +
 				'which has no runtime history, ' +
 				'has been running for ' + convert(varchar(20), secondsRunning) + ' seconds. ' + char(13) + char(13) +
-				'Start time: ' + convert(varchar(20), startTime) + char(13) +
-				'<table border="0"><tr><th colspan="2">' + isnull(a.currentStepName, 'N/A') + '</th><th width="150px"></th></tr>' +
-					'<tr><td></td><td colspan="2">' + isnull(a.currentStepText, 'N/A') + '</td></tr>' +
-				'</table><br>'+
-				'<b>Status:</b> <br>' + isnull(runStatus, 'N/A')
+				'Start time: ' + convert(varchar(20), startTime, 120) + '<br>' +
+				'Current Step: <b>' + isnull(a.currentStepName, 'N/A') + '</b><br>' +
+				'Current Step Text: <br>' +
+					'<div style="border: 1px; border-style: dashed; border-color: #bababa; font-family:Courier; font-size: x-small; margin: 0px; margin-left: 10px; padding: 5px;">' + isnull(a.currentStepText, 'N/A') + '</div><br>' +
+				'<b>Status</b>: <br>' + isnull(runStatus, 'N/A')
 				, 8000)	as message,
 			-- if runtime > 2x, then it's a critical alert
 			-- otherwise, sit on it
@@ -2274,7 +2279,7 @@ begin
 		select
 			case
 				when @bIsMaintenancePeriod = 1 or @nNumOldAlerts > 0 then 3
-				when @nNumAlerts > 0 and waitingTasks > 5 then 1
+				when @nNumAlerts > 0 and waitingTasks > 5 and @bIsOffHours = 0 then 1
 				else 2 end,
 			'CPU ' + convert(varchar(20), cpuNumber) + ' has ' + convert(varchar(20), waitingTasks) + ' tasks waiting.',
 			'Time: ' + convert(varchar(20), getDate(), 120) + ' <br>' +
@@ -2350,7 +2355,7 @@ begin
 			-- weight based on how long and whether this is the first alert in the last 10 minutes
 			case
 				when @bIsMaintenancePeriod = 1 or @nNumOldAlerts > 0 then 3
-				when msWaiting > 20000 and @nNumAlerts > 2 then 1
+				when msWaiting > 25000 and @nNumAlerts > 2 and @bIsOffHours = 0 then 1
 				else 2 end as severity,
 			convert(varchar(20), isnull(a.numRequests, 0)) + ' requests ' +
 				'waiting for ' + convert(varchar(20), a.msWaiting) + 'ms on "' + isnull(left(b.filePath, 3), 'N/A') + '"' as subject,

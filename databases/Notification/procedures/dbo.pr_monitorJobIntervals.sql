@@ -7,8 +7,9 @@ ALTER procedure [dbo].[pr_monitorJobIntervals]
 as
 begin
 	declare @cSQLString nvarchar(4000)
+	declare @cCommandNotes varchar(8000)
 	declare @nUkeyJob int
-	create table #commands (commandText varchar(500))
+	create table #commands (commandText varchar(2000), commandNotes varchar(8000))
 
 	if exists (select top 1 [name] from master.dbo.sysdatabases where [name] = 'Scheduler')
 	begin
@@ -37,8 +38,8 @@ begin
 		--*******************************************************************************************************************
 		-- SQL Detailed Check
 
-		insert into #commands (commandText)
-		select 'EXEC scheduler.dbo.pr_job_disable ' + convert(varchar(100), ukey)
+		insert into #commands (commandText, commandNotes)
+		select 'EXEC scheduler.dbo.pr_job_disable ' + convert(varchar(100), ukey), 'Disabling SQL Detailed Check for ' + a.groupName
 			from (
 				select a.groupName, b.ukey, jobName, count(distinct c.ukey) as numServers
 					from dm_serverGroups a (nolock)
@@ -56,8 +57,8 @@ begin
 					having count(distinct c.ukey) = 0
 				) a
 
-		insert into #commands (commandText)
-		select 'EXEC scheduler.dbo.pr_job_enable ' + convert(varchar(100), ukey)
+		insert into #commands (commandText, commandNotes)
+		select 'EXEC scheduler.dbo.pr_job_enable ' + convert(varchar(100), ukey), 'Enabling SQL Detailed Check for ' + a.groupName
 			from (
 				select a.groupName, b.ukey, jobName, count(distinct c.ukey) as numServers
 					from dm_serverGroups a (nolock)
@@ -78,8 +79,8 @@ begin
 		--*******************************************************************************************************************
 		-- SQL Fragmentation Check
 
-		insert into #commands (commandText)
-		select 'EXEC scheduler.dbo.pr_job_disable ' + convert(varchar(100), ukey)
+		insert into #commands (commandText, commandNotes)
+		select 'EXEC scheduler.dbo.pr_job_disable ' + convert(varchar(100), ukey), 'Disabling SQL Fragmentation Check for ' + a.groupName
 			from (
 				select a.groupName, b.ukey, jobName, count(distinct c.ukey) as numServers
 					from dm_serverGroups a (nolock)
@@ -97,8 +98,8 @@ begin
 					having count(distinct c.ukey) = 0
 				) a
 
-		insert into #commands (commandText)
-		select 'EXEC scheduler.dbo.pr_job_enable ' + convert(varchar(100), ukey)
+		insert into #commands (commandText, commandNotes)
+		select 'EXEC scheduler.dbo.pr_job_enable ' + convert(varchar(100), ukey), 'Enabling SQL Fragmentation Check for ' + a.groupName
 			from (
 				select a.groupName, b.ukey, jobName, count(distinct c.ukey) as numServers
 					from dm_serverGroups a (nolock)
@@ -119,8 +120,8 @@ begin
 		--*******************************************************************************************************************
 		-- SQL Integrity Check
 
-		insert into #commands (commandText)
-		select 'EXEC scheduler.dbo.pr_job_disable ' + convert(varchar(100), ukey)
+		insert into #commands (commandText, commandNotes)
+		select 'EXEC scheduler.dbo.pr_job_disable ' + convert(varchar(100), ukey), 'Disabling SQL Integrity Check for ' + a.groupName
 			from (
 				select a.groupName, b.ukey, jobName, count(distinct c.ukey) as numServers
 					from dm_serverGroups a (nolock)
@@ -138,8 +139,8 @@ begin
 					having count(distinct c.ukey) = 0
 				) a
 
-		insert into #commands (commandText)
-		select 'EXEC scheduler.dbo.pr_job_enable ' + convert(varchar(100), ukey)
+		insert into #commands (commandText, commandNotes)
+		select 'EXEC scheduler.dbo.pr_job_enable ' + convert(varchar(100), ukey), 'Enabling SQL Integrity Check for ' + a.groupName
 			from (
 				select a.groupName, b.ukey, jobName, count(distinct c.ukey) as numServers
 					from dm_serverGroups a (nolock)
@@ -160,8 +161,8 @@ begin
 		--*******************************************************************************************************************
 		-- SQL Service Check
 
-		insert into #commands (commandText)
-		select 'EXEC scheduler.dbo.pr_job_disable ' + convert(varchar(100), ukey)
+		insert into #commands (commandText, commandNotes)
+		select 'EXEC scheduler.dbo.pr_job_disable ' + convert(varchar(100), ukey), 'Disabling SQL Services Check for ' + a.groupName
 			from (
 				select a.groupName, b.ukey, jobName, count(distinct c.ukey) as numServers
 					from dm_serverGroups a (nolock)
@@ -179,8 +180,8 @@ begin
 					having count(distinct c.ukey) = 0
 				) a
 
-		insert into #commands (commandText)
-		select 'EXEC scheduler.dbo.pr_job_enable ' + convert(varchar(100), ukey)
+		insert into #commands (commandText, commandNotes)
+		select 'EXEC scheduler.dbo.pr_job_enable ' + convert(varchar(100), ukey), 'Enabling SQL Services Check for ' + a.groupName
 			from (
 				select a.groupName, b.ukey, jobName, count(distinct c.ukey) as numServers
 					from dm_serverGroups a (nolock)
@@ -201,8 +202,8 @@ begin
 		--*******************************************************************************************************************
 		-- Configuration Check
 
-		insert into #commands (commandText)
-		select 'EXEC scheduler.dbo.pr_job_disable ' + convert(varchar(100), ukey)
+		insert into #commands (commandText, commandNotes)
+		select 'EXEC scheduler.dbo.pr_job_disable ' + convert(varchar(100), ukey), 'Disabling WMI Configuration Check for ' + a.groupName
 			from (
 				select a.groupName, b.ukey, jobName, count(distinct c.ukey) as numServers
 					from dm_serverGroups a (nolock)
@@ -219,8 +220,8 @@ begin
 					having count(distinct c.ukey) = 0
 				) a
 
-		insert into #commands (commandText)
-		select 'EXEC scheduler.dbo.pr_job_enable ' + convert(varchar(100), ukey)
+		insert into #commands (commandText, commandNotes)
+		select 'EXEC scheduler.dbo.pr_job_enable ' + convert(varchar(100), ukey), 'Enabling WMI Configuration Check for ' + a.groupName
 			from (
 				select a.groupName, b.ukey, jobName, count(distinct c.ukey) as numServers
 					from dm_serverGroups a (nolock)
@@ -240,8 +241,8 @@ begin
 		--*******************************************************************************************************************
 		-- Event Log Check
 
-		insert into #commands (commandText)
-		select 'EXEC scheduler.dbo.pr_job_disable ' + convert(varchar(100), ukey)
+		insert into #commands (commandText, commandNotes)
+		select 'EXEC scheduler.dbo.pr_job_disable ' + convert(varchar(100), ukey), 'Disabling Windows Event Log Check for ' + a.groupName
 			from (
 				select a.groupName, b.ukey, jobName, count(distinct c.ukey) as numServers
 					from dm_serverGroups a (nolock)
@@ -258,8 +259,8 @@ begin
 					having count(distinct c.ukey) = 0
 				) a
 
-		insert into #commands (commandText)
-		select 'EXEC scheduler.dbo.pr_job_enable ' + convert(varchar(100), ukey)
+		insert into #commands (commandText, commandNotes)
+		select 'EXEC scheduler.dbo.pr_job_enable ' + convert(varchar(100), ukey), 'Disabling Windows Event Log Check for ' + a.groupName
 			from (
 				select a.groupName, b.ukey, jobName, count(distinct c.ukey) as numServers
 					from dm_serverGroups a (nolock)
@@ -283,8 +284,8 @@ begin
 		--*******************************************************************************************************************
 		-- SQL Detailed Check
 
-		insert into #commands (commandText)
-		select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @enabled = 0'
+		insert into #commands (commandText, commandNotes)
+		select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @enabled = 0', 'Disabling SQL Detailed Check for ' + a.groupName
 			from (
 				select a.groupName, b.job_id, jobName, count(distinct c.ukey) as numServers
 					from dm_serverGroups a (nolock)
@@ -302,8 +303,8 @@ begin
 					having count(distinct c.ukey) = 0
 				) a
 
-		insert into #commands (commandText)
-		select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @Enabled = 1'
+		insert into #commands (commandText, commandNotes)
+		select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @Enabled = 1', 'Enabling SQL Detailed Check for ' + a.groupName
 			from (
 				select a.groupName, b.job_id, jobName, count(distinct c.ukey) as numServers
 					from dm_serverGroups a (nolock)
@@ -324,8 +325,8 @@ begin
 		--*******************************************************************************************************************
 		-- SQL Fragmentation Check
 
-		insert into #commands (commandText)
-		select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @enabled = 0'
+		insert into #commands (commandText, commandNotes)
+		select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @enabled = 0', 'Disabling SQL Fragmentation Check for ' + a.groupName
 			from (
 				select a.groupName, b.job_id, jobName, count(distinct c.ukey) as numServers
 					from dm_serverGroups a (nolock)
@@ -343,8 +344,8 @@ begin
 					having count(distinct c.ukey) = 0
 				) a
 
-		insert into #commands (commandText)
-		select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @Enabled = 1'
+		insert into #commands (commandText, commandNotes)
+		select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @Enabled = 1', 'Enabling SQL Fragmentation Check for ' + a.groupName
 			from (
 				select a.groupName, b.job_id, jobName, count(distinct c.ukey) as numServers
 					from dm_serverGroups a (nolock)
@@ -365,8 +366,8 @@ begin
 		--*******************************************************************************************************************
 		-- SQL Integrity Check
 
-		insert into #commands (commandText)
-		select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @enabled = 0'
+		insert into #commands (commandText, commandNotes)
+		select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @enabled = 0', 'Disabling SQL Integrity Check for ' + a.groupName
 			from (
 				select a.groupName, b.job_id, jobName, count(distinct c.ukey) as numServers
 					from dm_serverGroups a (nolock)
@@ -384,8 +385,8 @@ begin
 					having count(distinct c.ukey) = 0
 				) a
 
-		insert into #commands (commandText)
-		select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @Enabled = 1'
+		insert into #commands (commandText, commandNotes)
+		select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @Enabled = 1', 'Enabling SQL Integrity Check for ' + a.groupName
 			from (
 				select a.groupName, b.job_id, jobName, count(distinct c.ukey) as numServers
 					from dm_serverGroups a (nolock)
@@ -406,8 +407,8 @@ begin
 		--*******************************************************************************************************************
 		-- SQL Service Check
 
-		insert into #commands (commandText)
-		select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @enabled = 0'
+		insert into #commands (commandText, commandNotes)
+		select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @enabled = 0', 'Disabling SQL Services Check for ' + a.groupName
 			from (
 				select a.groupName, b.job_id, jobName, count(distinct c.ukey) as numServers
 					from dm_serverGroups a (nolock)
@@ -425,8 +426,8 @@ begin
 					having count(distinct c.ukey) = 0
 				) a
 
-		insert into #commands (commandText)
-		select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @Enabled = 1'
+		insert into #commands (commandText, commandNotes)
+		select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @Enabled = 1', 'Enabling SQL Services Check for ' + a.groupName
 			from (
 				select a.groupName, b.job_id, jobName, count(distinct c.ukey) as numServers
 					from dm_serverGroups a (nolock)
@@ -447,8 +448,8 @@ begin
 		--*******************************************************************************************************************
 		-- Configuration Check
 
-		insert into #commands (commandText)
-		select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @enabled = 0'
+		insert into #commands (commandText, commandNotes)
+		select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @enabled = 0', 'Disabling WMI Configuration Check for ' + a.groupName
 			from (
 				select a.groupName, b.job_id, jobName, count(distinct c.ukey) as numServers
 					from dm_serverGroups a (nolock)
@@ -465,8 +466,8 @@ begin
 					having count(distinct c.ukey) = 0
 				) a
 
-		insert into #commands (commandText)
-		select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @Enabled = 1'
+		insert into #commands (commandText, commandNotes)
+		select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @Enabled = 1', 'Enabling WMI Configuration Check for ' + a.groupName
 			from (
 				select a.groupName, b.job_id, jobName, count(distinct c.ukey) as numServers
 					from dm_serverGroups a (nolock)
@@ -486,8 +487,8 @@ begin
 		--*******************************************************************************************************************
 		-- Event Log Check
 
-		insert into #commands (commandText)
-		select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @enabled = 0'
+		insert into #commands (commandText, commandNotes)
+		select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @enabled = 0', 'Disabling Windows Event Log Check for ' + a.groupName
 			from (
 				select a.groupName, b.job_id, jobName, count(distinct c.ukey) as numServers
 					from dm_serverGroups a (nolock)
@@ -504,8 +505,8 @@ begin
 					having count(distinct c.ukey) = 0
 				) a
 
-		insert into #commands (commandText)
-		select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @Enabled = 1'
+		insert into #commands (commandText, commandNotes)
+		select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @Enabled = 1', 'Enabling Windows Event Log Check for ' + a.groupName
 			from (
 				select a.groupName, b.job_id, jobName, count(distinct c.ukey) as numServers
 					from dm_serverGroups a (nolock)
@@ -526,8 +527,12 @@ begin
 
 	while exists (select top 1 commandText from #commands)
 	begin
-		select top 1 @cSQLString = commandText
+		select top 1
+			@cSQLString = commandText,
+			@cCommandNotes = commandNotes
 			from #commands
+
+		insert into notificationLog_stage (subject, message, severity, serverName) values (@cCommandNotes, @cCommandNotes, 2, @@servername)
 
 		exec sp_executeSQL @cSQLString
 

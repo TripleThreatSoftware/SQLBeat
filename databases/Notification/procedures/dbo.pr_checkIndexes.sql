@@ -92,8 +92,11 @@ begin
 				from #performance
 				order by ukey
 
-			insert into notificationLog_stage (serverName, severity, subject, message)
-				values (@cServerName, 3, 'Index Analyzer failed at ' + convert(varchar(20), getDate()), @cMessage)
+			if @cMessage not like '%deadlock%'
+			begin
+				insert into notificationLog_stage (serverName, severity, subject, message)
+					values (@cServerName, 3, 'Index Analyzer failed at ' + convert(varchar(20), getDate(), 120), @cMessage)
+			end
 
 			continue
 		end

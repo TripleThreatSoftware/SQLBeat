@@ -56,12 +56,42 @@ begin
 				exec pr_examineServer @cServerName, @nMinutesSinceLastCheck
 			end try
 			begin catch
+				if error_message() like '%accept new connections, because it is shutting%'
+				begin
+					set @cSubject = 'SQL Server on ' + @cServerName + ' is shutting down!'
+					set @cMessage = 'SQL Server on ' + @cServerName + ' is shutting down!.<br>' + isnull(error_message(), 'No detail available.')
+
+					insert into notificationLog_stage (subject, message, serverName, severity) values (@cSubject, @cMessage, @cServerName, 1)
+				end
+				else
+				if error_message() like '%cannot process the object%xp_sqlagent_enum_jobs%'
+				begin
+					set @cSubject = 'SQL Server Agent is disabled on ' + @cServerName
+					set @cMessage = 'SQL Server Agent is disabled on ' + @cServerName + '.<br>' + isnull(error_message(), 'No detail available.')
+
+					insert into notificationLog_stage (subject, message, serverName, severity) values (@cSubject, @cMessage, @cServerName, 2)
+				end
+				else
+				if error_message() like '%incorrect syntax near%'
+				begin
+					print 'Eating error: ' + error_message()
+				end
+				else
 				if error_message() not like '%since it was compiled%'
+					and error_message() not like '%transaction log%'
+					and error_message() not like '%invalid object name%'
 				begin
 					set @cSubject = 'Failed to make contact with ' + @cServerName
 					set @cMessage = 'Failed to make contact with ' + @cServerName + '.<br>' + isnull(error_message(), 'No detail available.')
 
 					insert into notificationLog_stage (subject, message, serverName, severity) values (@cSubject, @cMessage, @cServerName, 1)
+				end
+				else
+				begin
+					set @cSubject = 'Failed to make contact with ' + @cServerName
+					set @cMessage = 'Failed to make contact with ' + @cServerName + '.<br>' + isnull(error_message(), 'No detail available.')
+
+					insert into notificationLog_stage (subject, message, serverName, severity) values (@cSubject, @cMessage, @cServerName, 3)
 				end
 			end catch
 
