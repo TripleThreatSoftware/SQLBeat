@@ -3,7 +3,8 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-ALTER procedure [dbo].[pr_rpt_returnBlockData] (@cMachineID varchar(100), @cDashboard varchar(100), @nUkeyBlock int)
+ALTER procedure [dbo].[pr_rpt_returnBlockData] (@cMachineID varchar(100), @cDashboard varchar(100), @nUkeyBlock int,
+	@nScreenHeight int = 0, @nScreenWidth int = 0, @nGraphHeight int = 0, @nGraphWidth int = 0)
 as
 begin
 	declare @cSQLString nvarchar(4000)
