@@ -1491,11 +1491,18 @@ begin
 			execute('drop procedure ' + @cProcedureName)
 
 		insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Snapshot of all jobs', @cSQLString, @nUkeyGroup)
-		exec sp_executeSQL @cSQLString
 
-		if @bTesting = 1
-			print @cSQLString
-		EXECUTE(@cProcedureName)
+		begin try
+			exec sp_executeSQL @cSQLString
+
+			if @bTesting = 1
+				print @cSQLString
+
+			EXECUTE(@cProcedureName)
+		end try
+		begin catch
+			insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Error reading jobs data', error_message(), @nUkeyGroup)
+		end catch
 
 		update #runningJobs
 			set job_id_char = dbo.fn_hex_to_char(job_id,16)

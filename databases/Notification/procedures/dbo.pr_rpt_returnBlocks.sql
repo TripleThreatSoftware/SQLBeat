@@ -3,8 +3,9 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-
--- pr_rpt_returnBlocks '2s4zlb555jayq223jisrkt3n', 'Home'
+-- select * from dashboardBlocks where machineID = 'hkbzlu45cwpcdf55tesqvvyv' and ukey_dashboard = 6
+-- select * from dm_dashboards where machineID = 'hkbzlu45cwpcdf55tesqvvyv'
+-- pr_rpt_returnBlocks 'hkbzlu45cwpcdf55tesqvvyv', 'Home'
 ALTER procedure [dbo].[pr_rpt_returnBlocks] (@cMachineID varchar(100), @cDashboard varchar(100))
 as
 begin
@@ -17,13 +18,18 @@ begin
 
 	insert into @results (blockTitle, ukey_block)
 	select b.blockTitle, a.ukey
-		from dashboardBlocks a (nolock)
+		from (
+			select ukey_block, ukey_dashboard, min(ukey) as ukey, min(sortOrder) as sortOrder
+				from dashboardBlocks a (nolock)
+				where machineID = @cMachineID
+				group by ukey_block, ukey_dashboard
+			) a
 		join dm_blocks b on a.ukey_block = b.ukey
 		join dm_dashboards c on a.ukey_dashboard = c.ukey
 			and c.machineID = @cMachineID
 			and c.dashboardName = @cDashboard
-		where a.machineID = @cMachineID
-		order by a.sortOrder, b.blockTitle
+		group by b.blockTitle, a.ukey
+		order by min(a.sortOrder), b.blockTitle
 
 	set @nUkeyBlock = 0
 	while exists (

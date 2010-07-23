@@ -1,6 +1,3 @@
-USE [Notification]
-GO
-/****** Object:  Trigger [dbo].[trg_serverGroups]    Script Date: 06/02/2010 11:25:32 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON

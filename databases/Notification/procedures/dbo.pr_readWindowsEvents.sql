@@ -61,10 +61,10 @@ begin
 
 	set @cServerName = ''
 
-	if not exists (select top 1 ukey from dm_settings where settingName = 'Shared Files')
-		insert into dm_settings (settingName, settingValue) values ('Shared Files', 'C:\SHARED\')
+	if not exists (select top 1 ukey from dm_settings where settingName = 'shared folder')
+		insert into dm_settings (settingName, settingValue) values ('shared folder', 'C:\SHARED\')
 
-	set @cScriptPath = (select top 1 settingValue from dm_settings where settingName = 'Shared Files')
+	set @cScriptPath = (select top 1 settingValue from dm_settings where settingName = 'shared folder')
 
 	create table #results (ukey int identity, wideString varchar(8000), serverName varchar(500))
 	create table #events (serverName varchar(200), category bigint, categoryString varchar(200), data varchar(8000),
