@@ -1,4 +1,3 @@
-/****** Object:  StoredProcedure [dbo].[pr_queryProcessLog]    Script Date: 05/19/2009 13:59:45 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -6,8 +5,8 @@ GO
 -- exec pr_queryProcessLog @cServerName = '10.3.10.110', @cDatabaseName = 'sandbox', @nNumHours = 720
 -- exec pr_queryProcessLog @cServerName = 'ttssvr', @nNumHours = 6
 
---exec pr_queryProcessLog @cServerName = '10.3.10.110', @dStartDate = '1900-01-01 00:00:00.000', @dEndDate = '1900-01-01 00:00:00.000', @nNumHours = 6,
---	@cHostName = null, @cLogin = null, @cBuffer = null, @bJustBlocking = 0, @nMinCPU = null, @nMinDisk = null,
+--exec pr_queryProcessLog @cServerName = 'web03', @dStartDate = '1900-01-01 00:00:00.000', @dEndDate = '1900-01-01 00:00:00.000', @nNumHours = 6,
+--	@cHostName = null, @cLogin = null, @cBuffer = null, @bJustBlocking = 1, @nMinCPU = null, @nMinDisk = null,
 --	@cProgramName = null, @cDatabaseName = null, @nMinWait = null, @bJustRunning = 0, @cLocks = null,
 --	@nMinRuntime = null
 
@@ -22,51 +21,101 @@ GO
 --	nMinRuntime int)
 
 
--- exec pr_queryProcessLog @cServerName = 'mssql-ny', @nNumHours = 48, @cDatabaseName = 'ap', @nMinRuntime = 10
-CREATE procedure [dbo].[pr_queryProcessLog] (@cServerName varchar(100), @dStartDate dateTime = null, @dEndDate dateTime = null, @nNumHours int = 12,
+-- exec pr_queryProcessLog @cServerName = 'web03', @nNumHours = 48, @cDatabaseName = '', @nMinRuntime = 30
+ALTER procedure [dbo].[pr_queryProcessLog] (@cServerName varchar(100), @dStartDate dateTime = null, @dEndDate dateTime = null, @nNumHours int = 12,
 	@cHostName varchar(100) = '', @cLogin varchar(100) = '', @cBuffer varchar(500) = '', @bJustBlocking bit = 0, @nMinCPU int = 0, @nMinDisk int = 0,
 	@cProgramName varchar(100) = '', @cDatabaseName varchar(100) = '', @nMinWait int = 0, @bJustRunning bit = 0, @cLocks varchar(100) = '',
 	@nMinRuntime int = 0)
 as
 begin
---	insert into tmp_log
---	select @cServerName, @dStartDate, @dEndDate, @nNumHours,
---		@cHostName, @cLogin, @cBuffer, @bJustBlocking, @nMinCPU, @nMinDisk,
---		@cProgramName, @cDatabaseName, @nMinWait, @bJustRunning, @cLocks,
---		@nMinRuntime, getDate()
+	--insert into tmp_log
+	--select @cServerName, @dStartDate, @dEndDate, @nNumHours,
+	--	@cHostName, @cLogin, @cBuffer, @bJustBlocking, @nMinCPU, @nMinDisk,
+	--	@cProgramName, @cDatabaseName, @nMinWait, @bJustRunning, @cLocks,
+	--	@nMinRuntime
 
-	select
-		top 200
-		ymd, spid, lastBatchTime, hostName, login, dbName, command, cpuTime, diskIO, blockedBy, waitTime, lastWaitType,
-		dbo.fn_returnFormattedBuffer(bufferContents) as bufferContents,
-		replace(locks, char(13), '<br>') as locks
-		from processLog (nolock)
-		where (ymd >= @dStartDate or isnull(@dStartDate, '') = '' or datePart(year, @dStartDate) = 1900)
-			and (ymd <= @dEndDate or isnull(@dEndDate, '') = '' or datePart(year, @dEndDate) = 1900)
-			and (ymd >= dateAdd(hour, -@nNumHours, getDate()) or isnull(@nNumHours, 0) = 0)
-			and (hostName like '%' + @cHostName + '%' or isnull(@cHostName, '') = '')
-			and hostName <> @@servername
-			and (login like '%' + @cLogin + '%' or isnull(@cLogin, '') = '')
-			and (bufferContents like '%' + @cBuffer + '%' or isnull(@cBuffer, '') = '')
-			and (
-					((isBlocker = 1 or isBlocked = 1) and @bJustBlocking = 1)
-					or isnull(@bJustBlocking, 0) = 0
-				)
-			and (cpuTime >= @nMinCPU or isnull(@nMinCPU, 0) = 0)
-			and (diskIO >= @nMinDisk or isnull(@nMinDisk, 0) = 0)
-			and (programName like '%' + @cProgramName + '%' or isnull(@cProgramName, '') = '')
-			and (dbname like '%' + @cDatabaseName + '%' or isnull(@cDatabaseName, '') = '')
-			and (waitTime >= @nMinWait or isnull(@nMinWait, 0) = 0)
-			and ((command <> 'awaiting command' and @bJustRunning = 1) or isnull(@bJustRunning, 0) = 0)
-			and (locks like '%' + @cLocks + '%' or isnull(@cLocks, '') = '')
+	if isnull(@nNumHours, 0) = 0
+		set @nNumHours = 12
 
-			and dbName not in ('master', 'model', 'msdb', 'distribution')
-			and programName not like '%repl%'
+--print @nNumHours
+--print @dStartDate
+--print dateAdd(hour, -24, getDate())
+--print datePart(year, @dStartDate)
 
-			and (dateDiff(second, lastBatchTime, ymd) >= @nMinRuntime or isnull(@nMinRuntime, 0) = 0)
+	if @nNumHours > 24
+		or (@dStartDate < dateAdd(hour, -24, getDate()) and datePart(year, @dStartDate) <> 1900)
+	begin
+		print 'using view'
 
-			and serverName = @cServerName
-		order by ymd, spid
+		select
+			top 200
+			ymd, spid, lastBatchTime, hostName, login, dbName, command, cpuTime, diskIO, blockedBy, waitTime, lastWaitType,
+			dbo.fn_returnFormattedBuffer(bufferContents) as bufferContents,
+			replace(locks, char(13), '<br>') as locks
+			from v_processLog_all (nolock)
+			where (ymd >= @dStartDate or isnull(@dStartDate, '') = '' or datePart(year, @dStartDate) = 1900)
+				and (ymd <= @dEndDate or isnull(@dEndDate, '') = '' or datePart(year, @dEndDate) = 1900)
+				and (ymd >= dateAdd(hour, -@nNumHours, getDate()) or isnull(@nNumHours, 0) = 0)
+				and (hostName like '%' + @cHostName + '%' or isnull(@cHostName, '') = '')
+				and hostName <> @@servername
+				and (login like '%' + @cLogin + '%' or isnull(@cLogin, '') = '')
+				and (bufferContents like '%' + @cBuffer + '%' or isnull(@cBuffer, '') = '')
+				and (
+						((isBlocker = 1 or isBlocked = 1) and @bJustBlocking = 1)
+						or isnull(@bJustBlocking, 0) = 0
+					)
+				and (cpuTime >= @nMinCPU or isnull(@nMinCPU, 0) = 0)
+				and (diskIO >= @nMinDisk or isnull(@nMinDisk, 0) = 0)
+				and (programName like '%' + @cProgramName + '%' or isnull(@cProgramName, '') = '')
+				and (dbname like '%' + @cDatabaseName + '%' or isnull(@cDatabaseName, '') = '')
+				and (waitTime >= @nMinWait or isnull(@nMinWait, 0) = 0)
+				and ((command <> 'awaiting command' and @bJustRunning = 1) or isnull(@bJustRunning, 0) = 0)
+				and (locks like '%' + @cLocks + '%' or isnull(@cLocks, '') = '')
 
+				and dbName not in ('master', 'model', 'msdb', 'distribution')
+				and programName not like '%repl%'
+
+				and ((dateDiff(second, lastBatchTime, ymd) >= @nMinRuntime and command <> 'Awaiting command') or isnull(@nMinRuntime, 0) = 0)
+
+				and serverName = @cServerName
+			order by ymd, spid
+
+	end
+	else
+	begin
+		print 'using table'
+
+		select
+			top 200
+			ymd, spid, lastBatchTime, hostName, login, dbName, command, cpuTime, diskIO, blockedBy, waitTime, lastWaitType,
+			dbo.fn_returnFormattedBuffer(bufferContents) as bufferContents,
+			replace(locks, char(13), '<br>') as locks
+			from processLog (nolock)
+			where (ymd >= @dStartDate or isnull(@dStartDate, '') = '' or datePart(year, @dStartDate) = 1900)
+				and (ymd <= @dEndDate or isnull(@dEndDate, '') = '' or datePart(year, @dEndDate) = 1900)
+				and (ymd >= dateAdd(hour, -@nNumHours, getDate()) or isnull(@nNumHours, 0) = 0)
+				and (hostName like '%' + @cHostName + '%' or isnull(@cHostName, '') = '')
+				and hostName <> @@servername
+				and (login like '%' + @cLogin + '%' or isnull(@cLogin, '') = '')
+				and (bufferContents like '%' + @cBuffer + '%' or isnull(@cBuffer, '') = '')
+				and (
+						((isBlocker = 1 or isBlocked = 1) and @bJustBlocking = 1)
+						or isnull(@bJustBlocking, 0) = 0
+					)
+				and (cpuTime >= @nMinCPU or isnull(@nMinCPU, 0) = 0)
+				and (diskIO >= @nMinDisk or isnull(@nMinDisk, 0) = 0)
+				and (programName like '%' + @cProgramName + '%' or isnull(@cProgramName, '') = '')
+				and (dbname like '%' + @cDatabaseName + '%' or isnull(@cDatabaseName, '') = '')
+				and (waitTime >= @nMinWait or isnull(@nMinWait, 0) = 0)
+				and ((command <> 'awaiting command' and @bJustRunning = 1) or isnull(@bJustRunning, 0) = 0)
+				and (locks like '%' + @cLocks + '%' or isnull(@cLocks, '') = '')
+
+				and dbName not in ('master', 'model', 'msdb', 'distribution')
+				and programName not like '%repl%'
+
+				and ((dateDiff(second, lastBatchTime, ymd) >= @nMinRuntime and command <> 'Awaiting command') or isnull(@nMinRuntime, 0) = 0)
+
+				and serverName = @cServerName
+			order by ymd, spid
+	end
 end
-GO

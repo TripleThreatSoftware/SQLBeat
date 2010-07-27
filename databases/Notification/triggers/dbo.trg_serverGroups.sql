@@ -107,11 +107,11 @@ begin
 				exec scheduler.dbo.pr_addJobStep @nUkeyJob, @cStepName, @cStepDatabase, @cStepText, 1, 0, 0, 0
 
 				set @cStepName = 'pr_processStagedData'
-				set @cStepText = 'exec pr_processStagedData'
+				set @cStepText = 'exec pr_processStagedData ' + convert(varchar(10), @nUkeyGroup)
 				exec scheduler.dbo.pr_addJobStep @nUkeyJob, @cStepName, @cStepDatabase, @cStepText, 2, 0, 0, 0
 
 				set @cStepName = 'pr_processRunResults'
-				set @cStepText = 'exec pr_processRunResults'
+				set @cStepText = 'exec pr_processRunResults ' + convert(varchar(10), @nUkeyGroup)
 				exec scheduler.dbo.pr_addJobStep @nUkeyJob, @cStepName, @cStepDatabase, @cStepText, 3, 0, 0, 0
 
 				exec scheduler.dbo.pr_addJobSchedule @nUkeyJob, 0, 0, 10

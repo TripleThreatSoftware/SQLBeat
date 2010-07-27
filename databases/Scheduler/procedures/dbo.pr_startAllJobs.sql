@@ -1,4 +1,9 @@
-create procedure pr_startAllJobs
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+alter procedure [dbo].[pr_startAllJobs]
 as
 begin
 	declare @nUkeyJob int

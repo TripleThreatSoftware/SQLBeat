@@ -1,19 +1,11 @@
-USE [Audit]
-GO
-
-/****** Object:  StoredProcedure [dbo].[pr_search]    Script Date: 03/24/2010 12:24:39 ******/
 SET ANSI_NULLS ON
 GO
-
 SET QUOTED_IDENTIFIER ON
 GO
-
--- exec pr_search 'sqlcluster01', 'portalpro', 'test'
-alter procedure [dbo].[pr_search] (@cServerName varchar(100) = '', @cDatabaseName varchar(100) = '', @cSearchString varchar(100))
+-- exec pr_search 'web03', 'AppDb', 'test'
+ALTER procedure [dbo].[pr_search] (@cServerName varchar(100) = '', @cDatabaseName varchar(100) = '', @cSearchString varchar(100))
 as
 begin
-	set nocount on
-
 	create table #results (ukey int identity, serverName varchar(100), databaseName varchar(200), objectName varchar(200), objectType varchar(100),
 		objectText varchar(8000), colID int)
 
@@ -79,11 +71,7 @@ begin
 		end
 	end
 
-	select distinct serverName, databaseName, objectName, objectText, objectType, colID
-		from #results
-		order by serverName, databaseName, objectName, colID
+	select distinct serverName, databaseName, objectName, objectText, objectType, colID from #results order by serverName, databaseName, objectName, colID
 
 	drop table #results
 end
-
-GO
