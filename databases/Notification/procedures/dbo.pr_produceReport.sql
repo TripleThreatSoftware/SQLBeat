@@ -1,9 +1,12 @@
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 -- select * from serverSelection
--- select * from reportMetaData
--- update reportMetaData set tableName = replace(tableName, 'AppDb', 'notification')
--- exec pr_produceReport 'ulhzbp55gdsmakaqndcjnl55', 1890, '2010-07-20', '2010-07-27'
--- exec pr_produceReport 'hkbzlu45cwpcdf55tesqvvyv', 10696, '2010-07-20', '2010-07-27', 1
-alter procedure pr_produceReport (@cMachineID varchar(100), @nUkeyReport int, @dStartDate dateTime = null, @dEndDate dateTime = null, @bReturnTable bit = 0)
+-- select * from reportMetaData where level1 = 'SQLServer' and level2 = 'Databases' and level3 = 'AppDb'
+-- exec pr_produceReport 'ulhzbp55gdsmakaqndcjnl55', 1890, '2010-08-01', '2010-08-04'
+-- exec pr_produceReport 'ulhzbp55gdsmakaqndcjnl55', 1890, '2010-07-20', '2010-07-27', 1
+ALTER procedure [dbo].[pr_produceReport] (@cMachineID varchar(100), @nUkeyReport int, @dStartDate dateTime = null, @dEndDate dateTime = null, @bReturnTable bit = 0)
 as
 begin
 

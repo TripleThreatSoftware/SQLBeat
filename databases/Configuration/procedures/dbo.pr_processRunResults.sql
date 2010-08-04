@@ -3,9 +3,12 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
+-- pr_readWMIObjects 1
+-- pr_processStagedData 1
 -- select top 100 * from runs_log order by ymd desc
--- exec pr_processRunResults 37
+-- exec pr_processRunResults 1
 -- select top 100 * from notification..drivespacelog order by ukey desc
+-- update dm_serverCounters set lastCheck = null
 
 ALTER procedure [dbo].[pr_processRunResults] (@nUkeyGroup int)
 as
@@ -320,7 +323,6 @@ begin
 				and instanceName not like '%seclogon%'
 				and instanceName not like '%aelookupsvc%'
 				and instanceName not like '%MSIServer%'
-				and instanceName not like '%Windows Error Reporting Service%'
 
 				and instanceName not like '%netmeeting%'
 				and instanceName not like '%secondary logon%'

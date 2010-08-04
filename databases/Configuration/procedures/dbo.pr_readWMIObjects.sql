@@ -1,4 +1,3 @@
-/****** Object:  StoredProcedure [dbo].[pr_readWMIObjects]    Script Date: 07/23/2010 10:15:02 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -9,7 +8,7 @@ GO
 -- truncate table runs_log
 -- select * from runs_log order by ymd desc
 
-alter procedure [dbo].[pr_readWMIObjects] (@nUkeyGroup int)
+ALTER procedure [dbo].[pr_readWMIObjects] (@nUkeyGroup int)
 as
 begin
 
@@ -34,6 +33,8 @@ begin
 	declare @cKeyName varchar(200)
 	declare @cKeyValue varchar(8000)
 	declare @nInstance int
+
+	insert into runs_log (message, serverName, ukey_group) values ('Monitoring Started', null, @nUkeyGroup)
 
 	Select
 		a.serverName, a.wmiUserName, a.wmiPassword, a.ukey as ukey_server,
@@ -172,4 +173,3 @@ begin
 	drop table #objectData
 
 end
-GO

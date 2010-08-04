@@ -82,7 +82,7 @@ begin
 		insert into @counters (ukey_counter, checkMinuteInterval)
 		select ukey, 30
 			from dm_counters (nolock)
-			where counterName = 'Win32_PerfFormattedData_PerfProc_Process'
+			where counterName in ('Win32_PerfFormattedData_PerfProc_Process', 'Win32_Process')
 	end
 
 	if exists (select top 1 groupName from @groups where groupName = 'Services')

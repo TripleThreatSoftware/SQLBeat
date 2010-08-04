@@ -1,5 +1,10 @@
--- exec pr_configureForType 'web03', 'SQL Server'
-alter procedure [dbo].[pr_configureForType] (@cServerName varchar(100), @cServerType varchar(100), @nUkeyGroup int = 0, @bEnableWMI bit = 1,
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- exec pr_configureForType 'DiabledServer', 'SQL Server', 4, 0
+-- create table tmp_configureForType
+ALTER procedure [dbo].[pr_configureForType] (@cServerName varchar(100), @cServerType varchar(100), @nUkeyGroup int = 0, @bEnableWMI bit = 1,
 	@cSQLUsername varchar(500) = '', @cSQLPassword varchar(500) = '', @cWMIUsername varchar(500) = '', @cWMIPassword varchar(500) = '')
 as
 begin
@@ -77,9 +82,9 @@ begin
 				pingCheck = 1,
 				pingCheckMinuteInterval = 2,
 				isIIS = 1,
-				configurationCheck = 1,
+				configurationCheck = case when @bEnableWMI = 1 then 1 else 0 end,
 				configurationCheckMinuteInterval = 10,
-				eventLogCheck = 1,
+				eventLogCheck = case when @bEnableWMI = 1 then 1 else 0 end,
 				eventLogCheckMinuteInterval = 10,
 				isServerPingable = 1,
 				maintenanceWindowStart = '1900-01-01 02:00:00.000',
@@ -100,9 +105,9 @@ begin
 			set isEnabled = 1,
 				pingCheck = 1,
 				pingCheckMinuteInterval = 2,
-				configurationCheck = 1,
+				configurationCheck = case when @bEnableWMI = 1 then 1 else 0 end,
 				configurationCheckMinuteInterval = 10,
-				eventLogCheck = 1,
+				eventLogCheck = case when @bEnableWMI = 1 then 1 else 0 end,
 				eventLogCheckMinuteInterval = 10,
 				isServerPingable = 1,
 				maintenanceWindowStart = '1900-01-01 02:00:00.000',
