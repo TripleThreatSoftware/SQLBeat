@@ -1,4 +1,8 @@
-alter procedure pr_checkStatus
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER procedure [dbo].[pr_checkStatus]
 as
 begin
 	declare @cMessage varchar(8000)
@@ -10,16 +14,16 @@ begin
 
 	set @nCount = (select count(*) from dm_servers (nolock) where isEnabled = 1)
 	set @cMessage = @cMessage + '<b>Enabled servers:</b> ' + convert(varchar(20), @nCount) + '<br>'
-	set @cSubject = 'Status report (' + convert(varchar(20), @nCount) + ' servers)'
+	set @cSubject = 'Status report (' + convert(varchar(20), isnull(@nCount, 0)) + ' servers)'
 
 	set @nCount = (select count(*) from dm_servers (nolock) where isEnabled = 1 and detailedCheck = 1)
-	set @cMessage = @cMessage + '<b>Detailed check servers:</b> ' + convert(varchar(20), @nCount) + '<br>'
+	set @cMessage = @cMessage + '<b>Detailed check servers:</b> ' + convert(varchar(20), isnull(@nCount, 0)) + '<br>'
 
 	set @dDate = (select max(lastDetailedCheck) from dm_servers (nolock) where isEnabled = 1 and detailedCheck = 1)
-	set @cMessage = @cMessage + '<b>Last detailed check:</b> ' + convert(varchar(20), @dDate, 120) + '<br>'
+	set @cMessage = @cMessage + '<b>Last detailed check:</b> ' + convert(varchar(20), isnull(@dDate, ''), 120) + '<br>'
 
 	set @nCount = (select count(distinct serverName) from processLog (nolock) where ymd >= dateAdd(hour, -2, getDate()) and serverName <> @@servername)
-	set @cMessage = @cMessage + '<b>ProcessLog Servers:</b> ' + convert(varchar(20), @nCount) + '<br>'
+	set @cMessage = @cMessage + '<b>ProcessLog Servers:</b> ' + convert(varchar(20), isnull(@nCount, 0)) + '<br>'
 
-	exec pr_sendMessage '', 'DBA', @cSubject, @cMessage, 1
+	insert into notificationLog_stage (subject, message, serverName, severity) values (@cSubject, @cMessage, @@servername, 1)
 end
