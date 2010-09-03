@@ -1,4 +1,9 @@
-create procedure [dbo].[pr_job_runSteps] (@nUkeyJob int, @bIsSuccess bit OUT)
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+ALTER procedure [dbo].[pr_job_runSteps] (@nUkeyJob int, @bIsSuccess bit OUT)
 as
 begin
 	declare @nUkey int
@@ -11,7 +16,7 @@ begin
 	declare @nRuntime bigint
 	declare @bContinueOnFailure bit
 
-	create table #output (outputString varchar(8000))
+	create table #jobStepOutput (outputString varchar(8000))
 
 	select
 		stepNumber, stepName, stepDatabase, stepText, isCommand, retryOnFailure, retryTimes, convert(int, ukey) as ukey_jobStep, continueOnFailure,
@@ -43,20 +48,20 @@ begin
 
 		set @nNumRepeats = 0
 		set @bStatus = 0
+		truncate table #jobStepOutput
 
 		if @bIsCommand = 1
 		begin
 			set @dStartTime = getDate()
 			set @cSQLString = @cStepText
-			truncate table #output
 
 			update jobSteps with (rowlock) set lastRun = getDate(), lastRunSuccess = null where ukey = @nUkeyJobStep
 
-			insert into #output (outputString)
+			insert into #jobStepOutput (outputString)
 			exec master..xp_cmdshell @cSQLString
 
 			set @cMessage = ''
-			select @cMessage = @cMessage + char(13) + outputString from #output where isnull(outputString, '') <> ''
+			select @cMessage = @cMessage + char(13) + outputString from #jobStepOutput where isnull(outputString, '') <> ''
 
 			update jobSteps with (rowlock) set lastRunSuccess = 1, lastRunStatus = left(@cMessage, 8000) where ukey = @nUkeyJobStep
 
@@ -94,10 +99,12 @@ begin
 				begin catch
 					set @nRuntime = dateDiff(ms, @dStartTime, getDate())
 
-					insert into jobHistory (ukey_job, ukey_jobStep, isError, stepOutput, runtime) values (
-						@nUkeyJob, @nUkeyJobStep, 1, ERROR_MESSAGE(), @nRuntime)
+					set @cMessage = 'Ran "' + isnull(@cSQLString, 'N/A') + '" and got "' + ERROR_MESSAGE() + '"'
 
-					update jobSteps with (rowlock) set lastRunSuccess = 0, lastRunStatus = ERROR_MESSAGE() where ukey = @nUkeyJobStep
+					insert into jobHistory (ukey_job, ukey_jobStep, isError, stepOutput, runtime) values (
+						@nUkeyJob, @nUkeyJobStep, 1, @cMessage, @nRuntime)
+
+					update jobSteps with (rowlock) set lastRunSuccess = 0, lastRunStatus = @cMessage where ukey = @nUkeyJobStep
 
 					if @bRetryOnFailure = 0
 						break
@@ -112,8 +119,3 @@ begin
 		end
 	end
 end
-GO
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
