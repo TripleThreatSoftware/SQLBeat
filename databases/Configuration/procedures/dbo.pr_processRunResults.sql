@@ -394,7 +394,7 @@ begin
 	-- Drive space
 
 	insert into notification..driveSpaceLog (ymd, serverName, driveLetter, driveSpace)
-	select @dLastRun, b.serverName, left(a.instanceName, 1), convert(decimal(20,2), a.newValue) / (1024*1000)
+	select @dLastRun, b.serverName, left(replace(replace(a.instanceName, ')', ''), '(', ''), 1), convert(decimal(20,2), a.newValue) / (1024*1000)
 		from #results a
 		join notification.dbo.dm_servers b (nolock) on a.serverName = b.serverName
 --		join notification.dbo.dm_drivespaceThresholds d (nolock) on b.ukey = d.ukey_server
