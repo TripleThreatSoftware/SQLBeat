@@ -3,7 +3,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
--- exec pr_sendAlerts '', 0, 0, 1
+-- exec pr_sendAlerts '', 1, 0, 1
 -- delete from messageRules where ukey = 18
 
 ALTER procedure [dbo].[pr_sendAlerts] (@cUserName varchar(100) = '', @bIsPreview bit = 0, @bOverride bit = 0, @bClearQueue bit = 0)
@@ -158,19 +158,31 @@ begin
 			and isnull(a.message, '') <> ''
 		order by a.emailAddress, a.ymd
 
+	-- as a double-check against duplicate entries in notificationLog, check against actual messages sent and do not send duplicates
+	delete #messagesToSend
+		from #messagesToSend a
+		join (
+			select distinct recipient, subject, body
+				from messagesSent (nolock)
+				where ymd >= dateAdd(hour, -2, getDate())
+			) b on a.emailAddress = b.recipient
+				and a.subject = b.subject
+				and a.message = b.body
+
+
 	if @bIsPreview = 0
 	begin
 
 		-- rate limiter!
 
-		if (select count(*) from #messagesToSend) > 5000 and @bOverride = 0
+		if (select count(*) from #messagesToSend) > 1000 and @bOverride = 0
 		begin
 			-- panic! email Cole, do not send these out
 
 			set @cThisSubject = 'SQLBeat (' + @@servername + '): More than 1000 messages are queued to send'
 			set @cThisMessage = 'There are ' + convert(varchar(20), (select count(*) from #messagesToSend)) + ' messages in the hopper to send for ' + @@servername + '.'
 
-			exec pr_sendMessage '', 'user@example.org', 'More than 1000 messages are queued to send', @cThisMessage
+			exec pr_sendMessage '', 'DBA', 'More than 1000 messages are queued to send', @cThisMessage
 		end
 		else
 		begin

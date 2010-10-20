@@ -1,13 +1,10 @@
-USE [Reporting]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_returnDatabaseList]    Script Date: 04/07/2010 12:33:41 ******/
+/****** Object:  StoredProcedure [dbo].[pr_returnDatabaseList]    Script Date: 10/20/2010 11:53:13 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
 -- exec pr_returnDatabaseList 'test'
-ALTER procedure [dbo].[pr_returnDatabaseList] (@cMachineID varchar(100))
+CREATE procedure [dbo].[pr_returnDatabaseList] (@cMachineID varchar(100))
 as
 begin
 	declare @bShowServerName bit
@@ -44,3 +41,4 @@ begin
 		from @results
 		order by ukey
 end
+GO

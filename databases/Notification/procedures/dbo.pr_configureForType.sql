@@ -2,8 +2,7 @@ SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
--- exec pr_configureForType 'DiabledServer', 'SQL Server', 4, 0
--- create table tmp_configureForType
+-- exec pr_configureForType 'web03', 'SQL Server'
 ALTER procedure [dbo].[pr_configureForType] (@cServerName varchar(100), @cServerType varchar(100), @nUkeyGroup int = 0, @bEnableWMI bit = 1,
 	@cSQLUsername varchar(500) = '', @cSQLPassword varchar(500) = '', @cWMIUsername varchar(500) = '', @cWMIPassword varchar(500) = '')
 as

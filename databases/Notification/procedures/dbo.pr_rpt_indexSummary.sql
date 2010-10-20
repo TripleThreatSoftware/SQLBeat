@@ -41,7 +41,7 @@ begin
 	insert into #performanceSummary (serverName, databaseName, tableName, indexName, user_updates, user_seeks, user_scans, user_lookups)
 	select
 		a.servername, a.databaseName, a.tableName,
-		left(a.indexName, 40) as indexName,
+		left(a.indexName, 100) as indexName,
 		a.user_updates, a.user_seeks, a.user_scans,a.user_lookups
 		from indexPerformanceLog a (nolock)
 		join #latestRun b on a.serverName = b.serverName

@@ -581,8 +581,8 @@ begin
 			if exists (select top 1 [name] from sysobjects where [name] = 'hist_partitionTableDaily')
 				insert into hist_partitionTableDaily (stepName) values ('Creating all view')
 
-			if exists (select top 1 [name] from sysobjects where [name] = 'hist_partitionTableDaily')
-				insert into hist_partitionTableDaily (stepName) values (@cVeryLongString1)
+			--if exists (select top 1 [name] from sysobjects where [name] = 'hist_partitionTableDaily')
+			--	insert into hist_partitionTableDaily (stepName) values (@cVeryLongString1)
 
  			begin try
 				exec(@cVeryLongString1

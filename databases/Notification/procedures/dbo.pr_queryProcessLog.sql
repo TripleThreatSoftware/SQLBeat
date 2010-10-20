@@ -37,10 +37,10 @@ begin
 	if isnull(@nNumHours, 0) = 0
 		set @nNumHours = 12
 
---print @nNumHours
---print @dStartDate
---print dateAdd(hour, -24, getDate())
---print datePart(year, @dStartDate)
+print @nNumHours
+print @dStartDate
+print dateAdd(hour, -24, getDate())
+print datePart(year, @dStartDate)
 
 	if @nNumHours > 24
 		or (@dStartDate < dateAdd(hour, -24, getDate()) and datePart(year, @dStartDate) <> 1900)

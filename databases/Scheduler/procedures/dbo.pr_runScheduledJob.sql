@@ -11,10 +11,16 @@ begin
 	declare @dStartTime dateTime
 	declare @nRuntime bigint
 	declare @bIsSuccess bit
+	declare @bIsLicenseValid bit
 
 	;RECEIVE TOP(1) @cConversationHandle = conversation_handle FROM ScheduledJobQueue
 
 	if @@rowcount = 0
+		return
+
+	set @bIsLicenseValid = (select notification.dbo.fn_isLicenseValid())
+
+	if @bIsLicenseValid = 0
 		return
 
 	set @nUkeyJob = (select top 1 ukey from jobs with (nolock) where conversationHandle = @cConversationHandle and isnull(currentStatus, '') <> 'Running')

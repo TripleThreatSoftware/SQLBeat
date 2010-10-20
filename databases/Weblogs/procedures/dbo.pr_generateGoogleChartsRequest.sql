@@ -1,12 +1,11 @@
-USE [Notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_generateGoogleChartsRequest]    Script Date: 05/18/2009 14:30:26 ******/
+/****** Object:  StoredProcedure [dbo].[pr_generateGoogleChartsRequest]    Script Date: 10/20/2010 11:53:12 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
-ALTER procedure [dbo].[pr_generateGoogleChartsRequest] (@nWidth int, @nHeight int, @bRelativeToTotal bit = 0, @bAbsoluteYAxis bit = 0, @bShowPie bit = 0, @bLeavePeaks bit = 0)
+create procedure [dbo].[pr_generateGoogleChartsRequest] (@nWidth int, @nHeight int, @bRelativeToTotal bit = 0,
+	@bAbsoluteYAxis bit = 0, @bShowPie bit = 0, @bLeavePeaks bit = 0, @bAlwaysShowLegend bit = 0, @bLeaveAllSets bit = 0,
+	@bShowTitle bit = 0, @cTitle varchar(200) = '', @cGraphURL varchar(8000) output)
 as
 begin
 	if isnull(@nHeight, 0) = 0
@@ -24,7 +23,7 @@ begin
 
 	if (select count(*) from #dataValues) = 0
 	begin
-		select 'images/not-available.jpg' as graphURL
+		set @cGraphURL = 'images/not-available.jpg'
 		return
 	end
 
@@ -82,7 +81,7 @@ begin
 			end
 
 			-- anything that doesn't hit at least 5% of the highest reading, ignore
-			if @nMaxValue <> 0
+			if @nMaxValue <> 0 and @bLeaveAllSets = 0
 				delete #dataValues
 					from #dataValues a
 					join (
@@ -101,7 +100,7 @@ begin
 			set @nAvgValue = (select avg(axis_y) from (select axis_x, sum(axis_y) as axis_y from #dataValues where seriesName = @cSeriesName group by axis_x) a)
 
 			-- anything that doesn't hit at least 5% of overall load at a reading point, ignore
-			if @nMaxValue <> 0
+			if @nMaxValue <> 0 and @bLeaveAllSets = 0
 				delete #dataValues
 					from #dataValues a
 					join (
@@ -116,6 +115,7 @@ begin
 
 		print 'Working on series: ' + @cSeriesName
 		print 'Max value: ' + convert(varchar(20), @nMaxvalue)
+		print 'Avg value: ' + convert(varchar(20), @nAvgValue)
 
 		if isnull(@nMinSeriesValue, 0) = isnull(@nMaxValue, 0)
 			set @nMinSeriesValue = 0
@@ -132,7 +132,7 @@ begin
 
 			print '   Working on set: ' + @cSetName
 
-			if (select count(distinct seriesName) from #dataValues) = 1 or @cSeriesName = @cSetName
+			if ((select count(distinct seriesName) from #dataValues) = 1 or @cSeriesName = @cSetName)
 				set @cLegend = @cLegend + @cSetName + '|'
 			else
 				set @cLegend = @cLegend + @cSeriesName + '-' + @cSetName + '|'
@@ -212,8 +212,12 @@ begin
 	set @cURLString = @cURLString + @cDatapoints
 
 	set @cURLString = @cURLString +
-		case when (select count(distinct setName) from #dataValues) = 1 then '' else '&chdl=' + @cLegend end + -- legend
+		case when (select count(distinct setName) from #dataValues) = 1 and not @bAlwaysShowLegend = 1 then '' else '&chdl=' + @cLegend end + -- legend
 		'&chco=ff0000,00ff00,0000ff,CCCCCC,849738,ff7e00,00f6ff,e4ff00,f600ff,20ae27,603897' -- showing in these colors
+
+	if @bShowTitle = 1
+		set @cURLString = @cURLString +
+			'&chtt=' + @cTitle
 
 	if @bShowPie = 1
 		set @cURLString = @cURLString +
@@ -234,7 +238,8 @@ begin
 					else '100'
 					end
 
-	select isnull(@cURLString , 'images/not-available.jpg') as graphURL
+	set @cGraphURL = isnull(@cURLString , 'images/not-available.jpg')
 
 	drop table #xAxis
 end
+GO

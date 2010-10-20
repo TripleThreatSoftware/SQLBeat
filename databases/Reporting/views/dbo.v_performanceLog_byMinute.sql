@@ -1,4 +1,9 @@
-create view v_performanceLog_byMinute
+/****** Object:  View [dbo].[v_performanceLog_byMinute]    Script Date: 10/20/2010 11:53:21 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+create view [dbo].[v_performanceLog_byMinute]
 as
 
 	select
