@@ -37,7 +37,9 @@ begin
 
 	set @nNextRunSeconds = dateDiff(second, getDate(), @dNextRun)
 
-	BEGIN CONVERSATION TIMER (@cConversationHandle) TIMEOUT = @nNextRunSeconds;
-
-	update jobs with (rowlock) set conversationHandle = @cConversationHandle, nextRun = @dNextRun, isEnabled = 1 where ukey = @nUkeyJob
+	if isnull(@nNextRunSeconds, 0) > 0
+	begin
+		BEGIN CONVERSATION TIMER (@cConversationHandle) TIMEOUT = @nNextRunSeconds;
+		update jobs with (rowlock) set conversationHandle = @cConversationHandle, nextRun = @dNextRun, isEnabled = 1 where ukey = @nUkeyJob
+	end
 end
