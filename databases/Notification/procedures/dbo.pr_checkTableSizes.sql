@@ -19,50 +19,15 @@ as
 begin
 	set nocount on
 
-	-- prevent this task from running while a database integrity check is running to avoid performance problems on the target server
-	if exists (select top 1 [name] from master.dbo.sysdatabases where [name] = 'scheduler')
-	begin
-		if exists (select top 1 ukey from scheduler.dbo.jobs where currentStatus = 'Running' and isEnabled = 1 and jobName like '%integrity check%')
-		begin
-			print 'integrity check is running'
-			return
-		end
-	end
-	else
-	begin
-		create table #runningJobs (Job_ID uniqueidentifier, Last_Run_Date int, Last_Run_Time varchar(6), Next_Run_Date int, Next_Run_Time varchar(6),
-			Next_Run_Schedule_ID int, Requested_To_Run int, Request_Source int, Request_Source_ID varchar(100), Running int,
-			Current_Step int, Current_Retry_Attempt int, State int)
-
-
-		insert into #runningJobs (job_id, last_run_date, last_run_time, next_run_date, next_run_time, next_run_schedule_id, requested_to_run,
-			request_source, request_source_id, running, current_step, current_retry_attempt, state)
-		exec master.dbo.xp_sqlagent_enum_jobs 1, ''
-
-		if exists (
-			select top 1 a.job_id
-				from #runningJobs a
-				join msdb.dbo.sysjobs b on a.job_id = b.job_id
-				where running = 1
-					and b.[name] like '%integrity check%'
-				)
-		begin
-			print 'integrity check is running'
-			drop table #runningJobs
-			return
-		end
-		else
-			drop table #runningJobs
-
-	end
-
 	declare @cServerName varchar(200)
 	declare @nUkeyServer int
 	declare @cSQLString nvarchar(4000)
 	declare @cUserName varchar(100)
 	declare @cPassword varchar(100)
 	declare @cThisServerName varchar(200)
+	declare @cSharedFolder varchar(500)
 
+	set @cSharedFolder = (select top 1 settingValue from notification.dbo.dm_settings where settingName = 'Shared Folder')
 	set @cThisServerName = (select settingValue from dm_settings (nolock) where settingName = 'Current machine name')
 
 	set @cServerName = ''
@@ -100,8 +65,10 @@ begin
 
 			order by servername
 
-		declare @cSharedFolder varchar(500)
-		set @cSharedFolder = (select top 1 settingValue from notification.dbo.dm_settings where settingName = 'Shared Folder')
+		if exists (select top 1 ukey from dm_settings where settingValue = 'Semaphore ' + @cServerName)
+			continue
+
+		insert into dm_settings (settingValue) values ('Semaphore ' + @cServerName)
 
 		if @cUserName is not null
 		begin
@@ -116,6 +83,8 @@ begin
 
 		insert into #history (nastyLine)
 		exec master..xp_cmdShell @cSQLString
+
+		delete from dm_settings where settingValue = 'Semaphore ' + @cServerName
 
 		delete from #history where nastyLine = '' or nastyLine = 'null' or nastyline like '%dbcc execution completed%' or nastyLine is null
 

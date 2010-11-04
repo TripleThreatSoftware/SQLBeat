@@ -20,7 +20,9 @@ begin
 	declare @nReturnStatus int
 	declare @cThisServerName varchar(100)
 	declare @cPassword varchar(100)
+	declare @cSharedFolder varchar(500)
 
+	set @cSharedFolder = (select top 1 settingValue from notification.dbo.dm_settings where settingName = 'Shared Folder')
 	set @cThisServerName = (select settingValue from dm_settings where settingName = 'Current machine name')
 
 	create table #results (ukey int identity, resultLine varchar(4000), databaseName varchar(100))
@@ -64,8 +66,10 @@ begin
 		if isnull(@nReturnStatus, 0) = 0
 			continue
 
-		declare @cSharedFolder varchar(500)
-		set @cSharedFolder = (select top 1 settingValue from notification.dbo.dm_settings where settingName = 'Shared Folder')
+		if exists (select top 1 ukey from dm_settings where settingValue = 'Semaphore ' + @cServerName)
+			continue
+
+		insert into dm_settings (settingValue) values ('Semaphore ' + @cServerName)
 
 		if isnull(@cUserName, '') <> ''
 		begin
@@ -80,6 +84,8 @@ begin
 
 		insert into #results (resultLine)
 		exec master..xp_cmdshell @cSQLString
+
+		delete from dm_settings where settingValue = 'Semaphore ' + @cServerName
 
 		set @cDatabaseName = ''
 		update #results

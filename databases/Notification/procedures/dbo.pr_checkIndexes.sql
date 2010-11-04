@@ -17,7 +17,9 @@ begin
 	declare @cThisServerName varchar(100)
 	declare @cPassword varchar(100)
 	declare @nUkeyServer int
+	declare @cSharedFolder varchar(500)
 
+	set @cSharedFolder = (select top 1 settingValue from notification.dbo.dm_settings where settingName = 'Shared Folder')
 	set @cThisServerName = (select settingValue from dm_settings where settingName = 'Current machine name')
 
 	create table #performance (ukey int identity, ukey_parent int, nastyLine varchar(3000))
@@ -61,8 +63,10 @@ begin
 		if isnull(@nReturnStatus, 0) = 0
 			continue
 
-		declare @cSharedFolder varchar(500)
-		set @cSharedFolder = (select top 1 settingValue from notification.dbo.dm_settings where settingName = 'Shared Folder')
+		if exists (select top 1 ukey from dm_settings where settingValue = 'Semaphore ' + @cServerName)
+			continue
+
+		insert into dm_settings (settingValue) values ('Semaphore ' + @cServerName)
 
 		if isnull(@cUserName, '') <> ''
 		begin
@@ -77,6 +81,8 @@ begin
 
 		insert into #performance (nastyLine)
 		exec master..xp_cmdShell @cSQLString
+
+		delete from dm_settings where settingValue = 'Semaphore ' + @cServerName
 
 		update #performance set nastyLine = rtrim(ltrim(replace(replace(replace(nastyLine, char(9), ''), char(13), ''), '  ', ' ')))
 
