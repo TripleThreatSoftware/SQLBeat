@@ -1028,7 +1028,8 @@ begin
 					1)
 			end
 
-			exec msdb..sp_stop_job @job_name = @cThisJob
+			if not exists (select top 1 [name] from master.dbo.sysdatabases where [name] = 'scheduler')
+				exec msdb..sp_stop_job @job_name = @cThisJob
 
 			insert into #results (message, severity, subject, isLongRunningJob) values (
 				'Job [' + @cThisJob + '] sent a STOP command.',
@@ -1737,7 +1738,8 @@ begin
 					and minutesStuck > 60
 				order by jobName
 
-			exec msdb..sp_stop_job @job_name = @cThisJob
+			if not exists (select top 1 [name] from master.dbo.sysdatabases where [name] = 'scheduler')
+				exec msdb..sp_stop_job @job_name = @cThisJob
 
 			insert into #results (message, severity, subject) values
 				(
@@ -1816,7 +1818,8 @@ begin
 			where jobName > @cThisJob
 			order by jobName
 
-		exec msdb..sp_stop_job @job_name = @cThisJob
+		if not exists (select top 1 [name] from master.dbo.sysdatabases where [name] = 'scheduler')
+			exec msdb..sp_stop_job @job_name = @cThisJob
 
 --		insert into #results (message, severity, subject) values
 --			(
