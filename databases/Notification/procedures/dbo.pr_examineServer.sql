@@ -2,7 +2,7 @@
 -- exec pr_examineServer 'sqlcluster01', 600
 -- select architecture, * from dm_servers
 -- update dm_servers set password = 'REDACTED', wmiPassword = 'REDACTED'
--- exec pr_examineServer '10.3.10.197', 600
+-- exec pr_examineServer 'web03', 30
 ALTER procedure [dbo].[pr_examineServer] (@cServerName varchar(100), @nMinutesBackToLook int)
 as
 begin
@@ -1830,6 +1830,40 @@ begin
 				where a.isSuccess = 0
 					and a.ukey > @nThisUkey
 
+
+			set @cThisMessage = @cThisMessage +
+				'<table width="100%" cellspacing="0" cellpadding="0"  border="0" style="font-family:Courier; font-size: x-small;">' +
+					'<tr>' +
+						'<th>Step</th><th>Runtime</th><th>Outcome</th><th>Start Time</th>' +
+					'</tr>'
+
+			select top 3
+				@cThisMessage = @cThisMessage +
+					'<tr>' +
+						'<td><b>' + isnull(b.stepName, 'N/A') + '</b></td>' +
+						'<td align="center">' + convert(varchar(20), isnull(a.runningSeconds, 0)) + 's</td>' +
+						'<td align="center">' + case when a.isSuccess = 1 then 'OK' else '<font color="red"><b>' + isnull(a.stepOutcome, 'N/A') end  + '</b></font></td>' +
+						'<td align="center">' + isnull(convert(varchar(20), a.ymd, 120), 'N/A') + '</td>' +
+					'</tr>'
+				from jobStepHistory a (nolock)
+				join dm_serverJobSteps b (nolock) on a.ukey_jobStep = b.ukey
+					and a.ukey_job = b.ukey_job
+					and b.ukey_server = @nUkeyServer
+				join dm_serverJobs c (nolock) on b.ukey_job = c.ukey
+					and a.ukey_job = c.ukey
+					and c.ukey_server = @nUkeyServer
+					and c.ukey = @nUkeyJob
+
+				join jobHistory d (nolock) on d.ukey_job = @nUkeyJob
+					and d.ukey_server = @nUkeyServer
+					and d.ymd = @dJobFailure
+					and a.ukey_jobHistory = d.ukey
+
+				where a.ukey_server = @nUkeyServer
+				order by a.ymd desc
+
+			set @cThisMessage = @cThisMessage + '</table>'
+
 			select
 				@nNumSuccess = sum(case when a.isSuccess = 1 then 1 else 0 end),
 				@nNumFailure = sum(case when a.isSuccess = 0 then 1 else 0 end)
@@ -1902,22 +1936,22 @@ begin
 			else
 			begin
 
-				select @cThisMessage = @cThisMessage + '<br><br>' +
-					'<table border="0"><tr><th colspan="3">' + isnull(b.stepName, 'N/A') + '</th></tr>' +
-						'<tr><td width="10px"></td><td>Start Time:</td><td>' + convert(varchar(20), a.ymd, 120) + ' </td></tr>' +
-						'<tr><td></td><td>Runtime   :</td><td>' + convert(varchar(20), isnull(a.runningSeconds, 0)) + 's</td></tr>' +
-						'<tr><td></td><td>Outcome   :</td><td>' + case when a.isSuccess = 1 then 'OK' else isnull(a.stepOutcome, 'N/A') end + '</td></tr>' +
-						case when a.isSuccess = 1
-							then ''
-							else '<tr><td></td><td>Step Text:</td><td>' + isnull(b.stepCommand, 'N/A') end + '</td></tr></table>'
-					from jobStepHistory a (nolock)
-					join dm_serverJobSteps b (nolock) on a.ukey_jobStep = b.ukey
-						and b.ukey_server = @nUkeyServer
-						and b.ukey_job = @nUkeyJob
-					where a.ukey_server = @nUkeyServer
-						and a.ukey_jobHistory = @nThisUkey
-						and a.ukey_job = @nUkeyJob
-					order by a.ymd
+				--select @cThisMessage = @cThisMessage + '<br><br>' +
+				--	'<table border="0"><tr><th colspan="3">' + isnull(b.stepName, 'N/A') + '</th></tr>' +
+				--		'<tr><td width="10px"></td><td>Start Time:</td><td>' + convert(varchar(20), a.ymd, 120) + ' </td></tr>' +
+				--		'<tr><td></td><td>Runtime   :</td><td>' + convert(varchar(20), isnull(a.runningSeconds, 0)) + 's</td></tr>' +
+				--		'<tr><td></td><td>Outcome   :</td><td>' + case when a.isSuccess = 1 then 'OK' else isnull(a.stepOutcome, 'N/A') end + '</td></tr>' +
+				--		case when a.isSuccess = 1
+				--			then ''
+				--			else '<tr><td></td><td>Step Text:</td><td>' + isnull(b.stepCommand, 'N/A') end + '</td></tr></table>'
+				--	from jobStepHistory a (nolock)
+				--	join dm_serverJobSteps b (nolock) on a.ukey_jobStep = b.ukey
+				--		and b.ukey_server = @nUkeyServer
+				--		and b.ukey_job = @nUkeyJob
+				--	where a.ukey_server = @nUkeyServer
+				--		and a.ukey_jobHistory = @nThisUkey
+				--		and a.ukey_job = @nUkeyJob
+				--	order by a.ymd
 
 				insert into #results (ymd, subject, message, severity, isJobFailure) values (@dJobFailure, @cThisSubject, @cThisMessage, 2, 1)
 			end
