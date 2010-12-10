@@ -1,11 +1,14 @@
-/****** Object:  UserDefinedFunction [dbo].[fn_checksum]    Script Date: 05/19/2009 13:59:45 ******/
+USE [Notification]
+GO
+/****** Object:  UserDefinedFunction [dbo].[fn_checksum]    Script Date: 12/10/2010 10:05:04 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 -- select dbo.fn_checksum('hello world')
 -- select dbo.fn_checksum('hello world2')
-create function [dbo].[fn_checksum](@cString varchar(max))
+ALTER function [dbo].[fn_checksum](@cString varchar(max))
 returns bigint
 as
 begin
@@ -19,7 +22,7 @@ begin
 	begin
 		set @cThisCharacter = substring(@cString, @nCounter, 1)
 
-		if @cThisCharacter not in (char(13), char(10), space(1))
+		if @cThisCharacter not in (char(13), char(10), space(1), char(9)) and ascii(@cThisCharacter) not in (30)
 			set @nResults = @nResults + ascii(@cThisCharacter)
 
 		set @nCounter = @nCounter + 1
@@ -27,4 +30,3 @@ begin
 
 	return @nResults
 end
-GO
