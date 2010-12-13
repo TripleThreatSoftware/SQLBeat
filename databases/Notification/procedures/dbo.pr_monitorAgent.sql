@@ -1,4 +1,6 @@
-create procedure pr_monitorAgent
+-- select * from jobs
+GO
+ALTER procedure [dbo].[pr_monitorAgent]
 as
 begin
 	declare @nUkeyJob int
@@ -13,8 +15,9 @@ begin
 				where ymd >= dateAdd(hour, -12, getDate())
 				group by ukey_job
 			) b on a.ukey = b.ukey_job
-		where currentStatus = 'Running'
+		where (currentStatus = 'Running' or isnull(nextRun, '') = '')
 			and b.ukey_job is null
+			and a.isEnabled = 1
 
 	if @@rowcount > 0
 	begin

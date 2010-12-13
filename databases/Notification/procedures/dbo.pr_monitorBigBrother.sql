@@ -915,6 +915,7 @@ begin
 			or jobName like '%fragmentation check%'
 			or jobName like '%configuration check%'
 			or jobName like '%detailed check%'
+			or jobName like '%maintain report metadata%'
 			or jobName like '%integrity check%'
 			or jobName like '%import weblogs%'
 			or jobName like '%monitor sql objects%'
