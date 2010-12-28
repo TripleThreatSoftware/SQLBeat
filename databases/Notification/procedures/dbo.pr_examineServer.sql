@@ -2,7 +2,7 @@
 -- exec pr_examineServer 'sqlcluster01', 600
 -- select architecture, * from dm_servers
 -- update dm_servers set password = 'REDACTED', wmiPassword = 'REDACTED'
--- exec pr_examineServer 'web03', 30
+-- exec pr_examineServer '10.3.10.197', 600
 ALTER procedure [dbo].[pr_examineServer] (@cServerName varchar(100), @nMinutesBackToLook int)
 as
 begin
@@ -891,7 +891,7 @@ begin
 					order by [dbID]
 
 				set @cDatabaseName = (select top 1 [dbname] from #databaseNames where [dbID] = @nDBID)
-				if isnull(@cDatabaseName, '') = ''
+				if isnull(@cDatabaseName, '') = '' or @cDatabaseName in ('tempdb', 'master', 'model', 'msdb')
 					continue
 
 				set @cSQLString = '
