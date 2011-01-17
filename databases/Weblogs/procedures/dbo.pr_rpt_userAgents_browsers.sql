@@ -1,11 +1,13 @@
-/****** Object:  StoredProcedure [dbo].[pr_rpt_userAgents_browsers]    Script Date: 12/04/2009 18:51:59 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
--- exec pr_rpt_userAgents_browsers 'osaweb'
 
-CREATE procedure [dbo].[pr_rpt_userAgents_browsers] (@cSiteName varchar(100))
+-- exec pr_rpt_userAgents_browsers 'AppDb'
+-- exec weblogs..pr_rpt_userAgents_browsers 'AppDb'
+-- select * from dm_sites
+
+ALTER procedure [dbo].[pr_rpt_userAgents_browsers] (@cSiteName varchar(100))
 as
 begin
 
@@ -14,11 +16,16 @@ begin
 			when c.browserName like '%msie 7%' then 'MSIE 7.x'
 			when c.browserName like '%msie 6%' then 'MSIE 6.x'
 			when c.browserName like '%msie 5%' then 'MSIE 5.x'
+			when c.browserName like '%blackberry%' then 'Blackberry'
+			when c.browserName like '%iphone%' then 'IPhone'
+			when c.browserName like '%ipad%' then 'IPad'
 			when c.browserName like '%firefox%' then 'FireFox'
 			when c.browserName like '%safari%' then 'Safari'
 			when c.browserName like '%netscape%' then 'Netscape'
 			when c.browserName like '%mozilla%' then 'Mozilla'
 			when c.browserName like '%Opera%' then 'Opera'
+			when c.browserName like '%crawler%' or c.browserName like '%bot%' or c.browserName like '%baidu%' or c.browserName like '%spider%' then 'Bot'
+			when charindex('/', c.browserName) > 0 then left(c.browserName, charindex('/', c.browserName) - 1)
 			else c.browserName end
 			as browserName,
 		sum(uniques) as uniques,
@@ -37,20 +44,24 @@ begin
 		join dm_sites f (nolock) on a.ukey_site = f.ukey
 			and f.friendlyName = @cSiteName
 
-		where a.ymd >= dateAdd(week, -1, getDate())
+		where a.ymd >= dateAdd(week, -2, getDate())
 
 		group by case
 			when c.browserName like '%msie 7%' then 'MSIE 7.x'
 			when c.browserName like '%msie 6%' then 'MSIE 6.x'
 			when c.browserName like '%msie 5%' then 'MSIE 5.x'
+			when c.browserName like '%blackberry%' then 'Blackberry'
+			when c.browserName like '%iphone%' then 'IPhone'
+			when c.browserName like '%ipad%' then 'IPad'
 			when c.browserName like '%firefox%' then 'FireFox'
 			when c.browserName like '%safari%' then 'Safari'
 			when c.browserName like '%netscape%' then 'Netscape'
 			when c.browserName like '%mozilla%' then 'Mozilla'
 			when c.browserName like '%Opera%' then 'Opera'
+			when c.browserName like '%crawler%' or c.browserName like '%bot%' or c.browserName like '%baidu%' or c.browserName like '%spider%' then 'Bot'
+			when charindex('/', c.browserName) > 0 then left(c.browserName, charindex('/', c.browserName) - 1)
 			else c.browserName end
-		having count(*) > 50
+		having sum(uniques) > 50
 		order by requests desc
 
 end
-GO
