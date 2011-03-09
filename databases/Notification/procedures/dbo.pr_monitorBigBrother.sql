@@ -8,7 +8,7 @@ GO
 -- select top 100 * from messagesSent order by ymd desc
 -- select top 100 * from notificationLog order by ymd desc
 
-ALTER       procedure [dbo].[pr_monitorBigBrother]
+alter       procedure [dbo].[pr_monitorBigBrother]
 as
 begin
 	set nocount on
@@ -662,36 +662,38 @@ begin
 		update #runningJobs
 			set last_run_outcome = b.last_run_outcome
 			from #runningJobs a
-			join msdb.dbo.sysjobservers b  on a.job_id = b.job_id
+			join msdb.dbo.sysjobservers b  on convert(varchar(100), a.job_id) = convert(varchar(100), b.job_id)
 
 		update #runningJobs
-			set jobName = isnull(left(rtrim(ltrim(b.name)), 200), '')
+			set jobName = isnull(left(rtrim(ltrim(convert(varchar(100), b.name))), 200), '')
 			from #runningJobs a
-			left outer join msdb.dbo.sysjobs b  on a.job_id = b.job_id
+			left outer join msdb.dbo.sysjobs b  on convert(varchar(100), a.job_id) = convert(varchar(100), b.job_id)
 
 		update #runningJobs
 			set currentStepName = left(b.step_name, 200),
 				currentStepText = left(b.command, 1000)
 			from #runningJobs a
-			join msdb.dbo.sysjobsteps b on a.job_id = b.job_id
+			join msdb.dbo.sysjobsteps b on convert(varchar(100), a.job_id) = convert(varchar(100), b.job_id)
 			where isnull(a.current_step, 0) > 0
 
 		update #runningJobs
-			set job_id_char = dbo.fn_hex_to_char(job_id,16)
+			set job_id_char = dbo.fn_hex_to_char(convert(varbinary, job_id),16)
 
 		update #runningJobs
 			set Last_Run_Time = replicate('0', 6 - len(rtrim(Last_Run_Time))) + rtrim(ltrim(Last_Run_Time))
 			where len(rtrim(Last_Run_Time)) < 6
+
 		update #runningJobs
 			set Next_Run_Time = replicate('0', 6 - len(rtrim(Next_Run_Time))) + rtrim(ltrim(Next_Run_Time))
 			where len(rtrim(Next_Run_Time)) < 6
 
 		update #runningJobs
 			set ymd = convert(dateTime, left(last_run_date, 4) + '-' + left(right(last_run_date, 4), 2) + '-' + right(last_run_date, 2) + ' ' + left(last_run_time, 2) + ':' + left(right(Last_Run_Time, 4), 2) + ':' + right(Last_Run_Time, 2) + '.000')
-			where left(last_run_date, 2) = '20'
+			where left(convert(varchar(100), last_run_date), 2) = '20'
+
 		update #runningJobs
 			set nextRun = convert(dateTime, left(Next_run_date, 4) + '-' + left(right(Next_run_date, 4), 2) + '-' + right(Next_run_date, 2) + ' ' + left(Next_run_time, 2) + ':' + left(right(Next_Run_Time, 4), 2) + ':' + right(Next_Run_Time, 2) + '.000')
-			where left(Next_run_date, 2) = '20'
+			where left(convert(varchar(100), Next_run_date), 2) = '20'
 
 		-- For SP4, the JOBID is no longer in the programName field. Improvise.
 		update #runningJobs
