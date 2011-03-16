@@ -4,7 +4,7 @@ SET QUOTED_IDENTIFIER ON
 GO
 
 -- create table eventLog_stage_hist (ukey_group int, ymd dateTime default getDate(), step varchar(200))
--- pr_processEventLogMessages 37
+-- pr_processEventLogMessages 30
 -- select * from eventLog_history where servername = 'prooradb06' order by ymd desc
 -- select * from eventLog_stage
 -- select * from notificationLog_stage
@@ -28,34 +28,34 @@ begin
 	-- Get rid of duplicates
 	--*********************************************************************************************************************
 
-	begin try
-		-- get rid of anything with a bad timeWritten field
-		delete eventLog_stage with (rowlock)
-			from eventLog_stage a
-			join dm_servers b (nolock) on (a.computerName = b.serverName or a.computerName = isnull(b.friendlyName, ''))
-				and b.ukey_group = @nUkeyGroup
-			where not (
-				left(timeWritten, 1) = ''''
-				and isdate(left(replace(timeWritten, '''', ''), 8) + ' ' + substring(replace(timeWritten, '''', ''),9,2) + ':' + substring(replace(timeWritten, '''', ''),11,2)) = 1
-				)
+	--begin try
+	--	-- get rid of anything with a bad timeWritten field
+	--	delete eventLog_stage with (rowlock)
+	--		from eventLog_stage a
+	--		join dm_servers b (nolock) on (a.computerName = b.serverName or a.computerName = isnull(b.friendlyName, ''))
+	--			and b.ukey_group = @nUkeyGroup
+	--		where not (
+	--			left(timeWritten, 1) = ''''
+	--			and isdate(left(replace(timeWritten, '''', ''), 8) + ' ' + substring(replace(timeWritten, '''', ''),9,2) + ':' + substring(replace(timeWritten, '''', ''),11,2)) = 1
+	--			)
 
-		update eventLog_stage with (rowlock)
-			set timeWritten = convert(varchar(20), convert(dateTime, left(replace(timeWritten, '''', ''), 8) + ' ' + substring(replace(timeWritten, '''', ''),9,2) + ':' + substring(replace(timeWritten, '''', ''),11,2), 112), 120)
-			from eventLog_stage a
-			join dm_servers b (nolock) on (a.computerName = b.serverName or a.computerName = isnull(b.friendlyName, ''))
-				and b.ukey_group = @nUkeyGroup
-	end try
-	begin catch
-		insert into eventLog_history (notes, ukey_group) values ('Found error converting dateTime in update of eventLog_stage', @nUkeyGroup)
-	end catch
+	--	update eventLog_stage with (rowlock)
+	--		set timeWritten = convert(varchar(20), convert(dateTime, left(replace(timeWritten, '''', ''), 8) + ' ' + substring(replace(timeWritten, '''', ''),9,2) + ':' + substring(replace(timeWritten, '''', ''),11,2), 112), 120)
+	--		from eventLog_stage a
+	--		join dm_servers b (nolock) on (a.computerName = b.serverName or a.computerName = isnull(b.friendlyName, ''))
+	--			and b.ukey_group = @nUkeyGroup
+	--end try
+	--begin catch
+	--	insert into eventLog_history (notes, ukey_group) values ('Found error converting dateTime in update of eventLog_stage', @nUkeyGroup)
+	--end catch
 
-	-- ditch anything that did not properly convert to a date
-	delete eventLog_stage with (rowlock)
-		from eventLog_stage a
-		join dm_servers b (nolock) on (a.computerName = b.serverName or a.computerName = isnull(b.friendlyName, ''))
-			and b.ukey_group = @nUkeyGroup
-		where isnumeric(left(timeWritten, 1)) = 0
-			or isdate(timeWritten) = 0
+	---- ditch anything that did not properly convert to a date
+	--delete eventLog_stage with (rowlock)
+	--	from eventLog_stage a
+	--	join dm_servers b (nolock) on (a.computerName = b.serverName or a.computerName = isnull(b.friendlyName, ''))
+	--		and b.ukey_group = @nUkeyGroup
+	--	where isnumeric(left(timeWritten, 1)) = 0
+	--		or isdate(timeWritten) = 0
 
 	select *,
 		convert(varchar(8000), '') as emailMessage,
@@ -82,15 +82,6 @@ begin
 				group by computerName
 			) b on a.serverName = b.computerName
 
-
-	-- if there are a bunch of .net errors, freak out
-	if (select count(*) from #eventLog where [message] like '%an unhandled exception%' and timeWritten >= dateAdd(minute, -30, getDate())) >= 5
-	begin
-		update #eventLog
-			set severity = 1
-			where [message] like '%an unhandled exception%'
-	end
-
 	delete #eventLog
 		from #eventLog a
 		join eventLog b (nolock) on isnull(a.computerName, '') = isnull(b.computerName, '')
@@ -108,7 +99,7 @@ begin
 
 	begin try
 		insert into eventLog (logType, category, computerName, message, sourcename, timeWritten, type, auser, monitorDate)
-		select logType, category, computerName, message, sourcename, convert(dateTime, timeWritten), type, auser, monitorDate
+		select logType, category, computerName, message, sourcename, convert(varchar(20), timeWritten, 120), type, auser, monitorDate
 			from #eventLog a (nolock)
 	end try
 	begin catch
@@ -151,7 +142,9 @@ begin
 			and message not like '%login succeeded%'
 			and message not like '%dbcc checkdb%found 0 errors%'
 			and message not like '%rpc%'
+			and message not like '%drive array accelerator%'
 			and message not like '%sntp%'
+			and message not like '%transaction log%'
 			and message not like '%windows installer service%'
 			and message not like '%error log has been reinitialized%'
 			and message not like '%microsoft corporation%'
@@ -222,7 +215,12 @@ begin
 		where [type] = 'Information'
 
 	update #eventLog
-		set emailMessage = isnull(computerName, 'BAD COMPUTER NAME') + ' @ ' + convert(varchar(20), convert(dateTime, timeWritten), 120) + char(13) + char(13) + isnull(message, 'BAD MESSAGE'),
+		set emailMessage =
+				case
+					when message like '%an unhandled exception has occurred%' and charindex('exception type', message) > 0 then
+						substring(message, charindex('exception type', message), 8000)
+					else isnull(computerName, 'BAD COMPUTER NAME') + ' @ ' + convert(varchar(20), convert(dateTime, timeWritten), 120) + char(13) + char(13) +  isnull(message, 'BAD MESSAGE')
+					end,
 			severity = case when
 				message not like '%sspi%'
 				and message not like '%unable to cycle%'
@@ -247,7 +245,11 @@ begin
 					)
 				then 1
 				else 2 end,
-			emailSubject = 'EventLog @ ' + left(right(convert(varchar(20), convert(dateTime, timeWritten), 120), 8), 5) + ' : ' + isnull(message, 'BAD MESSAGE')
+			emailSubject = 'EventLog @ ' + left(right(convert(varchar(20), convert(dateTime, timeWritten), 120), 8), 5) + ' : ' +
+				case when message like '%an unhandled exception has occurred%' and charindex('exception type', message) > 0 then
+						substring(message, charindex('exception type', message) + 15, 8000)
+					else isnull(message, 'BAD MESSAGE')
+					end
 		where isInformational = 0
 
 	select computerName, logType, message, sourceName, count(*) as numAlerts, min(timeWritten) as minYMD, max(timeWritten) as maxYMD
@@ -282,7 +284,6 @@ begin
 			and a.logType = b.logType
 			and a.message = b.message
 			and a.sourcename = b.sourceName
-
 
 	insert into notificationLog_stage (message, severity, subject, serverName, isEventLog, ymd)
 	select distinct
