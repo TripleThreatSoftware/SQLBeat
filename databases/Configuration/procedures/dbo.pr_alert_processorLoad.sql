@@ -57,11 +57,11 @@ begin
 			from #loadSummary
 			where serverName > @cThisServer
 				 and serverName in (
-					select serverName from #loadReadings group by serverName having count(*) >= 3 and avg(processorLoad) >= 60
+					select serverName from #loadReadings group by serverName having max(processorLoad) > 50 and avg(processorLoad) > 30
 					)
 		)
 	begin
-		set @nSeverity = 3
+		set @nSeverity = 1
 
 		select top 1
 			@cThisServer = serverName,
@@ -69,7 +69,7 @@ begin
 			from #loadSummary
 			where serverName > @cThisServer
 				 and serverName in (
-					select serverName from #loadReadings group by serverName having count(*) >= 3 and avg(processorLoad) >= 60
+					select serverName from #loadReadings group by serverName having max(processorLoad) > 50 and avg(processorLoad) > 30
 					)
 			order by serverName
 
@@ -107,8 +107,8 @@ begin
 		set @nNumAlerts = (select count(*) from notification..notificationLog (nolock) where serverName = @cThisServer and subject like '%cpu load%' and ymd >= dateAdd(hour, -1, getDate()))
 
 		set @nSeverity = case
-			when @nNumAlerts = 0 then 3
-			when @nNumAlerts = 1 then 2
+			when @nNumAlerts = 0 then 2
+			when @nNumAlerts = 1 then 1
 			else 1 end
 
 
