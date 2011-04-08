@@ -191,3 +191,5 @@ print 'done'
 	drop table #output
 	drop table #queries
 end
+
+-- select top 100 * from notification..messagesSent order by ymd desc
