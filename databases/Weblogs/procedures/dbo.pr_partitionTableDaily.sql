@@ -1,8 +1,3 @@
-/****** Object:  StoredProcedure [dbo].[pr_partitionTableDaily]    Script Date: 04/20/2010 13:32:45 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
 -- The keyFieldList variable should not contain ymd_id or ymd fields
 ALTER   procedure [dbo].[pr_partitionTableDaily] (@cTableName varchar(100), @cDateField varchar(100), @cKeyfieldList varchar(100), @lMakeUkey bit)
 as
@@ -121,7 +116,7 @@ begin
 	if @lHasYMD = 1
 	begin
 		set @cSQLString = 'select distinct b.ymd, b.ymdString, b.year, b.month, b.week
-			from (select distinct convert(varchar(10), ' + @cDateField + ', 120) as dateField from ' + @cTableName + ') a
+			from (select distinct convert(varchar(10), ' + @cDateField + ', 120) as dateField from ' + @cTableName + ' where ' + @cDateField + ' is not null) a
 			left outer join #dm_ymd b on a.dateField = b.ymd
 				and b.ymd >= ''' + convert(varchar(10), @dFirstDate, 120) + ''''
 
