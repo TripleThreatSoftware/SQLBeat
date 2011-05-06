@@ -57,7 +57,7 @@ begin
 			from #loadSummary
 			where serverName > @cThisServer
 				 and serverName in (
-					select serverName from #loadReadings group by serverName having max(processorLoad) > 50 and avg(processorLoad) > 30
+					select serverName from #loadReadings group by serverName having max(processorLoad) > 50 and avg(processorLoad) > 40
 					)
 		)
 	begin
@@ -69,7 +69,7 @@ begin
 			from #loadSummary
 			where serverName > @cThisServer
 				 and serverName in (
-					select serverName from #loadReadings group by serverName having max(processorLoad) > 50 and avg(processorLoad) > 30
+					select serverName from #loadReadings group by serverName having max(processorLoad) > 50 and avg(processorLoad) > 40
 					)
 			order by serverName
 
