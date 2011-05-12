@@ -298,6 +298,18 @@ begin
 				and instanceName not like '%application management%'
 				and instanceName not like '%background intelligent transfer service%'
 				and instanceName not like '%web proxy auto-discovery%'
+
+				and instanceName not like '%Runtime Optimization Service%'
+				and instanceName not like '%Logical Disk Manager%'
+				and instanceName not like '%Virtual Disk Service%'
+				and instanceName not like '%seclogon%'
+				and instanceName not like '%aelookupsvc%'
+				and instanceName not like '%MSIServer%'
+				and instanceName not like '%wersvc%'
+				and instanceName not like '%wmiApSrv%'
+
+				and instanceName not like '%netmeeting%'
+				and instanceName not like '%secondary logon%'
 		) <= 5
 	begin
 
@@ -321,6 +333,7 @@ begin
 				and instanceName not like '%aelookupsvc%'
 				and instanceName not like '%MSIServer%'
 				and instanceName not like '%wersvc%'
+				and instanceName not like '%wmiApSrv%'
 
 				and instanceName not like '%netmeeting%'
 				and instanceName not like '%secondary logon%'
