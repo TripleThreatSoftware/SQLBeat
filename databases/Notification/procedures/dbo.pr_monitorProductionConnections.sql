@@ -1,9 +1,8 @@
-/****** Object:  StoredProcedure [dbo].[pr_monitorProductionConnections]    Script Date: 05/19/2009 13:59:45 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE procedure [dbo].[pr_monitorProductionConnections]
+ALTER procedure [dbo].[pr_monitorProductionConnections]
 as
 begin
 
@@ -11,7 +10,7 @@ begin
 	select a.serverName, a.ymd,
 		'There are ' + convert(varchar(20), a.numConnections) + ' connections to ' + a.serverName + ' at ' + convert(varchar(20), a.ymd, 120) + '.' as subject,
 		'There are ' + convert(varchar(20), a.numConnections) + ' connections to ' + a.serverName + ' at ' + convert(varchar(20), a.ymd, 120) + ' of which ' + convert(varchar(20), a.numActiveConnections) + ' are active.',
-		b.offHoursPriority
+		3
 		from (
 			select serverName, ymd,
 				count(*) as numConnections,
@@ -23,8 +22,7 @@ begin
 		join dm_servers b on a.serverName = b.serverName
 			and b.detailedCheck = 1
 			and (
-				isnull(a.numConnections, 0) > isnull(connectionAlertThreshold, 300)
-				or isnull(a.numActiveConnections, 0) > isnull(activeConnectionAlertThreshold, 100)
+				isnull(a.numConnections, 0) > isnull(connectionAlertThreshold, 500)
+				or isnull(a.numActiveConnections, 0) > isnull(activeConnectionAlertThreshold, 250)
 				)
 end
-GO
