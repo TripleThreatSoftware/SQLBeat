@@ -3,8 +3,10 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 --select * from dm_sources
+-- select top 100 * from dm_sourceFiles order by ukey desc
+-- select top 100 * from fact_weblogs_stage_hist
 --
---exec pr_importWeblogs 1
+--exec pr_importWeblogs 10
 -- select * from fact_weblogs_stage_hist order by ukey
 
 ALTER  procedure [dbo].[pr_importWeblogs] (@nUkeySource int)
@@ -116,6 +118,8 @@ begin
 
 	update #filesToImport
 		set filePath = directory + '\' + fileName
+
+--select * from #filesToImport
 
 	delete from #filesToImport where isnull(fileName, '') = '' or isnull(directory, '') = ''
 
@@ -583,84 +587,126 @@ begin
 
 		insert into fact_weblogs_stage_hist (stepName) values ('Adding dimensions')
 
-		insert into dm_sourceIP (sourceIP)
-		select a.sourceIP
-			from ( select distinct isnull(sourceIP, '') as sourceIP from fact_weblogs_stage ) a
-			left outer join dm_sourceIP b on a.sourceIP = b.sourceIP
-			where b.ukey is null
+		begin try
+			insert into dm_sourceIP (sourceIP)
+			select a.sourceIP
+				from ( select distinct isnull(sourceIP, '') as sourceIP from fact_weblogs_stage ) a
+				left outer join dm_sourceIP b on a.sourceIP = b.sourceIP
+				where b.ukey is null
+		end try
+		begin catch
+			set @cThisMessage = 'Error adding to dm_sourceIP:' + isnull(ERROR_MESSAGE(), 'N/A')
 
-		insert into dm_method (method)
-		select a.method
-			from ( select distinct isnull(method, '') as method from fact_weblogs_stage ) a
-			left outer join dm_method b on a.method = b.method
-			where b.ukey is null
+			insert into fact_weblogs_stage_hist (stepName) values (left(@cThisMessage, 5000))
+		end catch
 
-		insert into dm_uriStem (uriStem, isPage)
-		select a.uriStem,
-			case when a.uriStem not like '%gif%'
-				and a.uriStem not like '%jpg%'
-				and a.uriStem not like '%doc%'
-				and a.uriStem not like '%ppt%'
-				and a.uriStem not like '%mp4%'
-				and a.uriStem not like '%png%'
-				and a.uriStem not like '%dll%'
-				and a.uriStem not like '%pdf%'
-				and a.uriStem not like '%style.css%'
-				and a.uriStem not like '%favicon.ico%'
-				and a.uriStem not like '%css.aspx%'
-				and not right(a.uriStem,3) = '.js'
-				then 1
-				else 0
-				end
-			from ( select distinct uriStem from fact_weblogs_stage ) a
-			left outer join dm_uriStem b on a.uriStem = b.uriStem
-			where b.ukey is null
+		begin try
+			insert into dm_method (method)
+			select a.method
+				from ( select distinct isnull(method, '') as method from fact_weblogs_stage ) a
+				left outer join dm_method b on a.method = b.method
+				where b.ukey is null
+		end try
+		begin catch
+			set @cThisMessage = 'Error adding to dm_method:' + isnull(ERROR_MESSAGE(), 'N/A')
 
-		insert into dm_clientIP (clientIP)
-		select a.clientIP
-			from ( select distinct isnull(clientIP, '') as clientIP from fact_weblogs_stage ) a
-			left outer join dm_clientIP b on a.clientIP = b.clientIP
-			where b.ukey is null
+			insert into fact_weblogs_stage_hist (stepName) values (left(@cThisMessage, 5000))
+		end catch
 
-		insert into dm_userAgent (userAgent, isHuman, browsername, serviceName, osName)
-		select a.userAgent,
-			dbo.fn_isHuman(a.userAgent) as isHuman,
-			dbo.fn_decodeUserAgent_browser(a.userAgent) as browserName,
-			dbo.fn_decodeUserAgent_service(a.userAgent) as serviceName,
-			dbo.fn_decodeUserAgent_os(a.userAgent) as osName
-			from ( select distinct isnull(userAgent, '') as userAgent from fact_weblogs_stage ) a
-			left outer join dm_userAgent b on a.userAgent = b.userAgent
-			where b.ukey is null
+		begin try
+			insert into dm_uriStem (uriStem, isPage)
+			select a.uriStem,
+				case when a.uriStem not like '%gif%'
+					and a.uriStem not like '%jpg%'
+					and a.uriStem not like '%doc%'
+					and a.uriStem not like '%ppt%'
+					and a.uriStem not like '%mp4%'
+					and a.uriStem not like '%png%'
+					and a.uriStem not like '%dll%'
+					and a.uriStem not like '%pdf%'
+					and a.uriStem not like '%style.css%'
+					and a.uriStem not like '%favicon.ico%'
+					and a.uriStem not like '%css.aspx%'
+					and not right(a.uriStem,3) = '.js'
+					then 1
+					else 0
+					end
+				from ( select distinct uriStem from fact_weblogs_stage ) a
+				left outer join dm_uriStem b on a.uriStem = b.uriStem
+				where b.ukey is null
+		end try
+		begin catch
+			set @cThisMessage = 'Error adding to dm_uriStem:' + isnull(ERROR_MESSAGE(), 'N/A')
+
+			insert into fact_weblogs_stage_hist (stepName) values (left(@cThisMessage, 5000))
+		end catch
+
+		begin try
+			insert into dm_clientIP (clientIP)
+			select a.clientIP
+				from ( select distinct isnull(clientIP, '') as clientIP from fact_weblogs_stage ) a
+				left outer join dm_clientIP b on a.clientIP = b.clientIP
+				where b.ukey is null
+		end try
+		begin catch
+			set @cThisMessage = 'Error adding to dm_clientIP:' + isnull(ERROR_MESSAGE(), 'N/A')
+
+			insert into fact_weblogs_stage_hist (stepName) values (left(@cThisMessage, 5000))
+		end catch
+
+		begin try
+			insert into dm_userAgent (userAgent, isHuman, browsername, serviceName, osName)
+			select a.userAgent,
+				dbo.fn_isHuman(a.userAgent) as isHuman,
+				dbo.fn_decodeUserAgent_browser(a.userAgent) as browserName,
+				dbo.fn_decodeUserAgent_service(a.userAgent) as serviceName,
+				dbo.fn_decodeUserAgent_os(a.userAgent) as osName
+				from ( select distinct isnull(userAgent, '') as userAgent from fact_weblogs_stage ) a
+				left outer join dm_userAgent b on a.userAgent = b.userAgent
+				where b.ukey is null
+		end try
+		begin catch
+			set @cThisMessage = 'Error adding to dm_userAgent:' + isnull(ERROR_MESSAGE(), 'N/A')
+
+			insert into fact_weblogs_stage_hist (stepName) values (left(@cThisMessage, 5000))
+		end catch
 
 		insert into fact_weblogs_stage_hist (stepName) values ('Adding to the fact table')
 
-		insert into fact_weblogs (ukey_sourceFile, ukey_site, ymd,
-			ukey_sourceIP, ukey_method, ukey_uriStem, queryString, ukey_clientIP, ukey_userAgent,
-			[requestStatus],[requestSubStatus],[win32Status],
-			referer, siteName, cookie, hostName, timeTaken, bytes
-			)
-		SELECT @nUkeySourceFile as ukey_sourceFile,
-			@nUkeySite as ukey_site,
-			convert(dateTime, [date] + ' ' + [time]) as ymd,
-			b.ukey as ukey_sourceIP,
-			c.ukey as ukey_method,
-			d.ukey as ukey_uriStem,
-			a.queryString,
-			f.ukey as ukey_clientIP,
-			g.ukey as ukey_userAgent,
-			[requestStatus],[requestSubStatus],[win32Status],
-			a.referer, a.siteName, a.cookie, a.hostName, a.timeTaken, a.bytes
+		begin try
+			insert into fact_weblogs (ukey_sourceFile, ukey_site, ymd,
+				ukey_sourceIP, ukey_method, ukey_uriStem, queryString, ukey_clientIP, ukey_userAgent,
+				[requestStatus],[requestSubStatus],[win32Status],
+				referer, siteName, cookie, hostName, timeTaken, bytes
+				)
+			SELECT @nUkeySourceFile as ukey_sourceFile,
+				@nUkeySite as ukey_site,
+				convert(dateTime, [date] + ' ' + [time]) as ymd,
+				b.ukey as ukey_sourceIP,
+				c.ukey as ukey_method,
+				d.ukey as ukey_uriStem,
+				a.queryString,
+				f.ukey as ukey_clientIP,
+				g.ukey as ukey_userAgent,
+				[requestStatus],[requestSubStatus],[win32Status],
+				a.referer, a.siteName, a.cookie, a.hostName, a.timeTaken, a.bytes
 
-			FROM fact_weblogs_stage a
-			join dm_sourceIP b on isnull(a.sourceIP, '') = b.sourceIP
-			join dm_method c on isnull(a.method, '') = c.method
-			join dm_uriStem d on isnull(a.uriStem, '') = d.uriStem
-			join dm_clientIP f on isnull(a.clientIP, '') = f.clientIP
-			join dm_userAgent g on isnull(a.userAgent, '') = g.userAgent
-			where isDate([date] + ' ' + [time]) = 1
+				FROM fact_weblogs_stage a
+				join dm_sourceIP b on isnull(a.sourceIP, '') = b.sourceIP
+				join dm_method c on isnull(a.method, '') = c.method
+				join dm_uriStem d on isnull(a.uriStem, '') = d.uriStem
+				join dm_clientIP f on isnull(a.clientIP, '') = f.clientIP
+				join dm_userAgent g on isnull(a.userAgent, '') = g.userAgent
+				where isDate([date] + ' ' + [time]) = 1
 
-		if @@rowcount = 0
-			insert into fact_weblogs_stage_hist (stepName) values ('No rows were inserted. Is there a NULL value?')
+			if @@rowcount = 0
+				insert into fact_weblogs_stage_hist (stepName) values ('No rows were inserted. Is there a NULL value?')
+		end try
+		begin catch
+			set @cThisMessage = 'Error adding to fact_weblogs:' + isnull(ERROR_MESSAGE(), 'N/A')
+
+			insert into fact_weblogs_stage_hist (stepName) values (left(@cThisMessage, 5000))
+		end catch
 
 		insert into fact_weblogs_stage_hist (stepName) values ('Truncating stage table')
 
