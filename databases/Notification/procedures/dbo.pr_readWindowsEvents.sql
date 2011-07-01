@@ -15,7 +15,7 @@ GO
 -- pr_readWindowsEvents 1
 -- select lastEventLogCheck, serverName from dm_servers where isEnabled = 1 and eventLogCheck = 1 order by lastEventLogCheck
 -- select * from notificationLog_stage
- --update dm_servers set lastEventLogCheck = '5/26/2010 01:00:00 AM' where servername = 'web03'
+ --update dm_servers set lastEventLogCheck = '7/28/2010' where servername = 'web03'
  --delete from eventLog where timeWritten >= '2010-05-26'
 -- select * from eventLog_stage order by timeWritten desc
 -- select top 500 * from eventLog order by timeWritten desc
@@ -23,6 +23,8 @@ GO
 -- exec pr_processEventLogMessages 30
 -- select * from dm_servers
 -- select top 500 * from notificationLog order by ymd desc
+-- exec pr_readWindowsEvents 1
+
 ALTER procedure [dbo].[pr_readWindowsEvents] (@nUkeyGroup int)
 as
 begin
@@ -65,6 +67,9 @@ begin
 		insert into dm_settings (settingName, settingValue) values ('shared folder', 'C:\SHARED\')
 
 	set @cScriptPath = (select top 1 settingValue from dm_settings where settingName = 'shared folder')
+
+	if right(@cScriptPath, 1) <> '\'
+		set @cScriptPath = @cScriptPath + '\'
 
 	create table #results (ukey int identity, wideString varchar(8000), serverName varchar(500))
 	create table #events (serverName varchar(200), category bigint, categoryString varchar(200), data varchar(8000),
@@ -114,7 +119,7 @@ begin
 		else
 			set @cSQLString = 'powershell -file ' + @cScriptPath + 'readevents.ps1 -cServerName ' + @cServerName + ' -cUserName "' + @cUsername + '" -cPassword "' + @cPassword + '" -cTimestamp ' + dbo.fn_returnUTCDate(@dLastEventLogCheck)
 
-		print @cSQLString
+--		print @cSQLString
 
 		insert into #results (wideString)
 		exec master..xp_cmdshell @cSQLString
@@ -127,6 +132,9 @@ begin
 
 		update dm_servers set lastEventLogCheck = getDate() where serverName = @cServerName
 	end
+
+-- select * from #results
+
 	create index ix_tmp_results on #results (ukey) with fillfactor = 90
 
 --select * from #results
@@ -177,7 +185,6 @@ begin
 			set @cUser = ''
 			set @cLastFieldName = ''
 
-			print '*******Added Event'
 
 			continue
 		end
@@ -203,8 +210,6 @@ begin
 			else @cFieldName
 			end
 
-print 'Field: ' + @cFieldName
-print 'String: ' + @cWideString
 
 		begin try
 
@@ -345,9 +350,19 @@ print 'String: ' + @cWideString
 
 	end
 
+--	print 'Adding to stage table'
+
 	insert into eventLog_stage (logType, category, computername, message, sourcename, timewritten, type, auser, monitordate)
-	select logFile, category, servername, message, sourceName + case when isnull(categoryString, '') <> '' then ': ' + categoryString else '' end,
-		dateAdd(hour, -dateDiff(hour, getDate(), getUTCDate()), timeWritten), [type], [user], getDate()
+	select
+		left(logFile, 100),
+		left(category, 200),
+		left(servername, 200),
+		left(message, 8000),
+		left(sourceName + case when isnull(categoryString, '') <> '' then ': ' + categoryString else '' end, 200),
+		dateAdd(hour, -dateDiff(hour, getDate(), getUTCDate()), timeWritten),
+		left([type], 200),
+		left([user], 200),
+		getDate()
 		from #events
 
 	set @nRowCount = @@rowcount

@@ -39,7 +39,7 @@ begin
 				and ukey > @nUkey
 			order by ukey
 
-		print @cFriendlyName + ' is up!'
+--		print @cFriendlyName + ' is up!'
 
 		exec notification..pr_updateState @cKeyName = @cFriendlyName, @cState = 'Up', @cCategory = 'WebsiteMonitor', @bIsGood = 1
 	end

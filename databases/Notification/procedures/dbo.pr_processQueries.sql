@@ -30,7 +30,7 @@ begin
 	declare @nMinValue int
 	declare @nMaxValue int
 
-print 'starting'
+--print 'starting'
 
 	create table #output (ukey int identity, nastyLine varchar(8000))
 
@@ -63,7 +63,7 @@ print 'starting'
 
 	set @nUkey = 0
 
-print 'selected queries'
+--print 'selected queries'
 
 	while exists (select top 1 ukey from #queries where ukey > @nUkey)
 	begin
@@ -88,7 +88,7 @@ print 'selected queries'
 			where ukey > @nUkey
 			order by ukey
 
-		print 'Running query "' + @cQueryName + '" against ' + @cServerName
+--		print 'Running query "' + @cQueryName + '" against ' + @cServerName
 
 		set @cCommandText = 'set nocount on; ' + @cCommandText
 
@@ -142,9 +142,9 @@ print 'selected queries'
 			begin
 				set @cCleanOutput = rtrim(ltrim(replace(replace(@cOutput, char(13) , ''), char(9), '')))
 
-				print 'Found: ' + @cCleanOutput
-				print 'Alert: ' + @cAlertValue
-				print 'Expected: ' + @cExpectedValue
+				--print 'Found: ' + @cCleanOutput
+				--print 'Alert: ' + @cAlertValue
+				--print 'Expected: ' + @cExpectedValue
 
 				if (isnull(@cCleanOutput, '') <> isnull(@cExpectedValue, '') and isnull(@cExpectedValue, '') <> '')
 					or (isnull(@cCleanOutput, '') = isnull(@cAlertValue, '') and isnull(@cAlertValue, '') <> '')
@@ -175,9 +175,9 @@ print 'selected queries'
 						and ukey > @nUkeyRecipient
 					order by ukey
 
-				print 'Sending message!'
-				print @cSubject
-				print @cMessage
+				--print 'Sending message!'
+				--print @cSubject
+				--print @cMessage
 
 				exec notification..pr_sendMessage '', @cRecipient, @cSubject, @cMessage, 1
 			end
@@ -186,10 +186,8 @@ print 'selected queries'
 		update query set lastRun = getDate() where ukey = @nUkeyQuery
 	end
 
-print 'done'
+--print 'done'
 
 	drop table #output
 	drop table #queries
 end
-
--- select top 100 * from notification..messagesSent order by ymd desc

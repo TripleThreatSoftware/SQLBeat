@@ -69,7 +69,7 @@ begin
 
 	insert into notificationLog_history (runGUID, serverName, stepName, ukey_group) values (@cRunGUID, @cServerName, 'START', @nUkeyGroup)
 
-	print 'Current GUID: ' + convert(varchar(100), @cRunGUID)
+--	print 'Current GUID: ' + convert(varchar(100), @cRunGUID)
 
 	set @cThisServerName = (select settingValue from dm_settings where settingName = 'Current machine name')
 
@@ -249,8 +249,8 @@ begin
 		where ukey = @nUkeyServer
 			and isnull(serverVersion, '') <> @cVersion
 
-	print 'Found version: ' + @cVersion
-	print 'Existing architecture: ' + convert(varchar(20), @nArchitecture)
+	--print 'Found version: ' + @cVersion
+	--print 'Existing architecture: ' + convert(varchar(20), @nArchitecture)
 
 	if isnull(@nArchitecture, 0) <> case when @cVersion like '%x64%' then 64 else 32 end
 	begin
