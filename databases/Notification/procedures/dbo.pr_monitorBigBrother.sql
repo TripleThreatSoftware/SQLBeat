@@ -8,7 +8,7 @@ GO
 -- select top 100 * from messagesSent order by ymd desc
 -- select top 100 * from notificationLog order by ymd desc
 
-alter       procedure [dbo].[pr_monitorBigBrother]
+ALTER       procedure [dbo].[pr_monitorBigBrother]
 as
 begin
 	set nocount on
@@ -85,6 +85,9 @@ begin
 		currentStepName varchar(200), currentStepText varchar(1000),
 		expectedRunningSeconds int default 0, maxRunningSeconds int default 0, isSystemJob bit default 0, spid int)
 
+	create table #runningJobs_temp (Job_ID uniqueIdentifier, Last_Run_Date int, Last_Run_Time varchar(6), Next_Run_Date int, Next_Run_Time varchar(6),
+			Next_Run_Schedule_ID int, Requested_To_Run int, Request_Source int, Request_Source_ID varchar(100), Running int,
+			Current_Step int, Current_Retry_Attempt int, State int)
 
 	create table #results (ukey int identity, subject varchar(300), message varchar(8000), severity int default 3,
 			isJobFailure bit default 0, isLogShippingJobFailure bit default 0, isLongRunningJob bit default 0,
@@ -651,13 +654,20 @@ begin
 		drop table #jobInstances
 
 		begin try
-			insert into #runningJobs (job_id, last_run_date, last_run_time, next_run_date, next_run_time, next_run_schedule_id, requested_to_run,
+			insert into #runningJobs_temp (job_id, last_run_date, last_run_time, next_run_date, next_run_time, next_run_schedule_id, requested_to_run,
 				request_source, request_source_id, running, current_step, current_retry_attempt, state)
 			exec master.dbo.xp_sqlagent_enum_jobs 1, ''
 		end try
 		begin catch
 
 		end catch
+
+		-- we have to do this double-process to accommodate the uniqueIdentifier job_id field
+		insert into #runningJobs (job_id, last_run_date, last_run_time, next_run_date, next_run_time, next_run_schedule_id, requested_to_run,
+			request_source, request_source_id, running, current_step, current_retry_attempt, state)
+		select convert(varchar(100), job_id), last_run_date, last_run_time, next_run_date, next_run_time, next_run_schedule_id, requested_to_run,
+			request_source, request_source_id, running, current_step, current_retry_attempt, state
+			from #runningJobs_temp
 
 		update #runningJobs
 			set last_run_outcome = b.last_run_outcome
@@ -938,12 +948,12 @@ begin
 	-- jobs that we have a history for
 	insert into #results (message, severity, subject, isLongRunningJob)
 	select distinct left(
-			'Job [' + jobName + '], ' +
+			'Job [' + isnull(rtrim(ltrim(jobName)), '') + '], ' +
 			'which usually runs in ' + isnull(convert(varchar(20), expectedRunningSeconds), '') + ' seconds, ' +
 			'has been running for ' + convert(varchar(20), secondsRunning) + ' seconds. ' + char(13) + char(13) +
-			'Start time: ' + convert(varchar(20), startTime) + char(13) +
-			'Current step: ' + a.currentStepName + char(13) +
-			'Current step text: ' + char(13) + a.currentStepText, 2000) as message,
+			'Start time: ' + convert(varchar(20), isnull(startTime, '')) + char(13) +
+			'Current step: ' + isnull(a.currentStepName, '') + char(13) +
+			'Current step text: ' + char(13) + isnull(a.currentStepText, ''), 2000) as message,
 		-- if runtime > 2x, then it's a critical alert
 		-- otherwise, sit on it
 		3 as severity,
@@ -961,12 +971,12 @@ begin
 	-- this should be a rare case, only for new jobs
 	insert into #results (message, severity, subject, isLongRunningJob)
 	select distinct left(
-			'Job [' + jobName + '], ' +
+			'Job [' + isnull(rtrim(ltrim(jobName)), '') + '], ' +
 			'which has no runtime history, ' +
-			'has been running for ' + convert(varchar(20), secondsRunning) + ' seconds. ' + char(13) + char(13) +
-			'Start time: ' + convert(varchar(20), startTime, 120) + char(13) +
-			'Current step: ' + a.currentStepName + char(13) +
-			'Current step text: ' + char(13) + a.currentStepText, 2000) as message,
+			'has been running for ' + convert(varchar(20), isnull(secondsRunning, 0)) + ' seconds. ' + char(13) + char(13) +
+			'Start time: ' + convert(varchar(20), isnull(startTime, ''), 120) + char(13) +
+			'Current step: ' + isnull(a.currentStepName, '')+ char(13) +
+			'Current step text: ' + char(13) + isnull(a.currentStepText, ''), 2000) as message,
 		-- if runtime > 2x, then it's a critical alert
 		-- otherwise, sit on it
 		3 as severity,
@@ -2007,7 +2017,7 @@ begin
 	drop table #lockSummary
 	drop table #lockresults
 	drop table #junkString
-
+	drop table #runningJobs_temp
 	-- insert into hist_monitorBigBrother (stepName) values ('Alerts sent')
 
 end
