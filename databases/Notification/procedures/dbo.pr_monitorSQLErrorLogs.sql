@@ -1,4 +1,10 @@
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
 --select top 10 * from notificationLog_Stage
+-- truncate table notificationLog_Stage
 
 ALTER procedure [dbo].[pr_monitorSQLErrorLogs]
 as
@@ -21,9 +27,10 @@ begin
 				or (logMessage like '%error%' and logMessage not like '%0 errors%' and logMessage not like '%without errors%')
 				or logMessage like '%a significant part%'
 				)
+			and logMessage not like '%reinitialized%'
 
 	insert into #errorsFound (ymd, serverName, processInfo, logMessage, ukey)
-	select a.ymd, a.serverName, a.processInfo, a.logMessage, a.ukey
+	select distinct a.ymd, a.serverName, a.processInfo, a.logMessage, a.ukey
 		from sqlErrorLog a (nolock)
 		join #errorsFound b on a.ymd = b.ymd
 			and a.processInfo = b.processInfo
@@ -105,18 +112,24 @@ begin
 			group by serverName
 			order by serverName
 
-		-- if we've got lots of failures for a long time, deprioritize
-		if @nNumFailures > 5
-			or (
---				@nNumFailures > 1
---				and (
-				(
-					select count(*)
-						from notificationLog (nolock)
-						where serverName = @cServerName
-							and subject like '%login failure%'
-							and ymd >= dateAdd(hour, -1, getDate())
-					) > 1
+		-- if we've got lots of failures for a long time, increase the priority
+		if (
+			select top 1 b.isProduction
+				from dm_servers a (nolock)
+				join dm_serverGroups b (nolock) on a.ukey_group = b.ukey
+				where a.serverName = @cServerName
+			) = 1
+			and (
+				@nNumFailures >= 5
+				or (
+					(
+						select count(*)
+							from notificationLog (nolock)
+							where serverName = @cServerName
+								and subject like '%login failure%'
+								and ymd >= dateAdd(hour, -1, getDate())
+						) >= 4
+					)
 				)
 		begin
 			set @cSubject = 'Login failure for ' + convert(varchar(20), @nNumFailures) + ' users at ' + convert(varchar(20), @dYMDBegin, 120) + '.'
@@ -127,7 +140,7 @@ begin
 				where serverName = @cServerName
 				order by ymd
 
-			insert into notificationLog_stage (serverName, subject, message, severity) values (@cServerName, @cSubject, @cMessage, 2)
+			insert into notificationLog_stage (serverName, subject, message, severity) values (@cServerName, @cSubject, @cMessage, 1)
 
 			delete from #loginFailures where serverName = @cServerName
 		end
@@ -169,25 +182,48 @@ begin
 			and c.isProduction = 1
 		where c.ukey is null
 
+	select distinct serverName, processInfo, ymd, identity(int) as ukey
+		into #otherErrors
+		from #errorsFound
+		where isDeadlock = 0 and isLoginFailure = 0
+
+	set @nThisUkey = 0
+
+	while exists (select top 1 ukey from #otherErrors where ukey > @nThisUkey)
+	begin
+		select top 1
+			@cServerName = serverName,
+			@dYMDBegin = ymd,
+			@nThisUkey = ukey,
+			@cSubject = 'SQL Error from [' + processInfo + '] at ' + right(convert(varchar(20), ymd, 120), 8),
+			@cProcessInfo = processInfo
+			from #otherErrors
+			where ukey > @nThisUkey
+			order by ukey
+
+		set @cMessage = ''
+
+		select @cMessage = @cMessage + logMessage + '<br>'
+			from (
+				select top 500 logMessage
+					from #errorsFound
+					where serverName = @cServerName
+						and ymd = @dYMDBegin
+						and processInfo = @cProcessInfo
+					order by ukey
+				) a
+
+		insert into notificationLog_stage (ymd, serverName, severity, subject, message) values (@dYMDBegin, @cServerName, 2, @cSubject, @cMessage)
+	end
+
 	insert into notificationLog_stage (ymd, serverName, severity, subject, message)
-	select distinct ymd, serverName, 1, subject, message from #loginFailures
+	select distinct ymd, serverName, 2, subject, message from #loginFailures
 	union
 	select distinct ymd, serverName, 1, subject, message from #deadlocks
-	union
-	select
-		ymd, serverName, 1, left(logMessage, 100) as subject, convert(varchar(8000), logMessage) as message
-		from sqlErrorLog (nolock)
-		where ymd >= dateAdd(day, -2, getDate())
-			and (
-				logMessage like '%a significant part%'
-				)
+
 
 	drop table #errorsFound
 	drop table #loginFailures
 	drop table #deadlocks
+	drop table #otherErrors
 end
-GO
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO

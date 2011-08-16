@@ -81,7 +81,7 @@ begin
 	create table #runningJobs (Job_ID varchar(100), Last_Run_Date int, Last_Run_Time varchar(6), Next_Run_Date int, Next_Run_Time varchar(6),
 		Next_Run_Schedule_ID int, Requested_To_Run int, Request_Source int, Request_Source_ID varchar(100), Running int,
 		Current_Step int, Current_Retry_Attempt int, State int, ymd dateTime, last_run_outcome int, job_id_char varchar(100),
-		nextRun dateTime, minutesRunning decimal(10,2), secondsRunning int, startTime dateTime, jobName varchar(200), spidStartTime dateTime,
+		nextRun dateTime, minutesRunning decimal(20,2), secondsRunning int, startTime dateTime, jobName varchar(200), spidStartTime dateTime,
 		currentStepName varchar(200), currentStepText varchar(1000),
 		expectedRunningSeconds int default 0, maxRunningSeconds int default 0, isSystemJob bit default 0, spid int)
 
@@ -504,12 +504,12 @@ begin
 		select
 			convert(varchar(20), a.ukey) as job_id,
 			a.jobName,
-			d.stepName,
-			c.stepOutput as jobOutcome,
-			convert(decimal(10,2), convert(decimal(10,2), c.runtime) / 1000.00),
+			left(d.stepName, 1000),
+			left(c.stepOutput, 8000) as jobOutcome,
+			convert(decimal(20,2), convert(decimal(20,2), c.runtime) / 1000.00),
 			c.ymd,
 			case when c.isError = 0 then 1 else 0 end as isSuccess,
-			d.stepText,
+			left(d.stepText, 8000),
 			d.stepNumber
 			from scheduler.dbo.jobs a (nolock)
 			join #jobStarting b on a.ukey = b.ukey_job
@@ -525,15 +525,15 @@ begin
 		select
 			convert(varchar(20), a.ukey) as job_id,
 			datediff(second, nextRun, getDate()) as secondsRunning,
-			a.jobName,
+			left(a.jobName, 200),
 			a.nextRun as startTime,
-			convert(decimal(10,2), convert(decimal(10,2), datediff(second, nextRun, getDate())) / 60.00) as minutesRunning
+			convert(decimal(20,2), convert(decimal(20,2), datediff(second, nextRun, getDate())) / 60.00) as minutesRunning
 			from scheduler.dbo.jobs a (nolock)
 			where isnull(currentStatus, '') = 'Running'
 
 		update #runningJobs
-			set currentStepName = d.stepName,
-				currentStepText = d.stepText
+			set currentStepName = left(d.stepName, 200),
+				currentStepText = left(d.stepText, 1000)
 			from #runningJobs a
 			join (
 				select ukey_job, max(ukey) as ukey
@@ -545,6 +545,7 @@ begin
 				and b.ukey = c.ukey
 			join scheduler.dbo.jobSteps d (nolock) on c.ukey_jobStep = d.ukey
 				and b.ukey_job = d.ukey_job
+
 
 	end
 	else
