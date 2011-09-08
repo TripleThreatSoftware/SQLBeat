@@ -28,6 +28,7 @@ begin
 				or logMessage like '%a significant part%'
 				)
 			and logMessage not like '%reinitialized%'
+			and logMessage not like '%logging sql server messages%'
 
 	insert into #errorsFound (ymd, serverName, processInfo, logMessage, ukey)
 	select distinct a.ymd, a.serverName, a.processInfo, a.logMessage, a.ukey
