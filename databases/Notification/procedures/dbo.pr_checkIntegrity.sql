@@ -113,8 +113,6 @@ begin
 				or resultLine like '%connecting to sql server%'
 				or resultLine like '%unable to complete login process%'
 				or resultLine like '%does not exist or access denied%'
-				or resultLine like '%timeout%'
-				or resultLine like '%ConnectionOpen%'
 
 		if @@rowcount > 0
 		begin
@@ -128,8 +126,6 @@ begin
 					or resultLine like '%connecting to sql server%'
 					or resultLine like '%unable to complete login process%'
 					or resultLine like '%does not exist or access denied%'
-					or resultLine like '%timeout%'
-					or resultLine like '%ConnectionOpen%'
 		end
 
 		-- these should be just failures

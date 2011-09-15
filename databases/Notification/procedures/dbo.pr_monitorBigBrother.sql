@@ -939,6 +939,9 @@ begin
 			or jobName like '%monitor myself%'
 			or jobName like 'maintenance%'
 			or jobName like '%mart%'
+			or jobName like '%backup%'
+			or jobName like '%production connections%'
+			or jobName like '%execution statistics%'
 
 			or jobName like '%LSBackup%'
 			or jobName like '%LSRestore%'

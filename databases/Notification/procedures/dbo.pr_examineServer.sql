@@ -1098,6 +1098,7 @@ begin
 				where a.isBlocked = 1
 					and a.blockedBy <> ''
 					and a.ignoreSPID = 0
+					and abs(dateDiff(second, b.lastBatchTime, a.lastBatchTime)) >= @nBlockingSecondsThreshold
 --		end
 
 		-- wild
@@ -1752,7 +1753,7 @@ begin
 			where secondsRunning > expectedRunningSeconds * 1.5
 				and secondsRunning > 60
 				-- should be at least 20% higher than the longest runtime we've observed
-				and secondsRunning > maxRunningSeconds * 1.2
+				and (secondsRunning > maxRunningSeconds * 1.2 or secondsRunning > 60*60*12)
 				and expectedRunningSeconds > 0
 				and convert(int, (minutesRunning/10)) > 0
 
@@ -1776,7 +1777,7 @@ begin
 			1 as isLongRunningJob
 			from #runningJobs a
 			where secondsRunning > 60*5
-				and expectedRunningSeconds = 0
+				and isnull(expectedRunningSeconds, 0) = 0
 				and convert(int, (minutesRunning/10)) > 0
 
 		--********************************************************************************************************
