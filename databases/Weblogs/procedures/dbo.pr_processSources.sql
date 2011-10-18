@@ -1,4 +1,3 @@
-/****** Object:  StoredProcedure [dbo].[pr_processSources]    Script Date: 12/04/2009 18:51:58 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -12,7 +11,7 @@ GO
 --alter table dm_sources add isEnabled bit default 0
 
 --go
-CREATE procedure [dbo].[pr_processSources]
+ALTER procedure [dbo].[pr_processSources]
 as
 begin
 	declare @cThisSource varchar(1000)
@@ -23,6 +22,9 @@ begin
 	declare @bIsApache bit
 
 	set @nThisUkey = 0
+
+	if not datePart(hour, getDate()) between 0 and 7
+		return
 
 	insert into fact_weblogs_stage_hist (stepName) values ('Processing sources')
 
@@ -193,4 +195,3 @@ begin
 
 	end
 end
-GO

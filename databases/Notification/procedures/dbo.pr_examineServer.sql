@@ -1275,11 +1275,13 @@ begin
 
 		declare @dLastJobData dateTime
 
---		set @dLastJobData = (select max(ymd) from jobHistory (nolock) where ukey_server = @nUkeyServer)
+		set @dLastJobData = (select max(ymd) from jobHistory (nolock) where ukey_server = @nUkeyServer)
 
 		-- if we have no job data, just look at today
---		if isnull(@dLastJobData, '') = ''
+		if isnull(@dLastJobData, '') = ''
 			set @dLastJobData = convert(varchar(10), dateAdd(day, -1, getDate()), 120)
+		else
+			set @dLastJobData = dateAdd(hour, -2, @dLastJobData)
 
 		set @cSQLString = '
 			create procedure ' + @cProcedureName + '
