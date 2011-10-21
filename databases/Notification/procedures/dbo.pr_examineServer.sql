@@ -2,7 +2,7 @@
 -- exec pr_examineServer 'sqlcluster01', 600
 -- select architecture, * from dm_servers
 -- update dm_servers set password = 'REDACTED', wmiPassword = 'REDACTED'
--- exec pr_examineServer '10.3.10.197', 600
+-- exec pr_examineServer 'web03', 600
 ALTER procedure [dbo].[pr_examineServer] (@cServerName varchar(100), @nMinutesBackToLook int)
 as
 begin
@@ -1111,10 +1111,10 @@ begin
 
 				'CPU Delta: ' +
 					convert(varchar(20),
-						convert(decimal(10,2),
+						convert(decimal(20,2),
 							(
-								convert(decimal(10,2), sum(isnull(cpuTime, 0)) - sum(isnull(lastCPU, 0))) /
-								convert(decimal(10,2),
+								convert(decimal(20,2), sum(isnull(cpuTime, 0)) - sum(isnull(lastCPU, 0))) /
+								convert(decimal(20,2),
 									dateDiff(second,
 										min(isnull(case when datePart(year, lastData) = 1900 or isnull(lastData, '') = '' then isnull(lastBatchTime, getDate()) else lastData end, '')),
 										getDate()
@@ -1126,10 +1126,10 @@ begin
 
 				'DISK Delta: ' +
 					convert(varchar(20),
-						convert(decimal(10,2),
+						convert(decimal(20,2),
 							(
-								convert(decimal(10,2), sum(isnull(diskio, 0)) - sum(isnull(lastDisk, 0))) /
-								convert(decimal(10,2),
+								convert(decimal(20,2), sum(isnull(diskio, 0)) - sum(isnull(lastDisk, 0))) /
+								convert(decimal(20,2),
 									dateDiff(second,
 										min(isnull(case when datePart(year, lastData) = 1900 or isnull(lastData, '') = '' then isnull(lastBatchTime, getDate()) else lastData end, '')),
 										getDate()
@@ -1141,8 +1141,8 @@ begin
 
 				'Runtime of this batch: ' +
 					convert(varchar(20),
-						convert(decimal(10,2),
-							convert(decimal(10,2),
+						convert(decimal(20,2),
+							convert(decimal(20,2),
 								dateDiff(second, isnull(lastBatchTime, getDate()), getDate())
 								) / 60
 							)
@@ -1163,8 +1163,8 @@ begin
 
 			-- weight the severity based on how long it's been running, and whether or not it's business hours
 			case
-				when @bIsOffHours = 1 and convert(decimal(10,2), convert(decimal(10,2), dateDiff(second, isnull(lastBatchTime, getDate()), getDate())) / 60) > 45 then 1
-				when @bIsOffHours = 0 and convert(decimal(10,2), convert(decimal(10,2), dateDiff(second, isnull(lastBatchTime, getDate()), getDate())) / 60) > 15 then 1
+				when @bIsOffHours = 1 and convert(decimal(20,2), convert(decimal(20,2), dateDiff(second, isnull(lastBatchTime, getDate()), getDate())) / 60) > 45 then 1
+				when @bIsOffHours = 0 and convert(decimal(20,2), convert(decimal(20,2), dateDiff(second, isnull(lastBatchTime, getDate()), getDate())) / 60) > 15 then 1
 				else 2
 				end as severity,
 
