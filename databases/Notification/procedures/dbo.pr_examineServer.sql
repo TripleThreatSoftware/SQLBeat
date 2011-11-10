@@ -1,3 +1,8 @@
+/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 11/10/2011 10:48:45 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 --select top 100 * from notificationLog_history order by ymd desc
 -- exec pr_examineServer 'sqlcluster01', 600
 -- select architecture, * from dm_servers
@@ -872,11 +877,24 @@ begin
 				execute('drop procedure ' + @cProcedureName)
 
 			insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Identify all locks held', @cSQLString, @nUkeyGroup)
-			exec sp_executeSQL @cSQLString
+
+
+			begin try
+				exec sp_executeSQL @cSQLString
+			end try
+			begin catch
+				insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Error creating SP to determine locks', @cSQLString, @nUkeyGroup)
+			end catch
 
 			if @bTesting = 1
 				print @cSQLString
-			EXECUTE(@cProcedureName)
+
+			begin try
+				EXECUTE(@cProcedureName)
+			end try
+			begin catch
+				insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Error determining locks', @cSQLString, @nUkeyGroup)
+			end catch
 
 			-- now, scan through each database and get a list of locked objects
 
@@ -1279,9 +1297,9 @@ begin
 
 		-- if we have no job data, just look at today
 		if isnull(@dLastJobData, '') = ''
-			set @dLastJobData = convert(varchar(10), dateAdd(day, -1, getDate()), 120)
+			set @dLastJobData = convert(varchar(10), dateAdd(day, -2, getDate()), 120)
 		else
-			set @dLastJobData = dateAdd(hour, -2, @dLastJobData)
+			set @dLastJobData = dateAdd(hour, -12, @dLastJobData)
 
 		set @cSQLString = '
 			create procedure ' + @cProcedureName + '
