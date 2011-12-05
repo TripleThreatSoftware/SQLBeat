@@ -1,3 +1,6 @@
+USE [notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_checkFragmentation]    Script Date: 12/05/2011 11:08:23 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -135,7 +138,7 @@ begin
 		insert into notificationLog_stage (subject, message, severity, serverName)
 		select distinct
 			'Credentials (' + isnull(@cUserName, '') + '/' + isnull(@cPassword, '') + ') supplied for ' + isnull(@cFriendlyName, @cServerName) + ' invalid.' as subject,
-			'Fragmentation scan failed for "' + isnull(@cFriendlyName, @cServerName) + '" as "' + isnull(@cUserName, '') + '/' + isnull(@cPassword, '') + '" with the following error: ' + char(13) +
+			'Fragmentation scan failed for "' + isnull(@cFriendlyName, @cServerName) + '" as "' + isnull(@cUserName, '') + '" with the following error: ' + char(13) +
 				isnull(resultLine, 'NULL MESSAGE') as message,
 			3 as severity,
 			isnull(@cFriendlyName, @cServerName) as serverName
@@ -146,7 +149,7 @@ begin
 		insert into notificationLog_stage (subject, message, severity, serverName)
 		select distinct
 			'Database integrity failure on ' + isnull(@cFriendlyName, @cServerName) + '.' as subject,
-			'Fragmentation scan failed for "' + isnull(@cFriendlyName, @cServerName) + '" as "' + isnull(@cUserName, '') + '/' + isnull(@cPassword, '') + '" with the following error: ' + char(13) +
+			'Fragmentation scan failed for "' + isnull(@cFriendlyName, @cServerName) + '" as "' + isnull(@cUserName, '') + '" with the following error: ' + char(13) +
 				isnull(resultLine, 'NULL MESSAGE') as message,
 			2 as severity,
 			isnull(@cFriendlyName, @cServerName) as serverName
@@ -158,7 +161,7 @@ begin
 		insert into notificationLog_stage (subject, message, severity, serverName)
 		select distinct
 			'Fragmentation scan of ' + isnull(@cFriendlyName, @cServerName) + ' failed.' as subject,
-			'Fragmentation scan failed for "' + isnull(@cFriendlyName, @cServerName) + '" as "' + isnull(@cUserName, '') + '/' + isnull(@cPassword, '') + '" with the following error: ' + char(13) +
+			'Fragmentation scan failed for "' + isnull(@cFriendlyName, @cServerName) + '" as "' + isnull(@cUserName, '') + '" with the following error: ' + char(13) +
 				isnull(resultLine, 'NULL MESSAGE') as message,
 			3 as severity,
 			isnull(@cFriendlyName, @cServerName) as serverName

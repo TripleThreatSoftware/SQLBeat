@@ -1,13 +1,17 @@
-/****** Object:  StoredProcedure [dbo].[pr_pingServer]    Script Date: 05/19/2009 13:59:45 ******/
+USE [notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_pingServer]    Script Date: 12/05/2011 11:11:00 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
--- select top 100 * from pingResults order by ymd desc
+
+
+-- select top 100 * from pingLog order by ymd desc
 -- exec pr_pingServer 'appweb01'
 -- update pingResults set sqlPingResults = pingResults where sqlPingResults is null
 -- alter table pingResults drop column pingResults
-CREATE           procedure [dbo].[pr_pingServer] (@cServerName varchar(100))
+ALTER           procedure [dbo].[pr_pingServer] (@cServerName varchar(100))
 as
 begin
 	declare @cServerNamePart varchar(100)
@@ -20,6 +24,8 @@ begin
 	declare @bPingServer bit
 	declare @bIsBusinessHours bit
 	declare @nOffHoursPriority int
+	declare @bIsProduction bit
+	declare @nUkeyGroup int
 
 	declare @cRouterMessage varchar(2000)
 	declare @cServerMessage varchar(2000)
@@ -54,13 +60,16 @@ begin
 		@bPingServer = pingCheck,
 		@nOffHoursPriority = offHoursPriority,
 		@bServiceCheck = serviceCheck,
-		@bIsEnabled = isEnabled
+		@bIsEnabled = isEnabled,
+		@nUkeyGroup = ukey_group
 		from dm_servers (nolock)
 		where serverName = @cServerName
 --			and isEnabled = 1
 
 	if isnull(@bPingServer, 1) = 0
 		return 1
+
+	set @bIsProduction = (select top 1 isnull(isProduction, 0) from dm_serverGroups (nolock) where ukey = @nUkeyGroup)
 
 	--*********************************************************************************************************
 	-- Sort out the proper naming of the server
@@ -105,7 +114,7 @@ begin
 	begin
 		truncate table #sqlPing
 
-		set @cCommandline = 'ping ' + @cServerNamePart
+		set @cCommandline = 'ping ' + @cServerNamePart + ' -n 8'
 
 		insert into #sqlPing
 		exec master..xp_cmdshell @cCommandline
@@ -115,7 +124,7 @@ begin
 		select @cServerMessage = @cServerMessage + isnull(results, '') + char(13) --+ case when results like '%reply from%' then char(13) else '' end
 			from #sqlPing
 
-		if (@cServerMessage not like '%received = 4%' and @cServerMessage not like '%received = 3%' and @cServerMessage not like '%received = 2%') or @cServerMessage like '%ttl expired in transit%'
+		if (@cServerMessage not like '%received = 8%' and @cServerMessage not like '%received = 7%' and @cServerMessage not like '%received = 6%' and @cServerMessage not like '%received = 5%' and @cServerMessage not like '%received = 4%' and @cServerMessage not like '%received = 3%') or @cServerMessage like '%ttl expired in transit%'
 			set @bIsServerPingable = 0
 		else
 			set @bIsServerPingable = 1
@@ -134,7 +143,7 @@ begin
 		truncate table #sqlPing
 
 		declare @cSQLPingLocation varchar(200)
-		set @cSQLPingLocation = (select settingValue from dm_settings where settingName = 'SQLPing Location')
+		set @cSQLPingLocation = (select settingValue from dm_settings (nolock) where settingName = 'SQLPing Location')
 
 		if isnull(@cSQLPingLocation, '') <> ''
 		begin
@@ -220,25 +229,11 @@ begin
 			'SQLPing Results : ' + char(13) + @cSQLMessage
 
 		-- if it's business hours, or this is the third one we've seen in the last 90 minutes then raise the alert
-		if @bIsBusinessHours = 1
-			or (
-				@bIsBusinessHours = 0
-				and @nOffHoursPriority = 1
-			)
-		begin
-			insert into notificationLog_stage (message, severity, subject, serverName, isConnectivity)
-				values (@cThisMessage, 1, @cThisSubject, @cFriendlyName, 1)
-
-		end
-		else
-		begin
-			insert into notificationLog_stage (message, severity, subject, serverName, isConnectivity)
-				values (@cThisMessage, 2, @cThisSubject, @cFriendlyName, 1)
-		end
+		insert into notificationLog_stage (message, severity, subject, serverName, isConnectivity) values (
+			@cThisMessage, case when @nTimesUnavailable > 2 or @bIsProduction = 1 then 1 else 2 end, @cThisSubject, @cFriendlyName, 1)
 
 		return 0
 	end
 	else
 		return 1
 end
-GO
