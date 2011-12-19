@@ -1,3 +1,6 @@
+USE [configuration]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_readWMIObjects]    Script Date: 12/19/2011 16:25:30 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -33,6 +36,7 @@ begin
 	declare @cKeyName varchar(200)
 	declare @cKeyValue varchar(8000)
 	declare @nInstance int
+	declare @cServerNamePart varchar(100)
 
 	insert into runs_log (message, serverName, ukey_group) values ('Monitoring Started', null, @nUkeyGroup)
 
@@ -63,10 +67,13 @@ begin
 
 	set @cServerName = ''
 
-	if not exists (select top 1 ukey from notification.dbo.dm_settings where settingName = 'Shared Files')
-		insert into notification.dbo.dm_settings (settingName, settingValue) values ('Shared Files', 'C:\SHARED\')
+	if not exists (select top 1 ukey from notification.dbo.dm_settings where settingName = 'Shared Folder')
+		insert into notification.dbo.dm_settings (settingName, settingValue) values ('Shared Folder', 'C:\SHARED\')
 
-	set @cScriptPath = (select top 1 settingValue from notification.dbo.dm_settings where settingName = 'Shared Files')
+	set @cScriptPath = (select top 1 settingValue from notification.dbo.dm_settings where settingName = 'Shared Folder')
+
+	if right(@cScriptPath, 1) <> '\'
+		set @cScriptPath = @cScriptPath + '\'
 
 	create table #results (ukey int identity, wideString varchar(8000), serverName varchar(500), counterName varchar(200))
 	create table #objectData (serverName varchar(200), counterName varchar(200), keyName varchar(200), keyValue varchar(8000), instance int)
@@ -93,10 +100,17 @@ begin
 			where ukey > @nUkey
 			order by ukey
 
+		set @cServerNamePart = @cServerName
+
+		if charindex('\', @cServerName) > 0
+		begin
+			set @cServerNamePart = left(@cServerName, charindex('\', @cServerName) - 1)
+		end
+
 		if isnull(@cUserName, '') = ''
-			set @cSQLString = 'powershell -file ' + @cScriptPath + 'readWMI.ps1 -cServerName ' + @cServerName + ' -cObjectName ' + @cCounterName
+			set @cSQLString = 'powershell -file ' + @cScriptPath + 'readWMI.ps1 -cServerName ' + @cServerNamePart + ' -cObjectName ' + @cCounterName
 		else
-			set @cSQLString = 'powershell -file ' + @cScriptPath + 'readWMI.ps1 -cServerName ' + @cServerName + ' -cUserName "' + @cUsername + '" -cPassword "' + @cPassword + '" -cObjectName ' + @cCounterName
+			set @cSQLString = 'powershell -file ' + @cScriptPath + 'readWMI.ps1 -cServerName ' + @cServerNamePart + ' -cUserName "' + @cUsername + '" -cPassword "' + @cPassword + '" -cObjectName ' + @cCounterName
 
 		print @cSQLString
 

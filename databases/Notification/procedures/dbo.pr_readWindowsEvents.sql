@@ -1,3 +1,6 @@
+USE [notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_readWindowsEvents]    Script Date: 12/19/2011 16:22:57 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -60,6 +63,7 @@ begin
 	declare @cWideString varchar(8000)
 	declare @nRowCount int
 	declare @cLastFieldName varchar(100)
+	declare @cServerNamePart varchar(100)
 
 	set @cServerName = ''
 
@@ -112,12 +116,21 @@ begin
 
 --		set @dLastEventLogCheck = '2010-05-26'
 
+		set @cServerNamePart = @cServerName
+
+		if charindex('\', @cServerName) > 0
+		begin
+			set @cServerNamePart = left(@cServerName, charindex('\', @cServerName) - 1)
+		end
+
+--		set @dLastEventLogCheck = '2010-05-26'
+
 		insert into eventLog_history (notes, serverName, ukey_group) values ('Reading events since ' + convert(varchar(20), @dLastEventLogCheck, 120), @cServerName, @nUkeyGroup)
 
 		if isnull(@cUserName, '') = ''
-			set @cSQLString = 'powershell -file ' + @cScriptPath + 'readevents.ps1 -cServerName ' + @cServerName + ' -cTimestamp ' + dbo.fn_returnUTCDate(@dLastEventLogCheck)
+			set @cSQLString = 'powershell -file ' + @cScriptPath + 'readevents.ps1 -cServerName ' + @cServerNamePart + ' -cTimestamp ' + dbo.fn_returnUTCDate(@dLastEventLogCheck)
 		else
-			set @cSQLString = 'powershell -file ' + @cScriptPath + 'readevents.ps1 -cServerName ' + @cServerName + ' -cUserName "' + @cUsername + '" -cPassword "' + @cPassword + '" -cTimestamp ' + dbo.fn_returnUTCDate(@dLastEventLogCheck)
+			set @cSQLString = 'powershell -file ' + @cScriptPath + 'readevents.ps1 -cServerName ' + @cServerNamePart + ' -cUserName "' + @cUsername + '" -cPassword "' + @cPassword + '" -cTimestamp ' + dbo.fn_returnUTCDate(@dLastEventLogCheck)
 
 --		print @cSQLString
 
@@ -131,6 +144,13 @@ begin
 		update #results set serverName = @cServerName where serverName is null
 
 		update dm_servers set lastEventLogCheck = getDate() where serverName = @cServerName
+	end
+
+	if (select count(*) from #results where wideString like '%scripts is disabled%' or wideString like '%cannot be loaded because the execution%') > 0
+	begin
+		print 'PowerShell appears to be disabled'
+		insert into eventLog_history (notes, serverName, ukey_group) values ('Powershell appears to be disabled.', @cServerName, @nUkeyGroup)
+		return
 	end
 
 -- select * from #results

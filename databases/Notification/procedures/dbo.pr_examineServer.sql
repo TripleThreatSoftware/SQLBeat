@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 11/10/2011 10:48:45 ******/
+/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 12/19/2011 15:10:05 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -889,12 +889,15 @@ begin
 			if @bTesting = 1
 				print @cSQLString
 
-			begin try
-				EXECUTE(@cProcedureName)
-			end try
-			begin catch
-				insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Error determining locks', @cSQLString, @nUkeyGroup)
-			end catch
+			if exists (select top 1 name from sysobjects where name = @cProcedureName)
+			begin
+				begin try
+					EXECUTE(@cProcedureName)
+				end try
+				begin catch
+					insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Error determining locks', @cSQLString, @nUkeyGroup)
+				end catch
+			end
 
 			-- now, scan through each database and get a list of locked objects
 
@@ -909,7 +912,7 @@ begin
 					order by [dbID]
 
 				set @cDatabaseName = (select top 1 [dbname] from #databaseNames where [dbID] = @nDBID)
-				if isnull(@cDatabaseName, '') = '' or @cDatabaseName in ('tempdb', 'master', 'model', 'msdb')
+				if isnull(@cDatabaseName, '') = '' or @cDatabaseName in ('tempdb', 'master', 'model', 'msdb', 'reportserver')
 					continue
 
 				set @cSQLString = '
@@ -933,20 +936,30 @@ begin
 				if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
 					execute('drop procedure ' + @cProcedureName)
 
-				insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Retrieving names of locked objects', @cSQLString, @nUkeyGroup)
-				exec sp_executeSQL @cSQLString
+				begin try
+					insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Retrieving names of locked objects', @cSQLString, @nUkeyGroup)
+					exec sp_executeSQL @cSQLString
+				end try
+				begin catch
+
+					set @cThisMessage = left('ERROR: ' + error_message(), 500)
+					insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, @cThisMessage, @cSQLString, @nUkeyGroup)
+
+				end catch
 
 				if @bTesting = 1
 					print @cSQLString
 
-				begin try
-					EXECUTE(@cProcedureName)
-				end try
-				begin catch
-					set @cThisMessage = 'ERROR: ' + error_message()
-					insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, @cThisMessage, @cSQLString, @nUkeyGroup)
-				end catch
-
+				if exists (select top 1 name from sysobjects where name = @cProcedureName)
+				begin
+					begin try
+						EXECUTE(@cProcedureName)
+					end try
+					begin catch
+						set @cThisMessage = 'ERROR: ' + error_message()
+						insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, @cThisMessage, @cSQLString, @nUkeyGroup)
+					end catch
+				end
 			end
 
 
@@ -1375,12 +1388,22 @@ begin
 		if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
 			execute('drop procedure ' + @cProcedureName)
 
-		insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Building job history', @cSQLString, @nUkeyGroup)
-		exec sp_executeSQL @cSQLString
+		begin try
+			insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Building job history', @cSQLString, @nUkeyGroup)
+			exec sp_executeSQL @cSQLString
+		end try
+		begin catch
+			set @cThisMessage = left('ERROR: ' + error_message(), 500)
+			insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, @cThisMessage, @cSQLString, @nUkeyGroup)
+		end catch
 
 		if @bTesting = 1
 			print @cSQLString
-		EXECUTE(@cProcedureName)
+
+		if exists (select top 1 name from sysobjects where name = @cProcedureName)
+		begin
+			EXECUTE(@cProcedureName)
+		end
 
 		create index ix_tmp_jobHistory on #jobHistory (job_id, jobName) with fillfactor = 80
 		create index ix_tmp_jobStepHistory on #jobStepHistory (job_id, stepNumber) with fillfactor = 80
@@ -1820,9 +1843,18 @@ begin
 		if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
 			execute('drop procedure ' + @cProcedureName)
 
-		exec sp_executeSQL @cSQLString
+		begin try
+			exec sp_executeSQL @cSQLString
+		end try
+		begin catch
+			set @cThisMessage = left('ERROR: ' + error_message(), 500)
+			insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, @cThisMessage, @cSQLString, @nUkeyGroup)
+		end catch
 
-		EXECUTE(@cProcedureName)
+		if exists (select top 1 name from sysobjects where name = @cProcedureName)
+		begin
+			EXECUTE(@cProcedureName)
+		end
 
 		-- first, identify failures of jobs
 		declare @nUkeyJob int
@@ -2113,10 +2145,23 @@ begin
 		if @bTesting = 1
 			print @cSQLString
 
-		exec sp_executeSQL @cSQLString
+		begin try
+			exec sp_executeSQL @cSQLString
+		end try
+		begin catch
+			set @cThisMessage = left('ERROR: ' + error_message(), 500)
+			insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, @cThisMessage, @cSQLString, @nUkeyGroup)
+		end catch
 
-		insert into #results (severity, subject, message)
-		EXECUTE(@cProcedureName)
+		begin try
+			insert into #results (severity, subject, message)
+			EXECUTE(@cProcedureName)
+		end try
+		begin catch
+			set @cThisMessage = left('ERROR: ' + error_message(), 500)
+			insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, @cThisMessage, @cSQLString, @nUkeyGroup)
+		end catch
+
 	end
 	else
 		insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'No replication found', @cSQLString, @nUkeyGroup)
@@ -2176,17 +2221,27 @@ begin
 
 				insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Log size: File sizes', @cSQLString, @nUkeyGroup)
 
-				exec sp_executeSQL @cSQLString
+				begin try
+					exec sp_executeSQL @cSQLString
+				end try
+				begin catch
+					set @cThisMessage = left('ERROR: ' + error_message(), 500)
+					insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, @cThisMessage, @cSQLString, @nUkeyGroup)
+				end catch
+
 				if @bTesting = 1
 					print @cSQLString
 
-				begin try
-					EXECUTE(@cProcedureName)
-				end try
-				begin catch
-					set @cThisMessage = 'ERROR: ' + error_message()
-					insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, @cThisMessage, @cSQLString, @nUkeyGroup)
-				end catch
+				if exists (select top 1 name from sysobjects where name = @cProcedureName)
+				begin
+					begin try
+						EXECUTE(@cProcedureName)
+					end try
+					begin catch
+						set @cThisMessage = 'ERROR: ' + error_message()
+						insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, @cThisMessage, @cSQLString, @nUkeyGroup)
+					end catch
+				end
 
 				set @cSQLString = ''
 			end
@@ -2205,7 +2260,14 @@ begin
 
 			insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Log size: File sizes', @cSQLString, @nUkeyGroup)
 
-			exec sp_executeSQL @cSQLString
+			begin try
+				exec sp_executeSQL @cSQLString
+			end try
+			begin catch
+				set @cThisMessage = left('ERROR: ' + error_message(), 500)
+				insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, @cThisMessage, @cSQLString, @nUkeyGroup)
+			end catch
+
 			if @bTesting = 1
 				print @cSQLString
 
