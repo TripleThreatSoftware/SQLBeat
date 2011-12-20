@@ -1,9 +1,11 @@
-/****** Object:  StoredProcedure [dbo].[pr_rpt_memoryAllocationGraph]    Script Date: 05/19/2009 13:59:45 ******/
+USE [notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_rpt_memoryAllocationGraph]    Script Date: 12/20/2011 14:03:13 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE procedure [dbo].[pr_rpt_memoryAllocationGraph] (@cServerName varchar(100), @dStartDate dateTime, @dEndDate dateTime)
+ALTER procedure [dbo].[pr_rpt_memoryAllocationGraph] (@cServerName varchar(100), @dStartDate dateTime, @dEndDate dateTime)
 as
 begin
 
@@ -16,7 +18,7 @@ begin
 	set @dStartDate = isnull(@dStartDate, dateAdd(day, -3, getDate()))
 	set @dEndDate = isnull(@dEndDate, getDate())
 
-	create table #dataValues (seriesName varchar(100), setName varchar(200), axis_x varchar(100), axis_y decimal(10,2), sortOrder int identity)
+	create table #dataValues (seriesName varchar(100), setName varchar(200), axis_x varchar(100), axis_y decimal(20,2), sortOrder int identity)
 
 	insert into #dataValues
 	select
@@ -45,4 +47,3 @@ begin
 
 	drop table #dataValues
 end
-GO

@@ -1,3 +1,6 @@
+USE [notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_checkServices]    Script Date: 12/20/2011 11:12:59 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -89,7 +92,7 @@ begin
 		if @cUserName is not null
 		begin
 			-- with password, for stores
-			set @cSQLString = @cSharedFolder + '\osql -S' + @cServerName + ' -U' + @cUserName + ' -P' + @cPassword + ' -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\runningServices.SQL"'
+			set @cSQLString = @cSharedFolder + '\osql -S' + @cServerName + ' -U' + @cUserName + ' -P"' + @cPassword + '" -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\runningServices.SQL"'
 		end
 		else
 		begin

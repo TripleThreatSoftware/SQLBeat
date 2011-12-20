@@ -1,11 +1,11 @@
-USE [Notification]
+USE [notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_graph_sqlLoadByHour]    Script Date: 02/17/2010 11:41:49 ******/
+/****** Object:  StoredProcedure [dbo].[pr_graph_sqlLoadByHour]    Script Date: 12/20/2011 10:17:48 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
--- exec pr_graph_sqlLoadByHour 'sqlcluster01'
+-- exec pr_graph_sqlLoadByHour 'web04'
 
 ALTER procedure [dbo].[pr_graph_sqlLoadByHour] (@cServerName varchar(100), @nGraphWidth int = 800)
 as
@@ -14,9 +14,7 @@ begin
 --	declare @cServerName varchar(100)
 --	set @cServerName = 'mssql-ny'
 
-	create table #results (cpuTime varchar(8000), diskIO varchar(8000),
-		cpuTime_pie varchar(8000), diskIO_pie varchar(8000),
-		overallLoad varchar(8000))
+	create table #results (graphName varchar(100), graphURL varchar(8000))
 
 	declare @dStartDate dateTime
 	set @dStartDate = dateAdd(hour, -24, getDate())
@@ -54,8 +52,9 @@ begin
 		order by dbName, ymd, ymd_hour
 
 
-	insert into #results (cpuTime)
-	exec notification..pr_generateGoogleChartsRequest @nWidth = 1000, @nHeight = 300, @bRelativeToTotal = 0, @bAbsoluteYAxis = 1
+	insert into #results (graphURL)
+	exec notification..pr_generateGoogleChartsRequest @nWidth = @nGraphWidth, @nHeight = 300, @bRelativeToTotal = 0, @bAbsoluteYAxis = 1, @bLeavePeaks = 1
+	update #results set graphName = 'CPU Time' where graphName is null
 
 	--********************************************************************************************************************************
 	-- DiskIO by Database
@@ -85,8 +84,9 @@ begin
 			and dbName in (select top 5 dbName from mart_database_byHour (nolock) where serverName = @cServerName and dateAdd(hour, ymd_hour, ymd) >= @dStartDate group by dbName order by sum(diskIO) desc)
 		order by dbName, ymd, ymd_hour
 
-	insert into #results (diskIO)
-	exec notification..pr_generateGoogleChartsRequest @nWidth = 1000, @nHeight = 300, @bRelativeToTotal = 0, @bAbsoluteYAxis = 1
+	insert into #results (graphURL)
+	exec notification..pr_generateGoogleChartsRequest @nWidth = @nGraphWidth, @nHeight = 300, @bRelativeToTotal = 0, @bAbsoluteYAxis = 1
+	update #results set graphName = 'Disk IO' where graphName is null
 
 
 	--********************************************************************************************************************************
@@ -106,9 +106,9 @@ begin
 			and dbName in (select top 5 dbName from mart_database_byHour (nolock) where serverName = @cServerName and dateAdd(hour, ymd_hour, ymd) >= @dStartDate group by dbName order by sum(diskIO) desc)
 		group by dbName
 
-	insert into #results (diskIO_pie)
-	exec pr_generateGoogleChartsRequest @nWidth = 900, @nHeight = 300, @bRelativeToTotal = 0, @bShowPie = 1
-
+	insert into #results (graphURL)
+	exec pr_generateGoogleChartsRequest @nWidth = @nGraphWidth, @nHeight = 300, @bRelativeToTotal = 0, @bShowPie = 1
+	update #results set graphName = 'Disk IO Split' where graphName is null
 
 	--********************************************************************************************************************************
 	-- now, cpuTime in a pie chart
@@ -127,9 +127,9 @@ begin
 			and dbName in (select top 5 dbName from mart_database_byHour (nolock) where serverName = @cServerName and dateAdd(hour, ymd_hour, ymd) >= @dStartDate group by dbName order by sum(cpuTime) desc)
 		group by dbName
 
-	insert into #results (cpuTime_pie)
-	exec pr_generateGoogleChartsRequest @nWidth = 900, @nHeight = 300, @bRelativeToTotal = 0, @bShowPie = 1
-
+	insert into #results (graphURL)
+	exec pr_generateGoogleChartsRequest @nWidth = @nGraphWidth, @nHeight = 300, @bRelativeToTotal = 0, @bShowPie = 1
+	update #results set graphName = 'CPU Time Split' where graphName is null
 
 	--********************************************************************************************************************************
 	-- Overall SQL load by Hour
@@ -183,21 +183,15 @@ begin
 		order by ymd, ymd_hour
 
 
-	insert into #results (overallLoad)
+	insert into #results (graphURL)
 	exec pr_generateGoogleChartsRequest @nWidth = @nGraphWidth, @nHeight = null, @bRelativeToTotal = 0
-
+	update #results set graphName = 'Overall Load' where graphName is null
 
 	--********************************************************************************************************************************
 	-- now, output results
 
 	select
-		max(diskIO) as diskIO,
-		max(cpuTime) as cpuTime,
-
-		max(diskIO_pie) as diskIO_pie,
-		max(cpuTime_pie) as cpuTime_pie,
-
-		max(overallLoad) as overallLoad
+		*
 
 		from #results
 

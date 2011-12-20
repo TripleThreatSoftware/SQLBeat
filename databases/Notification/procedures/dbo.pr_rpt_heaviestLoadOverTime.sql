@@ -1,10 +1,12 @@
-/****** Object:  StoredProcedure [dbo].[pr_rpt_heaviestLoadOverTime]    Script Date: 05/19/2009 13:59:45 ******/
+USE [notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_rpt_heaviestLoadOverTime]    Script Date: 12/20/2011 13:28:30 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
--- exec pr_rpt_heaviestLoadOverTime 'doe-monitor-sql', 72
-CREATE procedure [dbo].[pr_rpt_heaviestLoadOverTime] (@cServerName varchar(100), @nHours int)
+-- exec pr_rpt_heaviestLoadOverTime 'web04', 6
+ALTER procedure [dbo].[pr_rpt_heaviestLoadOverTime] (@cServerName varchar(100), @nHours int)
 as
 begin
 --	declare @cServerName varchar(100)
@@ -14,12 +16,12 @@ begin
 		convert(varchar(20), spid) + isnull(hostname, '') + isnull(programName, '') + convert(varchar(20), login_time, 120) as keyString,
 		lastBatchTime,
 		min(ymd) as ymd,
-		min(cpuTime) as cpuTime_min,
-		max(cpuTime) as cpuTime_max,
-		min(diskIO) as diskIO_min,
-		max(diskIO) as diskIO_max,
-		max(cpuTime) - min(cpuTime) as cpuTime_delta,
-		max(diskIO) - min(diskIO) as diskIO_delta,
+		convert(bigint, min(cpuTime)) as cpuTime_min,
+		convert(bigint, max(cpuTime)) as cpuTime_max,
+		convert(bigint, min(diskIO)) as diskIO_min,
+		convert(bigint, max(diskIO)) as diskIO_max,
+		convert(bigint, max(cpuTime) - min(cpuTime)) as cpuTime_delta,
+		convert(bigint, max(diskIO) - min(diskIO)) as diskIO_delta,
 		convert(dateTime, null) as prevBatchTime,
 		min(bufferContents) as bufferContents_min,
 		max(bufferContents) as bufferContents_max
@@ -66,6 +68,13 @@ begin
 		from #activity a
 		where a.prevBatchTime is null
 
+	alter table #activity add trimmedBuffer varchar(8000)
+
+	update #activity
+		set trimmedBuffer = dbo.fn_returnTrimmedBuffer(bufferContents_min)
+
+	create index ix_tmp_activity_trimmedBuffer on #activity (trimmedBuffer) with fillfactor = 80
+
 	select
 		dbo.fn_returnFormattedBuffer(dbo.fn_returnTrimmedBuffer(bufferContents_min)) as bufferContents,
 		datePart(day, ymd) as ymd_day,
@@ -83,16 +92,16 @@ begin
 		from #activity a
 		join (
 			select top 20
-				dbo.fn_returnTrimmedBuffer(bufferContents_min) as bufferContents, count(*) as numItems
+				trimmedBuffer as bufferContents, count(*) as numItems
 				from #activity
-				group by dbo.fn_returnTrimmedBuffer(bufferContents_min)
+				group by trimmedBuffer
 				having count(*) >= 2
 					and (
 						avg(cpuTime_delta + diskIO_delta) > 500
 						or sum(cpuTime_delta + diskIO_delta) > 50000
 						)
 				order by sum(cpuTime_delta + diskIO_delta) desc
-			) b on dbo.fn_returnTrimmedBuffer(bufferContents_min) = b.bufferContents
+			) b on trimmedBuffer = b.bufferContents
 				and b.bufferContents not like '%sysjobs%'
 				and b.bufferContents not like '%sp_ms%'
 
@@ -105,4 +114,3 @@ begin
 
 	drop table #activity
 end
-GO

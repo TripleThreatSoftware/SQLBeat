@@ -1,6 +1,8 @@
+USE [notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_rpt_memoryStatistics]    Script Date: 12/20/2011 14:03:34 ******/
 SET ANSI_NULLS ON
 GO
-
 SET QUOTED_IDENTIFIER ON
 GO
 
@@ -76,18 +78,12 @@ begin
 			and a.counterName = b.counterName
 			and a.instanceName = b.instanceName
 
-	create table #results (ukey int, memoryAllocated varchar(8000), blocks varchar(8000), grants varchar(8000),
-		userStore_single varchar(8000), userStore_multiple varchar(8000),
-		objectStore_single varchar(8000),
-		cacheStore_single varchar(8000), cacheStore_multiple varchar(8000),
-		connectionPool varchar(8000), [fullText] varchar(8000), general varchar(8000), optimizer varchar(8000),
-		queryExecution varchar(8000), storeEngine varchar(8000), utilities varchar(8000),
-		freeAndAvailable varchar(8000)
+	create table #results (ukey int, graphName varchar(100), graphURL varchar(8000)
 		)
 	create table #dataValues (setName varchar(500), seriesName varchar(500), axis_x varchar(500), axis_y decimal(20,4), sortOrder int identity)
 	create table #returnValue (junkString varchar(8000))
 
-	insert into #results (ukey) values (1)
+--	insert into #results (ukey) values (1)
 
 	declare @cReportURL varchar(8000)
 
@@ -113,7 +109,8 @@ begin
 	set @cReportURL = (select top 1 junkString from #returnValue)
 	delete from #returnValue
 
-	update #results set freeAndAvailable = @cReportURL
+	insert into #results (graphName, graphURL) values ('Free/Available', @cReportURL)
+	--update #results set freeAndAvailable = @cReportURL
 	truncate table #dataValues
 
 	--*********************************************************************************************
@@ -138,7 +135,8 @@ begin
 	set @cReportURL = (select top 1 junkString from #returnValue)
 	delete from #returnValue
 
-	update #results set Utilities = @cReportURL
+	insert into #results (graphName, graphURL) values ('Utilities', @cReportURL)
+	--update #results set Utilities = @cReportURL
 	truncate table #dataValues
 
 	--*********************************************************************************************
@@ -163,7 +161,8 @@ begin
 	set @cReportURL = (select top 1 junkString from #returnValue)
 	delete from #returnValue
 
-	update #results set storeEngine = @cReportURL
+	insert into #results (graphName, graphURL) values ('Store Engine', @cReportURL)
+	--update #results set storeEngine = @cReportURL
 	truncate table #dataValues
 
 	--*********************************************************************************************
@@ -188,7 +187,8 @@ begin
 	set @cReportURL = (select top 1 junkString from #returnValue)
 	delete from #returnValue
 
-	update #results set queryExecution = @cReportURL
+	insert into #results (graphName, graphURL) values ('Query Execution', @cReportURL)
+	--update #results set queryExecution = @cReportURL
 	truncate table #dataValues
 
 	--*********************************************************************************************
@@ -213,7 +213,8 @@ begin
 	set @cReportURL = (select top 1 junkString from #returnValue)
 	delete from #returnValue
 
-	update #results set Optimizer = @cReportURL
+	insert into #results (graphName, graphURL) values ('Optimizer', @cReportURL)
+	--update #results set Optimizer = @cReportURL
 	truncate table #dataValues
 
 	--*********************************************************************************************
@@ -238,7 +239,8 @@ begin
 	set @cReportURL = (select top 1 junkString from #returnValue)
 	delete from #returnValue
 
-	update #results set General = @cReportURL
+	insert into #results (graphName, graphURL) values ('General', @cReportURL)
+	--update #results set General = @cReportURL
 	truncate table #dataValues
 
 
@@ -264,7 +266,8 @@ begin
 	set @cReportURL = (select top 1 junkString from #returnValue)
 	delete from #returnValue
 
-	update #results set [FullText] = @cReportURL
+	insert into #results (graphName, graphURL) values ('FullText', @cReportURL)
+	--update #results set [FullText] = @cReportURL
 	truncate table #dataValues
 
 
@@ -290,7 +293,8 @@ begin
 	set @cReportURL = (select top 1 junkString from #returnValue)
 	delete from #returnValue
 
-	update #results set connectionPool = @cReportURL
+	insert into #results (graphName, graphURL) values ('Connection Pool', @cReportURL)
+	--update #results set connectionPool = @cReportURL
 	truncate table #dataValues
 
 	--*********************************************************************************************
@@ -315,7 +319,8 @@ begin
 	set @cReportURL = (select top 1 junkString from #returnValue)
 	delete from #returnValue
 
-	update #results set memoryAllocated = @cReportURL
+	insert into #results (graphName, graphURL) values ('Memory Allocated', @cReportURL)
+	--update #results set memoryAllocated = @cReportURL
 	truncate table #dataValues
 
 	--*********************************************************************************************
@@ -340,7 +345,8 @@ begin
 	set @cReportURL = (select top 1 junkString from #returnValue)
 	delete from #returnValue
 
-	update #results set blocks = @cReportURL
+	insert into #results (graphName, graphURL) values ('Blocks', @cReportURL)
+	--update #results set blocks = @cReportURL
 	truncate table #dataValues
 
 	--*********************************************************************************************
@@ -365,7 +371,8 @@ begin
 	set @cReportURL = (select top 1 junkString from #returnValue)
 	delete from #returnValue
 
-	update #results set grants = @cReportURL
+	insert into #results (graphName, graphURL) values ('Grants', @cReportURL)
+	--update #results set grants = @cReportURL
 	truncate table #dataValues
 
 	--*********************************************************************************************
@@ -390,7 +397,8 @@ begin
 	set @cReportURL = (select top 1 junkString from #returnValue)
 	delete from #returnValue
 
-	update #results set userStore_single = @cReportURL
+	insert into #results (graphName, graphURL) values ('User Store/Single', @cReportURL)
+	--update #results set userStore_single = @cReportURL
 	truncate table #dataValues
 
 	--*********************************************************************************************
@@ -415,7 +423,8 @@ begin
 	set @cReportURL = (select top 1 junkString from #returnValue)
 	delete from #returnValue
 
-	update #results set userStore_multiple = @cReportURL
+	insert into #results (graphName, graphURL) values ('User Store/Multiple', @cReportURL)
+	--update #results set userStore_multiple = @cReportURL
 	truncate table #dataValues
 
 
@@ -441,7 +450,8 @@ begin
 	set @cReportURL = (select top 1 junkString from #returnValue)
 	delete from #returnValue
 
-	update #results set objectStore_single = @cReportURL
+	insert into #results (graphName, graphURL) values ('Object Store/Single', @cReportURL)
+	--update #results set objectStore_single = @cReportURL
 	truncate table #dataValues
 
 
@@ -467,7 +477,8 @@ begin
 	set @cReportURL = (select top 1 junkString from #returnValue)
 	delete from #returnValue
 
-	update #results set CacheStore_single = @cReportURL
+	insert into #results (graphName, graphURL) values ('Cache Store/Single', @cReportURL)
+	--update #results set CacheStore_single = @cReportURL
 	truncate table #dataValues
 
 	--*********************************************************************************************
@@ -492,7 +503,8 @@ begin
 	set @cReportURL = (select top 1 junkString from #returnValue)
 	delete from #returnValue
 
-	update #results set CacheStore_multiple = @cReportURL
+	insert into #results (graphName, graphURL) values ('Cache Store/Multiple', @cReportURL)
+	--update #results set CacheStore_multiple = @cReportURL
 	truncate table #dataValues
 
 
@@ -509,4 +521,3 @@ begin
 	drop table #counterOutput
 
 end
-GO

@@ -1,6 +1,6 @@
 USE [notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_rpt_sqlStatistics]    Script Date: 03/11/2010 10:28:38 ******/
+/****** Object:  StoredProcedure [dbo].[pr_rpt_sqlStatistics]    Script Date: 12/20/2011 13:34:30 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -48,14 +48,10 @@ begin
 
 -- select * from #counterOutput where objectName = 'SQLServer:Locks' and counterName = 'Average Wait Time (ms)' and instanceName <> '_Total' order by objectName, counterName, instanceName, ymd
 
-	create table #results (ukey int, pageSplits varchar(8000), fullScans varchar(8000), tableLockEscalations varchar(8000), pageActivity varchar(8000),
-		cursorMemory varchar(8000), logins varchar(8000), latchWaitTime varchar(8000), lockWaitTime varchar(8000), networkWaits varchar(8000),
-		pageIOLatchWaitTime varchar(8000)
+	create table #results (ukey int, graphName varchar(100), graphURL varchar(8000)
 		)
 	create table #dataValues (setName varchar(200), seriesName varchar(100), axis_x varchar(100), axis_y decimal(20,4), sortOrder int identity)
 	create table #returnValue (junkString varchar(8000))
-
-	insert into #results (ukey) values (1)
 
 	declare @cReportURL varchar(8000)
 
@@ -81,7 +77,8 @@ begin
 	set @cReportURL = (select top 1 junkString from #returnValue)
 	delete from #returnValue
 
-	update #results set pageIOLatchWaitTime = @cReportURL
+	insert into #results (graphName, graphURL) values ('Page IO Latch Wait Time (ms)', @cReportURL)
+	--update #results set pageIOLatchWaitTime = @cReportURL
 	truncate table #dataValues
 
 	--*********************************************************************************************
@@ -106,7 +103,8 @@ begin
 	set @cReportURL = (select top 1 junkString from #returnValue)
 	delete from #returnValue
 
-	update #results set networkWaits = @cReportURL
+	insert into #results (graphName, graphURL) values ('Network IO Wait Time (ms)', @cReportURL)
+	--update #results set networkWaits = @cReportURL
 	truncate table #dataValues
 
 	--*********************************************************************************************
@@ -131,7 +129,8 @@ begin
 	set @cReportURL = (select top 1 junkString from #returnValue)
 	delete from #returnValue
 
-	update #results set lockWaitTime = @cReportURL
+	insert into #results (graphName, graphURL) values ('Lock Wait Time (ms)', @cReportURL)
+	--update #results set lockWaitTime = @cReportURL
 	truncate table #dataValues
 
 	--*********************************************************************************************
@@ -156,7 +155,8 @@ begin
 	set @cReportURL = (select top 1 junkString from #returnValue)
 	delete from #returnValue
 
-	update #results set latchWaitTime = @cReportURL
+	insert into #results (graphName, graphURL) values ('Latch Wait Time (ms)', @cReportURL)
+	--update #results set latchWaitTime = @cReportURL
 	truncate table #dataValues
 
 	--*********************************************************************************************
@@ -181,7 +181,8 @@ begin
 	set @cReportURL = (select top 1 junkString from #returnValue)
 	delete from #returnValue
 
-	update #results set logins = @cReportURL
+	insert into #results (graphName, graphURL) values ('Logins per Second', @cReportURL)
+	--update #results set logins = @cReportURL
 	truncate table #dataValues
 
 	--*********************************************************************************************
@@ -208,7 +209,8 @@ begin
 	set @cReportURL = (select top 1 junkString from #returnValue)
 	delete from #returnValue
 
-	update #results set cursorMemory = @cReportURL
+	insert into #results (graphName, graphURL) values ('Cursor Memory Usage', @cReportURL)
+	--update #results set cursorMemory = @cReportURL
 	truncate table #dataValues
 
 
@@ -234,7 +236,8 @@ begin
 	set @cReportURL = (select top 1 junkString from #returnValue)
 	delete from #returnValue
 
-	update #results set pageActivity = @cReportURL
+	insert into #results (graphName, graphURL) values ('Page Reads/Writes per Second', @cReportURL)
+	--update #results set pageActivity = @cReportURL
 	truncate table #dataValues
 
 	--*********************************************************************************************
@@ -259,7 +262,8 @@ begin
 	set @cReportURL = (select top 1 junkString from #returnValue)
 	delete from #returnValue
 
-	update #results set tableLockEscalations = @cReportURL
+	insert into #results (graphName, graphURL) values ('Table Lock Escalations per Second', @cReportURL)
+	--update #results set tableLockEscalations = @cReportURL
 	truncate table #dataValues
 
 	--*********************************************************************************************
@@ -284,7 +288,8 @@ begin
 	set @cReportURL = (select top 1 junkString from #returnValue)
 	delete from #returnValue
 
-	update #results set pageSplits = @cReportURL
+	insert into #results (graphName, graphURL) values ('Page Splits per Second', @cReportURL)
+	--update #results set pageSplits = @cReportURL
 	truncate table #dataValues
 
 	--*********************************************************************************************
@@ -309,7 +314,8 @@ begin
 	set @cReportURL = (select top 1 junkString from #returnValue)
 	delete from #returnValue
 
-	update #results set fullScans = @cReportURL
+	insert into #results (graphName, graphURL) values ('Full Scans per Second', @cReportURL)
+	--update #results set fullScans = @cReportURL
 	truncate table #dataValues
 
 

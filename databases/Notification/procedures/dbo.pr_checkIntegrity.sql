@@ -1,3 +1,6 @@
+USE [notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_checkIntegrity]    Script Date: 12/20/2011 11:11:10 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -74,7 +77,7 @@ begin
 		if isnull(@cUserName, '') <> ''
 		begin
 			-- with password
-			set @cSQLString = @cSharedFolder + '\osql -S' + @cServerName + ' -U' + @cUserName + ' -P' + isnull(@cPassword, '') + ' -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\check_all_databases.SQL"'
+			set @cSQLString = @cSharedFolder + '\osql -S' + @cServerName + ' -U' + @cUserName + ' -P"' + isnull(@cPassword, '') + '" -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\check_all_databases.SQL"'
 		end
 		else
 		begin

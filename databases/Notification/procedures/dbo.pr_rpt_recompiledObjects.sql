@@ -1,14 +1,18 @@
-/****** Object:  StoredProcedure [dbo].[pr_rpt_recompiledObjects]    Script Date: 05/19/2009 13:59:45 ******/
+USE [notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_rpt_recompiledObjects]    Script Date: 12/20/2011 10:48:42 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
 -- exec pr_rpt_recompiledObjects 'funmssql02', null, null
-CREATE procedure [dbo].[pr_rpt_recompiledObjects] (@cServerName varchar(100), @nNumHours int = 6)
+ALTER procedure [dbo].[pr_rpt_recompiledObjects] (@cServerName varchar(100), @nNumHours int = 6)
 as
 begin
 
-	select left(a.subkeyName, charindex(' ', a.subkeyName)) as subkeyName, left(keyValue, len(keyValue) - 1) as keyValue
+	select
+		convert(decimal(10,2), left(a.subkeyName, charindex(' ', a.subkeyName))) as [Plans Per Hour],
+		left(keyValue, len(keyValue) - 1) as [Object Name]
 		from (
 			select left(keyValue, charindex('for "', keyValue) - 1) as subkeyName,
 				substring(keyValue, charindex('"', keyValue) + 1, 8000) as keyValue,
@@ -33,9 +37,8 @@ begin
 			and not a.keyValue like '%pr_backupDatabase%'
 			and not a.keyValue like '%sysjob%'
 			and charindex('|||', a.keyValue) = 0
-		order by subkeyName
+		order by convert(decimal(10,2), left(a.subkeyName, charindex(' ', a.subkeyName))) desc
 
 
 
 end
-GO

@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 12/19/2011 15:10:05 ******/
+/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 12/20/2011 11:11:29 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -447,7 +447,7 @@ begin
 		--***********************************************************
 		-- current error log
 		if @cUserName is not null
-			set @cSQLString = 'osql -S' + @cServerName + ' -U' + @cUserName + ' -P' + @cPassword + ' -n -h-1 -w8000 -s"|" -dmaster -Q "exec master.dbo.sp_readerrorlog"'
+			set @cSQLString = 'osql -S' + @cServerName + ' -U' + @cUserName + ' -P"' + @cPassword + '" -n -h-1 -w8000 -s"|" -dmaster -Q "exec master.dbo.sp_readerrorlog"'
 		else
 			set @cSQLString = 'osql -S' + @cServerName + ' -E -n -h-1 -w8000 -s"|" -dmaster -Q "exec master.dbo.sp_readerrorlog"'
 
@@ -479,7 +479,7 @@ begin
 		begin
 
 			if @cUserName is not null
-				set @cSQLString = 'osql -S' + @cServerName + ' -U' + @cUserName + ' -P' + @cPassword + ' -n -h-1 -w8000 -s"|" -dmaster -Q "exec master.dbo.sp_readerrorlog 1"'
+				set @cSQLString = 'osql -S' + @cServerName + ' -U' + @cUserName + ' -P"' + @cPassword + '" -n -h-1 -w8000 -s"|" -dmaster -Q "exec master.dbo.sp_readerrorlog 1"'
 			else
 				set @cSQLString = 'osql -S' + @cServerName + ' -E -n -h-1 -w8000 -s"|" -dmaster -Q "exec master.dbo.sp_readerrorlog 1"'
 
@@ -744,7 +744,7 @@ begin
 		if @cUserName is not null
 		begin
 			-- with password, for stores
-			set @cSQLString = @cSharedFolder + '\osql -S' + @cServerName + ' -U' + @cUserName + ' -P' + @cPassword + ' -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\all_user_activity.SQL"'
+			set @cSQLString = @cSharedFolder + '\osql -S' + @cServerName + ' -U' + @cUserName + ' -P"' + @cPassword + '" -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\all_user_activity.SQL"'
 		end
 		else
 		begin

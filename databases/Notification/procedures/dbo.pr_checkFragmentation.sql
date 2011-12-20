@@ -1,6 +1,6 @@
 USE [notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_checkFragmentation]    Script Date: 12/05/2011 11:08:23 ******/
+/****** Object:  StoredProcedure [dbo].[pr_checkFragmentation]    Script Date: 12/20/2011 11:10:48 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -94,7 +94,7 @@ begin
 		if isnull(@cUserName, '') <> ''
 		begin
 			-- with password
-			set @cSQLString = @cSharedFolder + '\osql -S' + @cServerName + ' -U' + @cUserName + ' -P' + isnull(@cPassword, '') + ' -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\fragmentation_check_and_fix.SQL"'
+			set @cSQLString = @cSharedFolder + '\osql -S' + @cServerName + ' -U' + @cUserName + ' -P"' + isnull(@cPassword, '') + '" -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\fragmentation_check_and_fix.SQL"'
 		end
 		else
 		begin
