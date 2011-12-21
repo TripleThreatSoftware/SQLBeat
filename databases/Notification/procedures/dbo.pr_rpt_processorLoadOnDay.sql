@@ -1,4 +1,4 @@
-create procedure pr_rpt_processorLoadOnDay (@nUkeyServer int, @dDate dateTime)
+ALTER procedure [dbo].[pr_rpt_processorLoadOnDay] (@nUkeyServer int = 0, @dDate dateTime, @cServerName varchar(100) = '')
 as
 begin
 
@@ -6,6 +6,9 @@ begin
 --declare @dDate dateTime
 --set @nUkeyServer = (select top 1 ukey from notification..dm_servers where servername = 'prooradb01')
 --set @dDate = '2010-02-10'
+
+	if ISNULL(@nUkeyServer, 0) = 0
+		set @nUkeyServer = (select top 1 ukey from notification..dm_servers where servername = @cServerName)
 
 	create table #dataValues (setName varchar(200), seriesName varchar(100), axis_x varchar(100), axis_y decimal(20,4), sortOrder int identity)
 
