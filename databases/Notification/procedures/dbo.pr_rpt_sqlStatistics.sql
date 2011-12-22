@@ -1,6 +1,6 @@
 USE [notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_rpt_sqlStatistics]    Script Date: 12/20/2011 13:34:30 ******/
+/****** Object:  StoredProcedure [dbo].[pr_rpt_sqlStatistics]    Script Date: 12/22/2011 12:05:28 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -62,13 +62,13 @@ begin
 	insert into #dataValues (seriesName, setName, axis_x, axis_y)
 	select 'Page IO Latch Waits', counterName + case when instanceName <> '' then '/' + instanceName else '' end + '/Min', right(ymd, 5), minValue
 		from #counterOutput
-		where objectName = 'SQLServer:Wait Statistics' and counterName = 'Page IO latch waits' and instanceName = 'Average wait time (ms)'
+		where objectName like '%:Wait Statistics' and counterName = 'Page IO latch waits' and instanceName = 'Average wait time (ms)'
 		order by counterName, instanceName, ymd
 
 	insert into #dataValues (seriesName, setName, axis_x, axis_y)
 	select 'Page IO Latch Waits', counterName + case when instanceName <> '' then '/' + instanceName else '' end + '/Max', right(ymd, 5), maxValue
 		from #counterOutput
-		where objectName = 'SQLServer:Wait Statistics' and counterName = 'Page IO latch waits' and instanceName = 'Average wait time (ms)'
+		where objectName like '%:Wait Statistics' and counterName = 'Page IO latch waits' and instanceName = 'Average wait time (ms)'
 		order by counterName, instanceName, ymd
 
 	insert into #returnValue
@@ -88,13 +88,13 @@ begin
 	insert into #dataValues (seriesName, setName, axis_x, axis_y)
 	select 'Network Waits', counterName + case when instanceName <> '' then '/' + instanceName else '' end + '/Min', right(ymd, 5), minValue
 		from #counterOutput
-		where objectName = 'SQLServer:Wait Statistics' and counterName = 'Network IO waits' and instanceName = 'Average wait time (ms)'
+		where objectName like '%:Wait Statistics' and counterName = 'Network IO waits' and instanceName = 'Average wait time (ms)'
 		order by counterName, instanceName, ymd
 
 	insert into #dataValues (seriesName, setName, axis_x, axis_y)
 	select 'Network Waits', counterName + case when instanceName <> '' then '/' + instanceName else '' end + '/Max', right(ymd, 5), maxValue
 		from #counterOutput
-		where objectName = 'SQLServer:Wait Statistics' and counterName = 'Network IO waits' and instanceName = 'Average wait time (ms)'
+		where objectName like '%:Wait Statistics' and counterName = 'Network IO waits' and instanceName = 'Average wait time (ms)'
 		order by counterName, instanceName, ymd
 
 	insert into #returnValue
@@ -114,13 +114,13 @@ begin
 	insert into #dataValues (seriesName, setName, axis_x, axis_y)
 	select 'Lock Waits', counterName + case when instanceName <> '' then '/' + instanceName else '' end + '/Min', right(ymd, 5), minValue
 		from #counterOutput
-		where objectName = 'SQLServer:Locks' and counterName = 'Average Wait Time (ms)' and instanceName <> '_Total'
+		where objectName like '%:Locks' and counterName = 'Average Wait Time (ms)' and instanceName <> '_Total'
 		order by counterName, instanceName, ymd
 
 	insert into #dataValues (seriesName, setName, axis_x, axis_y)
 	select 'Lock Waits', counterName + case when instanceName <> '' then '/' + instanceName else '' end + '/Max', right(ymd, 5), maxValue
 		from #counterOutput
-		where objectName = 'SQLServer:Locks' and counterName = 'Average Wait Time (ms)' and instanceName <> '_Total'
+		where objectName like '%:Locks' and counterName = 'Average Wait Time (ms)' and instanceName <> '_Total'
 		order by counterName, instanceName, ymd
 
 	insert into #returnValue
@@ -192,14 +192,14 @@ begin
 	insert into #dataValues (seriesName, setName, axis_x, axis_y)
 	select 'Cursor Memory', counterName + case when instanceName <> '' then '/' + instanceName else '' end + '/Min', right(ymd, 5), minValue
 		from #counterOutput
-		where objectName = 'SQLServer:Cursor Manager by Type' and counterName in ('Cursor memory usage')
+		where objectName like '%:Cursor Manager by Type' and counterName in ('Cursor memory usage')
 			and instanceName <> '_Total'
 		order by counterName, instanceName, ymd
 
 	insert into #dataValues (seriesName, setName, axis_x, axis_y)
 	select 'Cursor Memory', counterName + case when instanceName <> '' then '/' + instanceName else '' end + '/Max', right(ymd, 5), maxValue
 		from #counterOutput
-		where objectName = 'SQLServer:Cursor Manager by Type' and counterName in ('Cursor memory usage')
+		where objectName like '%:Cursor Manager by Type' and counterName in ('Cursor memory usage')
 			and instanceName <> '_Total'
 		order by counterName, instanceName, ymd
 
@@ -221,13 +221,13 @@ begin
 	insert into #dataValues (seriesName, setName, axis_x, axis_y)
 	select 'Page Activity', counterName + case when instanceName <> '' then '/' + instanceName else '' end + '/Min', right(ymd, 5), minValue
 		from #counterOutput
-		where objectName = 'SQLServer:Buffer Manager' and counterName in ('Page reads/sec', 'Page writes/sec')
+		where objectName like '%:Buffer Manager' and counterName in ('Page reads/sec', 'Page writes/sec')
 		order by counterName, instanceName, ymd
 
 	insert into #dataValues (seriesName, setName, axis_x, axis_y)
 	select 'Page Activity', counterName + case when instanceName <> '' then '/' + instanceName else '' end + '/Max', right(ymd, 5), maxValue
 		from #counterOutput
-		where objectName = 'SQLServer:Buffer Manager' and counterName in ('Page reads/sec', 'Page writes/sec')
+		where objectName like '%:Buffer Manager' and counterName in ('Page reads/sec', 'Page writes/sec')
 		order by counterName, instanceName, ymd
 
 	insert into #returnValue
