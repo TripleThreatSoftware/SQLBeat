@@ -1,6 +1,6 @@
 USE [notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_checkDeepSQLStats]    Script Date: 12/20/2011 11:10:35 ******/
+/****** Object:  StoredProcedure [dbo].[pr_checkDeepSQLStats]    Script Date: 01/03/2012 09:19:29 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -118,7 +118,7 @@ begin
 			else
 			begin
 				insert into notificationLog_stage (serverName, severity, subject, message)
-					values (@cServerName, 2, 'Deep SQL scan failed at ' + convert(varchar(20), getDate(), 120), @cMessage)
+					values (@cServerName, 3, 'Deep SQL scan failed at ' + convert(varchar(20), getDate(), 120), @cMessage)
 			end
 
 			continue
