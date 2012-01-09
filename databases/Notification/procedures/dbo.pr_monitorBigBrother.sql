@@ -1,3 +1,6 @@
+USE [notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_monitorBigBrother]    Script Date: 01/09/2012 22:02:33 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -37,6 +40,7 @@ begin
 	declare @nNumSuccess int
 	declare @nNumFailure int
 	declare @bSuccess bit
+	declare @nUkeyJob int
 
 	declare @dLastSuccess dateTime
 	declare @dLastFailure dateTime
@@ -1047,6 +1051,14 @@ begin
 
 			if not exists (select top 1 [name] from master.dbo.sysdatabases where [name] = 'scheduler')
 				exec msdb..sp_stop_job @job_name = @cThisJob
+			else
+			begin
+				set @nUkeyJob = (select top 1 ukey from scheduler.dbo.jobs where jobName = @cThisJob)
+
+				exec scheduler.dbo.pr_job_stop @nUkeyJob
+				exec scheduler.dbo.pr_job_start @nUkeyJob
+			end
+
 
 			insert into #results (message, severity, subject, isLongRunningJob) values (
 				'Job [' + @cThisJob + '] sent a STOP command.',
@@ -1061,7 +1073,6 @@ begin
 	-- Job Failures
 
 	-- first, identify failures of jobs
-	declare @nUkeyJob int
 	declare @dJobFailure dateTime
 	set @nThisUkey = 0
 
@@ -1757,6 +1768,13 @@ begin
 
 			if not exists (select top 1 [name] from master.dbo.sysdatabases where [name] = 'scheduler')
 				exec msdb..sp_stop_job @job_name = @cThisJob
+			else
+			begin
+				set @nUkeyJob = (select top 1 ukey from scheduler.dbo.jobs where jobName = @cThisJob)
+
+				exec scheduler.dbo.pr_job_stop @nUkeyJob
+				exec scheduler.dbo.pr_job_start @nUkeyJob
+			end
 
 			insert into #results (message, severity, subject) values
 				(
@@ -1837,7 +1855,13 @@ begin
 
 		if not exists (select top 1 [name] from master.dbo.sysdatabases where [name] = 'scheduler')
 			exec msdb..sp_stop_job @job_name = @cThisJob
+		else
+		begin
+				set @nUkeyJob = (select top 1 ukey from scheduler.dbo.jobs where jobName = @cThisJob)
 
+				exec scheduler.dbo.pr_job_stop @nUkeyJob
+				exec scheduler.dbo.pr_job_start @nUkeyJob
+		end
 --		insert into #results (message, severity, subject) values
 --			(
 --				'Job ' + @cThisJob + ', started at ' + convert(varchar(20), @dStartTime) + ', sent a STOP command at ' + convert(varchar(20), getDate(), 120) + '.',
