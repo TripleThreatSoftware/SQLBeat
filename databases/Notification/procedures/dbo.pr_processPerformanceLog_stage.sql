@@ -1,3 +1,8 @@
+/****** Object:  StoredProcedure [dbo].[pr_processPerformanceLog_stage]    Script Date: 01/10/2012 16:47:13 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 ALTER procedure [dbo].[pr_processPerformanceLog_stage]
 as
 begin
@@ -6,6 +11,8 @@ begin
 	declare @nMinUkey bigint
 	declare @nMinRunstamp bigint
 	declare @nMaxRunstamp bigint
+
+	set ansi_warnings off
 
 	declare @nSixHours bigint
 	set @nSixHours = dbo.fn_returnRunStamp(dateAdd(hour, -6, getDate()))

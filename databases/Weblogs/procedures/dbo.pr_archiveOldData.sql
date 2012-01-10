@@ -1,3 +1,6 @@
+USE [Weblogs]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_archiveOldData]    Script Date: 01/10/2012 11:59:35 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -13,16 +16,16 @@ begin
 	insert into mart_page_byday_archive (ukey, ukey_site, ukey_uristem, requestStatus, ymd, numRequests, numRequests_human, uniques, uniques_human, pageLoadTime, pagePostTime, getTime, postTime)
 	select ukey, ukey_site, ukey_uristem, requestStatus, ymd, numRequests, numRequests_human, uniques, uniques_human, pageLoadTime, pagePostTime, getTime, postTime
 		from mart_page_byday (nolock)
-		where ymd < dateAdd(month, -3, getDate())
+		where ymd < dateAdd(month, -2, getDate())
 
-	delete from mart_page_byday with (tablock) where ymd < dateAdd(month, -3, getDate())
+	delete from mart_page_byday with (tablock) where ymd < dateAdd(month, -2, getDate())
 
 	insert into mart_page_byhour_archive (ukey, ukey_site, ukey_uriStem, requestStatus, ymd, hour, numRequests, numRequests_human, uniques, uniques_human, pageLoadTime, pagePostTime, getTime, postTime)
 	select ukey, ukey_site, ukey_uriStem, requestStatus, ymd, hour, numRequests, numRequests_human, uniques, uniques_human, pageLoadTime, pagePostTime, getTime, postTime
 		from mart_page_byhour (nolock)
-		where ymd < dateAdd(month, -2, getDate())
+		where ymd < dateAdd(month, -1, getDate())
 
-	delete from mart_page_byhour with (tablock) where ymd < dateAdd(month, -2, getDate())
+	delete from mart_page_byhour with (tablock) where ymd < dateAdd(month, -1, getDate())
 
 	select distinct ukey_uriStem
 		into #usedURIs

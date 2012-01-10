@@ -1,6 +1,6 @@
 USE [notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_monitorBigBrother]    Script Date: 01/09/2012 22:02:33 ******/
+/****** Object:  StoredProcedure [dbo].[pr_monitorBigBrother]    Script Date: 01/10/2012 11:19:35 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -432,7 +432,7 @@ begin
 
 	if exists (select top 1 [name] from master.dbo.sysdatabases where [name] = 'scheduler')
 	begin
-		print 'Here we use the Free Agent database'
+		--print 'Here we use the Free Agent database'
 
 		-- drop table #jobStarting
 		select

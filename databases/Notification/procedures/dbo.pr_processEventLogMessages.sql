@@ -1,3 +1,6 @@
+USE [notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_processEventLogMessages]    Script Date: 01/10/2012 12:06:43 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -215,6 +218,11 @@ begin
 		where [type] = 'Information'
 
 	update #eventLog
+		set isInformational = 0
+		where sourceName in ('Kernel-General', 'EventLog', 'USER32', 'Microsoft-Windows-Kernel-General')
+			and not message like '%uptime is%'
+
+	update #eventLog
 		set emailMessage =
 				case
 					when message like '%an unhandled exception has occurred%' and charindex('exception type', message) > 0 then
@@ -242,6 +250,7 @@ begin
 					or message like '%The Event log service was stopped%'
 					or message like '%The Event log service was started%'
 					or ((sourceName like '%clussvc%' or sourceName like '%mssqlserver%') and type = 'Error')
+					or sourceName in ('Kernel-General', 'EventLog', 'USER32', 'Microsoft-Windows-Kernel-General')
 					)
 				then 1
 				else 2 end,

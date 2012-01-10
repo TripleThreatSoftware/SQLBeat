@@ -1,3 +1,6 @@
+USE [notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_monitorPerformanceLog]    Script Date: 01/10/2012 11:20:12 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -22,16 +25,25 @@ begin
 	declare @nPage int
 	declare @nNumPages int
 	declare @nSeverity int
+	declare @bIsMaintenancePeriod bit
 
 	if isnull(@dRightNow, '') = ''
-		set @dRightNow = getDate()
+		set @dRightNow = @dRightNow
 
 	set @dEndDate = @dRightNow
 	set @dStartDate = isnull(@dStartDate, dateAdd(hour, -18, @dEndDate))
 
-	create table #servers (ukey_server int, serverName varchar(200))
-	insert into #servers (ukey_server, serverName)
-	select distinct a.ukey, a.serverName
+	create table #servers (ukey_server int, serverName varchar(200), isDuringMaintenance bit)
+	insert into #servers (ukey_server, serverName, isDuringMaintenance)
+	select distinct a.ukey, a.serverName,
+		case
+			when maintenanceWindowStart is null or maintenanceWindowStop is null
+				then 0
+			when right(convert(varchar(20), @dRightNow, 120), 8) >= right(convert(varchar(20), maintenanceWindowStart, 120), 8)
+				and right(convert(varchar(20), @dRightNow, 120), 8) <= right(convert(varchar(20), maintenanceWindowStop, 120), 8)
+				then 1
+			else 0
+			end
 		from dm_servers a (nolock)
 		join dm_serverGroups b (nolock) on a.ukey_group = b.ukey
 			and b.isProduction = 1
@@ -216,7 +228,9 @@ begin
 				isnull(min(a.minValue), 0) as minValue,
 				isnull(avg(a.avgValue), 0) as avgValue
 				from mart_performanceLog_byday a (nolock)
-				where ymd >= dateAdd(week, -2, convert(varchar(10), getDate(), 120))
+				where ymd >= dateAdd(week, -2, convert(varchar(10), @dRightNow, 120))
+					-- we need to ignore any values for today, since the marting may have already happened
+					and ymd < CONVERT(varchar(10), @dRightNow, 120)
 				group by a.ukey_server, a.ukey_counter, a.ukey_object, a.instanceName
 			) d on a.ukey_server = d.ukey_server
 				and b.ukey = d.ukey_object
@@ -231,7 +245,7 @@ begin
 --		and c.counterName = 'SchemaMgr Store'
 --	join dm_servers d on a.ukey_server = d.ukey
 --		and d.serverName = 'mssqla-ny'
---	where a.ymd >= dateAdd(week, -2, convert(varchar(10), getDate(), 120))
+--	where a.ymd >= dateAdd(week, -2, convert(varchar(10), @dRightNow, 120))
 
 --a.ymd >= dateAdd(hour, -36, @dStartDate)
 --					and a.ymd <= dateAdd(hour, -3, @dEndDate)
@@ -272,7 +286,9 @@ begin
 				join dm_performanceCounters c (nolock) on a.ukey_counter = c.ukey
 					and c.counterName in ('Maximum Free Memory (kb)')
 				join dm_servers d (nolock) on a.ukey_server = d.ukey
-				where a.ymd >= dateAdd(week, -6, getdate())
+				where a.ymd >= dateAdd(week, -6, @dRightNow)
+					-- we need to ignore any values for today, since the marting may have already happened
+					and a.ymd < CONVERT(varchar(10), @dRightNow, 120)
 				group by d.ukey, d.serverName
 			) b on a.ukey_server = b.ukey
 			and (
@@ -339,8 +355,8 @@ begin
 				join #runstamps r10 on r10.runNumber = 10 and r10.ukey_server = @nUkeyServer
 				where a.ukey_server = @nUkeyServer
 
-			print @cSubject
-			print @cMessage
+			--print @cSubject
+			--print @cMessage
 
 			insert into notificationLog_stage (serverName, subject, message, severity) values (@cServerName, @cSubject, @cMessage, @nSeverity)
 		end
@@ -442,7 +458,7 @@ begin
 			and time10 < historicalMaxvalue * 0.9
 			and isAlert = 0
 
-	print 'Removed ' + convert(varchar(20), @@rowcount) + ' values that were less than 90% of historical max'
+	--print 'Removed ' + convert(varchar(20), @@rowcount) + ' values that were less than 90% of historical max'
 
 	-- it needs to not be returning to normal
 	delete from #results
@@ -510,16 +526,19 @@ begin
 	begin
 		select top 1
 			@nUkeyServer = ukey_server,
-			@cServerName = serverName
+			@cServerName = serverName,
+			@bIsMaintenancePeriod = isDuringMaintenance
 			from #servers
 			where ukey_server > @nUkeyServer
 			order by ukey_server
 
 		-- there must be at least three counters
+		-- no sense in alerting during the maintenance window
 		if (select count(*) from #results where ukey_server = @nUkeyServer) > 2
 			and (select count(*) from #results where ukey_server = @nUkeyServer and counterName not like '%/sec%') > 0
+			and @bIsMaintenancePeriod = 0
 		begin
-			print 'Generating results for ' + @cServerName
+			--print 'Generating results for ' + @cServerName
 
 			truncate table #serverResults
 
@@ -578,8 +597,8 @@ begin
 				set @cMessage = replace(@cMessage, 'Time09', (select top 1 right(dbo.fn_runstampToString(runStamp), 11) from #runstamps where ukey = 9))
 				set @cMessage = replace(@cMessage, 'Time10', (select top 1 right(dbo.fn_runstampToString(runStamp), 11) from #runstamps where ukey = 10))
 
-				print @cSubject
-				print @cMessage
+				--print @cSubject
+				--print @cMessage
 
 				insert into notificationLog_stage (serverName, subject, message, severity) values (@cServerName, @cSubject, @cMessage, 3)
 

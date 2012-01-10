@@ -1,25 +1,24 @@
-/****** Object:  Table [dbo].[mart_userAgent_byday]    Script Date: 12/04/2009 18:54:07 ******/
-SET ANSI_NULLS ON
+alter table mart_useragent_byday alter column ukey bigint
 GO
-SET QUOTED_IDENTIFIER ON
+sp_who2
+xp_readerrorlog
+sp_cycle_errorlog
+
+select MIN(ymd), MAX(ymd) from mart_page_byday (nolock)
+select MIN(ymd), MAX(ymd) from mart_page_byhour (nolock)
+
+drop table mart_page_byhour_archive
 GO
-CREATE TABLE [dbo].[mart_userAgent_byday](
-	[ukey] [int] IDENTITY(1,1) NOT NULL,
-	[ymd] [datetime] NULL,
-	[ukey_site] [int] NULL,
-	[ukey_userAgent] [bigint] NULL,
-	[uniques] [bigint] NULL,
-	[requests] [bigint] NULL,
-	[pageViews] [bigint] NULL,
-	[pageRequests] [bigint] NULL,
-	[pageNotFoundErrors] [bigint] NULL
-) ON [PRIMARY]
-GO
-CREATE CLUSTERED INDEX [ix_martUserAgentByday_ymd_ukeySite_ukeyUserAgent_ukey] ON [dbo].[mart_userAgent_byday]
-(
-	[ymd] ASC,
-	[ukey_site] ASC,
-	[ukey_userAgent] ASC,
-	[ukey] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 70) ON [PRIMARY]
+select *
+	into mart_page_byhour_archive
+	from mart_page_byhour
+	where ymd < '2011-12-13'
+
+select MIN(ymd), MAX(ymd) from mart_page_byday_archive (nolock)
+select MIN(ymd), MAX(ymd) from mart_page_byhour_archive (nolock)
+
+mart_page_byday_archive
+
+select * from scheduler.dbo.jobSteps where stepText like '%pr_archiveOldData%'
+select * from scheduler.dbo.jobHistory where ukey_jobstep = 419
 GO

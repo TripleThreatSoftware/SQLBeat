@@ -1,6 +1,6 @@
 USE [configuration]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_readWMIObjects]    Script Date: 12/19/2011 16:25:30 ******/
+/****** Object:  StoredProcedure [dbo].[pr_readWMIObjects]    Script Date: 01/10/2012 11:19:05 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -112,7 +112,7 @@ begin
 		else
 			set @cSQLString = 'powershell -file ' + @cScriptPath + 'readWMI.ps1 -cServerName ' + @cServerNamePart + ' -cUserName "' + @cUsername + '" -cPassword "' + @cPassword + '" -cObjectName ' + @cCounterName
 
-		print @cSQLString
+		--print @cSQLString
 
 		insert into #results (wideString)
 		exec master..xp_cmdshell @cSQLString

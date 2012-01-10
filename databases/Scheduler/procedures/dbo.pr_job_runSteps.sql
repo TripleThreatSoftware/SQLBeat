@@ -1,3 +1,6 @@
+USE [Scheduler]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_job_runSteps]    Script Date: 01/10/2012 11:41:17 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -15,6 +18,8 @@ begin
 	declare @dStartTime dateTime
 	declare @nRuntime bigint
 	declare @bContinueOnFailure bit
+
+	--SET ANSI_WARNINGS off
 
 	create table #jobStepOutput (outputString varchar(8000))
 
