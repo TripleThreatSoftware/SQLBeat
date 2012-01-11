@@ -1,6 +1,6 @@
 USE [notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_checkDeepSQLStats]    Script Date: 01/03/2012 09:19:29 ******/
+/****** Object:  StoredProcedure [dbo].[pr_checkDeepSQLStats]    Script Date: 01/11/2012 10:31:54 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -102,23 +102,26 @@ begin
 --					or nastyLine like '%incorrect syntax%'
 				order by ukey
 
-			print 'Error!'
-			print @cSQLString
-			print @cMessage
-
-			if (select count(*) from notificationLog where serverName = @cServerName and subject like '%deep sql scan failed%' and ymd >= dateAdd(hour, -3, getDate())) > 2
+			if not @cMessage like '%deadlock victim%'
 			begin
-				-- disable the server
-				update dm_servers set deepSQL2005Check = 0
-					where ukey = @nUkeyServer
+				print 'Error!'
+				print @cSQLString
+				print @cMessage
 
-				insert into notificationLog_stage (serverName, severity, subject, message)
-					values (@cServerName, 2, 'Deep SQL scan DISABLED at ' + convert(varchar(20), getDate(), 120), @cMessage)
-			end
-			else
-			begin
-				insert into notificationLog_stage (serverName, severity, subject, message)
-					values (@cServerName, 3, 'Deep SQL scan failed at ' + convert(varchar(20), getDate(), 120), @cMessage)
+				if (select count(*) from notificationLog where serverName = @cServerName and subject like '%deep sql scan failed%' and ymd >= dateAdd(hour, -3, getDate())) > 2
+				begin
+					-- disable the server
+					update dm_servers set deepSQL2005Check = 0
+						where ukey = @nUkeyServer
+
+					insert into notificationLog_stage (serverName, severity, subject, message)
+						values (@cServerName, 2, 'Deep SQL scan DISABLED at ' + convert(varchar(20), getDate(), 120), @cMessage)
+				end
+				else
+				begin
+					insert into notificationLog_stage (serverName, severity, subject, message)
+						values (@cServerName, 3, 'Deep SQL scan failed at ' + convert(varchar(20), getDate(), 120), @cMessage)
+				end
 			end
 
 			continue

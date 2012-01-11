@@ -1,6 +1,6 @@
 USE [notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_checkIntegrity]    Script Date: 12/20/2011 11:11:10 ******/
+/****** Object:  StoredProcedure [dbo].[pr_checkIntegrity]    Script Date: 01/11/2012 10:30:26 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -101,6 +101,10 @@ begin
 		update #results
 			set databaseName = 'BAD DB NAME'
 			where isnull(databaseName, '') = ''
+
+		delete from #results
+			where databaseName = 'BAD DB NAME'
+				and resultLine like '%ConnectionCheckForData%'
 
 		-- these should be just failures
 		insert into notificationLog_stage (subject, message, severity, serverName)

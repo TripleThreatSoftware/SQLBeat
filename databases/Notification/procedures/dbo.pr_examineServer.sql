@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 12/21/2011 12:56:25 ******/
+/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 01/11/2012 09:13:26 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -7,7 +7,7 @@ GO
 -- exec pr_examineServer 'sqlcluster01', 600
 -- select architecture, * from dm_servers
 -- update dm_servers set password = 'REDACTED', wmiPassword = 'REDACTED'
--- exec pr_examineServer 'web04', 600
+-- exec pr_examineServer 'web03', 600
 ALTER procedure [dbo].[pr_examineServer] (@cServerName varchar(100), @nMinutesBackToLook int)
 as
 begin
@@ -711,6 +711,7 @@ begin
 			set isWild = 1
 			from #processes
 			where dateDiff(minute, lastBatchTime, getDate()) > @nRunningMinutesThreshold
+				and (cpuTime > @nCPUThreshold or diskIO > @nDiskThreshold) -- look at total time here
 				and command <> 'AWAITING COMMAND'
 				and programName <> 'SQLAgent - Alert Engine'
 				and rtrim(command) not in ('LOG WRITER', 'CHECKPOINT SLEEP', 'TASK MANAGER',
@@ -724,7 +725,7 @@ begin
 				and programName not like '%SQLAGENT%'
 				and programName not like '%repl%'
 
-				and (cpuTime > 10 or diskIO > 10)
+				and (cpuTime > 1000 or diskIO > 1000)
 
 		update #processes
 			set hostname = b.hostname,
