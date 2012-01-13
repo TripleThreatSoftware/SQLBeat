@@ -1,6 +1,6 @@
 USE [notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_processEventLogMessages]    Script Date: 01/10/2012 12:06:43 ******/
+/****** Object:  StoredProcedure [dbo].[pr_processEventLogMessages]    Script Date: 01/13/2012 10:03:28 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -219,8 +219,10 @@ begin
 
 	update #eventLog
 		set isInformational = 0
-		where sourceName in ('Kernel-General', 'EventLog', 'USER32', 'Microsoft-Windows-Kernel-General')
-			and not message like '%uptime is%'
+		where not message like '%uptime is%'
+			and (
+				sourceName in ('Kernel-General', 'EventLog', 'USER32', 'Microsoft-Windows-Kernel-General', 'ASP.NET 2.0.50727.0: Web Event')
+				)
 
 	update #eventLog
 		set emailMessage =
