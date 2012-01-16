@@ -1,6 +1,6 @@
 USE [notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_monitorBigBrother]    Script Date: 01/10/2012 11:19:35 ******/
+/****** Object:  StoredProcedure [dbo].[pr_monitorBigBrother]    Script Date: 01/16/2012 08:44:58 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -1494,8 +1494,21 @@ begin
 				set jobHistory = @cBuffer
 				where ukey = @nUkey
 
+			set @cBuffer = ''
+			set @cBuffer = (
+				select top 1 [message]
+					from notificationLog (nolock)
+					where serverName = (select top 1 serverName from dm_servers (nolock) where ukey = @nUkeyServer)
+						and ymd >= @dStartTime
+						and ymd <= @dEndTime
+				)
+
+			update #detailedChecks
+				set jobHistory = isnull(jobHistory, '') + isnull('<br>' + @cBuffer, '')
+				where ukey = @nUkey
+
 			-- this message won't be very helpful, so don't bother sending it
-			if isnull(@cBuffer, '') = ''
+			if (select isnull(jobHistory, '') from #detailedChecks where ukey = @nUkey) = ''
 				delete from #detailedChecks where ukey = @nUkey and isFailure = 1
 		end
 	end
@@ -1529,7 +1542,7 @@ begin
 				'Run History: ' + char(13) +
 				isnull(a.runHistory, 'N/A'),
 			8000) as message,
-		case when a.isSuccess = 0 and a.isRunning = 0
+		case when a.isSuccess = 0 and a.isRunning = 0 and ISNULL(a.jobHistory, '') not like '%invalid object name%'
 			then 1
 			else 3
 			end as severity
