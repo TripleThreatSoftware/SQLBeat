@@ -1,3 +1,6 @@
+USE [audit]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_checkObjects]    Script Date: 01/19/2012 08:49:59 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -23,7 +26,7 @@ begin
 		set @bRunDuringMaintenanceWindow = 0
 
 	create table #objectText (databaseName varchar(500), objectName varchar(500), id bigint,
-		xtype varchar(2), objectText varchar(8000), ukey int identity, isChanged bit default 0, textChecksum bigint)
+		xtype varchar(2), objectText varchar(8000), ukey int identity, isChanged bit default 0, textChecksum bigint, colID int)
 	create table #tableStructure (databaseName varchar(500), tableName varchar(500), tableID bigint,
 		xtype varchar(2), columnName varchar(200), columnLength smallint, columnPrecision tinyint, columnType tinyint,
 		columnXType tinyint, columnIsNullable int, ukey int identity, isChanged bit default 0)
@@ -37,6 +40,7 @@ begin
 
 	insert into auditRuns (ymd) values (getDate())
 	set @nUkeyAuditRun = (select scope_identity())
+
 
 	while exists (
 		select *
@@ -111,10 +115,7 @@ begin
 
 		SET @cSQLString = ''
 			select
-				'''''' + @cDatabaseName + '''''' as databaseName,
-				a.name as objectName,
-				a.id, a.xtype,
-				case when a.xtype = ''''D'''' then a.name + '''' '''' else '''''''' end + b.text as text
+				'''''' + @cDatabaseName + '''''' as databaseName, a.name as objectName, a.id, a.xtype, case when a.xtype = ''''D'''' then a.name + '''' '''' else '''''''' end + b.text as text, b.colID
 				from [' + @cServerName + '].['' + @cDatabaseName + ''].dbo.sysobjects a
 				join [' + @cServerName + '].['' + @cDatabaseName + ''].dbo.syscomments b on a.id = b.id
 				where a.xtype <> ''''s''''
@@ -126,7 +127,7 @@ begin
 					and a.name not like ''''syncobj%''''
 				order by a.name''
 
-		insert into #objectText (databaseName, objectName, id, xtype, objectText)
+		insert into #objectText (databaseName, objectName, id, xtype, objectText, colID)
 		EXEC sp_executeSQL @cSQLString
 
 		SET @cSQLString = ''
@@ -138,16 +139,6 @@ begin
 				where a.xtype <> ''''s''''
 					and left(a.name, 3) <> ''''dt_''''
 					and e.name <> space(0)
-					and a.name not like ''''df__sys%''''
-					and a.name not like ''''df__MS%''''
-					and a.name not like ''''syncobj%''''
-					and a.name not like ''''sys%''''
-					and a.name not like ''''msreplication%''''
-					and a.name not like ''''mspeer%''''
-					and a.name not like ''''mspub%''''
-					and a.name not like ''''mssnapshot%''''
-					and a.name not like ''''mssubscription%''''
-					and a.name not like ''''sp_ms%''''
 				order by a.name, e.name''
 
 		insert into #tableStructure (databaseName, tableName, tableID, xtype, columnName, columnLength, columnPrecision, columnType, columnXType, columnIsNullable)
@@ -155,8 +146,7 @@ begin
 
 		SET @cSQLString = ''
 			select
-				'''''' + @cDatabaseName + '''''' as databaseName,
-				a.name, a.id, c.indid, c.name, a.xtype, e.[name], d.keyno
+				'''''' + @cDatabaseName + '''''' as databaseName, a.name, a.id, c.indid, c.name, a.xtype, e.[name], d.keyno
 				from [' + @cServerName + '].['' + @cDatabaseName + ''].dbo.sysobjects a
 				join [' + @cServerName + '].['' + @cDatabaseName + ''].dbo.sysindexes c on a.id = c.id
 				join [' + @cServerName + '].['' + @cDatabaseName + ''].dbo.sysindexkeys d on a.id = d.id
@@ -164,14 +154,6 @@ begin
 				join [' + @cServerName + '].['' + @cDatabaseName + ''].dbo.syscolumns e on a.id = e.id
 					and (d.colid = e.colid or d.id is null)
 				where a.name not like ''''sys%''''
-					and a.name not like ''''df__sys%''''
-					and a.name not like ''''df__MS%''''
-					and a.name not like ''''syncobj%''''
-					and a.name not like ''''msreplication%''''
-					and a.name not like ''''mspeer%''''
-					and a.name not like ''''mspub%''''
-					and a.name not like ''''mssnapshot%''''
-					and a.name not like ''''mssubscription%''''
 					and c.name not like ''''%_dta_%''''
 				order by a.name, c.name, d.keyno, e.[name]''
 
@@ -179,9 +161,7 @@ begin
 		EXEC sp_executeSQL @cSQLString
 
 		SET @cSQLString = ''
-			select
-				'''''' + @cDatabaseName + '''''' as databaseName,
-				a.id, a.name
+			select '''''' + @cDatabaseName + '''''' as databaseName, a.id, a.name
 				from [' + @cServerName + '].['' + @cDatabaseName + ''].dbo.sysobjects a
 				where a.xtype = ''''F''''
 				order by a.name''
@@ -192,12 +172,35 @@ begin
 	END
  end'
 
+
 		if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
 			execute('drop procedure ' + @cProcedureName)
 
 		exec sp_executeSQL @cSQLString
 
 		EXECUTE(@cProcedureName)
+
+		delete from #objectText
+			where objectName  like 'df__sys%'
+				or objectName  like 'df__MS%'
+				or objectName  like 'syncobj%'
+				or objectName  like 'sys%'
+				or objectName  like 'msreplication%'
+				or objectName  like 'mspeer%'
+				or objectName  like 'mspub%'
+				or objectName  like 'mssnapshot%'
+				or objectName  like 'mssubscription%'
+				or objectName  like 'sp_ms%'
+
+		delete from #tableStructure
+			where tableName like 'df__sys%'
+				or tableName like 'df__MS%'
+				or tableName like 'syncobj%'
+				or tableName like 'msreplication%'
+				or tableName like 'mspeer%'
+				or tableName like 'mspub%'
+				or tableName like 'mssnapshot%'
+				or tableName like 'mssubscription%'
 
 		--***************************************************************************************************************************
 		--***************************************************************************************************************************
@@ -223,7 +226,8 @@ begin
 		-- anything in the table that is in the current snapshot, update
 		update auditData_objectText
 			set ymd_lastSeen = getDate(),
-				isCurrent = 1
+				isCurrent = 1,
+				colID = b.colID
 			from auditData_objectText a
 			join #objectText b on isnull(a.databaseName, '') = isnull(b.databaseName, '')
 				and isnull(a.objectName, '') = isnull(b.objectName, '')
@@ -245,12 +249,13 @@ begin
 				and a.serverName = @cServerName
 
 		-- add new things to the table
-		insert into auditData_objectText (serverName, databaseName, objectName, id, xtype, objectText, textChecksum)
+		insert into auditData_objectText (serverName, databaseName, objectName, id, xtype, objectText, textChecksum, isCurrent, colID)
 		select @cServerName, databaseName, objectName, id, xtype, objectText,
-			textChecksum
+			textChecksum, 1, colID
 			from #objectText
 			where isChanged = 1
 			order by ukey
+
 
 
 		--***************************************************************************************************************************
