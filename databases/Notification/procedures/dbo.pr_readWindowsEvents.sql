@@ -1,6 +1,6 @@
 USE [notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_readWindowsEvents]    Script Date: 12/19/2011 16:22:57 ******/
+/****** Object:  StoredProcedure [dbo].[pr_readWindowsEvents]    Script Date: 01/20/2012 00:57:04 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -100,7 +100,7 @@ begin
 			@cServerName = serverName,
 			@cUserName = wmiUserName,
 			@cPassword = wmiPassword,
-			@dLastEventLogCheck = isnull(dateAdd(hour, -6, lastEventLogCheck), dateAdd(hour, -24, getDate()))
+			@dLastEventLogCheck = isnull(dateAdd(hour, -2, lastEventLogCheck), dateAdd(hour, -24, getDate()))
 			from dm_servers (nolock)
 			where serverName > @cServerName
 				and isServerPingable = 1

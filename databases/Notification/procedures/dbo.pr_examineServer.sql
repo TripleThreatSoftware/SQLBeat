@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 01/11/2012 09:13:26 ******/
+/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 01/20/2012 16:30:37 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -252,7 +252,13 @@ begin
 	update dm_servers with (rowlock)
 		set serverVersion = lefT(@cVersion , 50)
 		where ukey = @nUkeyServer
-			and isnull(serverVersion, '') <> @cVersion
+			and isnull(serverVersion, '') <> lefT(@cVersion , 50)
+
+	if @@ROWCOUNT > 0
+	begin
+		-- here, the SQL version changed
+		insert into #results (message, severity, subject) values ('SQL version changed to ' + @cVersion, 1, 'SQL version changed to ' + @cVersion)
+	end
 
 	--print 'Found version: ' + @cVersion
 	--print 'Existing architecture: ' + convert(varchar(20), @nArchitecture)
@@ -661,6 +667,7 @@ begin
 					'AWAITING COMMAND', 'GHOST CLEANUP', 'DBCC', 'BACKUP', 'SIGNAL HANDLER', 'LOCK MONITOR')
 				or rtrim(ltrim(hostName)) = '.'
 				or rtrim(ltrim(hostname)) = @@servername
+				or rtrim(ltrim(hostname)) = (select settingValue from dm_settings where settingName = 'Current machine name' and settingValue is not null)
 
 		-- blocked
 		update #processes
@@ -702,7 +709,7 @@ begin
 				-- this is a job, and we'll catch it elsewhere
 				and programName not like '%SQLAGENT%'
 				and (
-					abs(dateDiff(minute, lastBatchTime, getDate())) >= 5 --between 5 and @nMinutesBackToLook*3
+					abs(dateDiff(minute, lastBatchTime, ymd)) >= 5 --between 5 and @nMinutesBackToLook*3
 					or datePart(year, lastbatchTime) = 1900
 					)
 
@@ -710,7 +717,7 @@ begin
 		update #processes
 			set isWild = 1
 			from #processes
-			where dateDiff(minute, lastBatchTime, getDate()) > @nRunningMinutesThreshold
+			where dateDiff(minute, lastBatchTime, ymd) > @nRunningMinutesThreshold
 				and (cpuTime > @nCPUThreshold or diskIO > @nDiskThreshold) -- look at total time here
 				and command <> 'AWAITING COMMAND'
 				and programName <> 'SQLAgent - Alert Engine'
@@ -1148,8 +1155,8 @@ begin
 								convert(decimal(20,2), sum(isnull(cpuTime, 0)) - sum(isnull(lastCPU, 0))) /
 								convert(decimal(20,2),
 									dateDiff(second,
-										min(isnull(case when datePart(year, lastData) = 1900 or isnull(lastData, '') = '' then isnull(lastBatchTime, getDate()) else lastData end, '')),
-										getDate()
+										min(isnull(case when datePart(year, lastData) = 1900 or isnull(lastData, '') = '' then isnull(lastBatchTime, ymd) else lastData end, '')),
+										ymd
 										)
 									)
 								) / 60.00
@@ -1163,8 +1170,8 @@ begin
 								convert(decimal(20,2), sum(isnull(diskio, 0)) - sum(isnull(lastDisk, 0))) /
 								convert(decimal(20,2),
 									dateDiff(second,
-										min(isnull(case when datePart(year, lastData) = 1900 or isnull(lastData, '') = '' then isnull(lastBatchTime, getDate()) else lastData end, '')),
-										getDate()
+										min(isnull(case when datePart(year, lastData) = 1900 or isnull(lastData, '') = '' then isnull(lastBatchTime, ymd) else lastData end, '')),
+										ymd
 										)
 									)
 								) / 60.00
@@ -1175,7 +1182,7 @@ begin
 					convert(varchar(20),
 						convert(decimal(20,2),
 							convert(decimal(20,2),
-								dateDiff(second, isnull(lastBatchTime, getDate()), getDate())
+								dateDiff(second, isnull(lastBatchTime, ymd), ymd)
 								) / 60
 							)
 						) + 'mins' + char(13) +
@@ -1195,8 +1202,8 @@ begin
 
 			-- weight the severity based on how long it's been running, and whether or not it's business hours
 			case
-				when @bIsOffHours = 1 and convert(decimal(20,2), convert(decimal(20,2), dateDiff(second, isnull(lastBatchTime, getDate()), getDate())) / 60) > 45 then 1
-				when @bIsOffHours = 0 and convert(decimal(20,2), convert(decimal(20,2), dateDiff(second, isnull(lastBatchTime, getDate()), getDate())) / 60) > 15 then 1
+				when @bIsOffHours = 1 and convert(decimal(20,2), convert(decimal(20,2), dateDiff(second, isnull(lastBatchTime, ymd), ymd)) / 60) > 45 then 1
+				when @bIsOffHours = 0 and convert(decimal(20,2), convert(decimal(20,2), dateDiff(second, isnull(lastBatchTime, ymd), ymd)) / 60) > 15 then 1
 				else 2
 				end as severity,
 
@@ -1216,7 +1223,8 @@ begin
 				lastBatchTime,
 				hostname,
 				SPID,
-				locks
+				locks,
+				ymd
 			having sum(isnull(cpuTime, 0)) - sum(isnull(lastCPU, 0)) > 0
 				or sum(isnull(diskio, 0)) - sum(isnull(lastDisk, 0)) > 0
 
@@ -1321,70 +1329,146 @@ begin
 			begin
 				-- jobs
 				insert into #jobHistory (job_id, jobName, jobOutcome, runningSeconds, ymd, isSuccess, isEnabled)
+				select *
+					from openquery([' + @cServerName + '], ''
 				select
 					a.job_id,
 					left(a.[name], 1000) as jobName,
-					case when message not like ''%the job succeeded%'' then left(b.message, 8000) else '''' end as jobOutcome,
+					case when message not like ''''%the job succeeded%'''' then left(b.message, 8000) else '''''''' end as jobOutcome,
 
 					right(convert(varchar(10), run_duration), 2) +
-						left(right(''000000'' + convert(varchar(10), run_duration), 4), 2) * 60 +
-						left(right(''000000'' + convert(varchar(10), run_duration), 6), 2) * 60 * 60 as runningSeconds,
+						left(right(''''000000'''' + convert(varchar(10), run_duration), 4), 2) * 60 +
+						left(right(''''000000'''' + convert(varchar(10), run_duration), 6), 2) * 60 * 60 as runningSeconds,
 
-					left(run_date, 4) + ''-'' +
-						left(right(run_date, 4), 2) + ''-'' +
-						right(run_date, 2) + '' '' +
-						left(right(''000000'' + convert(varchar(20), run_time), 6), 2) + '':'' +
-						left(right(right(''000000'' + convert(varchar(20), run_time), 6), 4), 2) + '':'' +
-						right(right(''000000'' + convert(varchar(20), run_time), 6), 2) + ''.000'' as ymd,
+					left(run_date, 4) + ''''-'''' +
+						left(right(run_date, 4), 2) + ''''-'''' +
+						right(run_date, 2) + '''' '''' +
+						left(right(''''000000'''' + convert(varchar(20), run_time), 6), 2) + '''':'''' +
+						left(right(right(''''000000'''' + convert(varchar(20), run_time), 6), 4), 2) + '''':'''' +
+						right(right(''''000000'''' + convert(varchar(20), run_time), 6), 2) + ''''.000'''' as ymd,
 
 					b.run_status as isSuccess,
 					a.enabled as isEnabled
 
-					from [' + @cServerName + '].msdb.dbo.sysjobs a
-					join [' + @cServerName + '].msdb.dbo.sysjobhistory b on a.job_id = b.job_id
+					from msdb.dbo.sysjobs a
+					join msdb.dbo.sysjobhistory b on a.job_id = b.job_id
 						and b.step_id = 0
-					where left(run_date, 4) + ''-'' +
-						left(right(run_date, 4), 2) + ''-'' +
-						right(run_date, 2) + '' '' +
-						left(right(''000000'' + convert(varchar(20), run_time), 6), 2) + '':'' +
-						left(right(right(''000000'' + convert(varchar(20), run_time), 6), 4), 2) + '':'' +
-						right(right(''000000'' + convert(varchar(20), run_time), 6), 2) + ''.000'' >= ''' + convert(varchar(20), @dLastJobData, 120) + '''
-					order by a.job_id, b.run_date, right(''000000'' + convert(varchar(20), b.run_time), 6)
+					where left(run_date, 4) + ''''-'''' +
+						left(right(run_date, 4), 2) + ''''-'''' +
+						right(run_date, 2) + '''' '''' +
+						left(right(''''000000'''' + convert(varchar(20), run_time), 6), 2) + '''':'''' +
+						left(right(right(''''000000'''' + convert(varchar(20), run_time), 6), 4), 2) + '''':'''' +
+						right(right(''''000000'''' + convert(varchar(20), run_time), 6), 2) + ''''.000'''' >= ''''' + convert(varchar(20), @dLastJobData, 120) + '''''
+					order by a.job_id, b.run_date, right(''''000000'''' + convert(varchar(20), b.run_time), 6)'')
 
 				-- steps
 				insert into #jobStepHistory (job_id, jobName, stepName, stepOutcome, runningSeconds, ymd, isSuccess, stepCommand, stepNumber)
+				select *
+					from openquery([' + @cServerName + '], ''
 				select
 					a.job_id, left(a.[name], 1000) as jobName, left(b.step_name, 1000) as stepName,
-					case when message not like ''%the step succeeded%'' then left(b.message, 8000) else '''' end as stepOutcome,
+					case when message not like ''''%the step succeeded%'''' then left(b.message, 8000) else '''''''' end as stepOutcome,
 
 					right(convert(varchar(10), run_duration), 2) +
-						left(right(''000000'' + convert(varchar(10), run_duration), 4), 2) * 60 +
-						left(right(''000000'' + convert(varchar(10), run_duration), 6), 2) * 60 * 60 as runningSeconds,
+						left(right(''''000000'''' + convert(varchar(10), run_duration), 4), 2) * 60 +
+						left(right(''''000000'''' + convert(varchar(10), run_duration), 6), 2) * 60 * 60 as runningSeconds,
 
-					left(run_date, 4) + ''-'' +
-						left(right(run_date, 4), 2) + ''-'' +
-						right(run_date, 2) + '' '' +
-						left(right(''000000'' + convert(varchar(20), run_time), 6), 2) + '':'' +
-						left(right(right(''000000'' + convert(varchar(20), run_time), 6), 4), 2) + '':'' +
-						right(right(''000000'' + convert(varchar(20), run_time), 6), 2) + ''.000'' as ymd,
+					left(run_date, 4) + ''''-'''' +
+						left(right(run_date, 4), 2) + ''''-'''' +
+						right(run_date, 2) + '''' '''' +
+						left(right(''''000000'''' + convert(varchar(20), run_time), 6), 2) + '''':'''' +
+						left(right(right(''''000000'''' + convert(varchar(20), run_time), 6), 4), 2) + '''':'''' +
+						right(right(''''000000'''' + convert(varchar(20), run_time), 6), 2) + ''''.000'''' as ymd,
 
 					b.run_status as isSuccess,
 					left(c.command, 8000),
 					b.step_id
 
-					from [' + @cServerName + '].msdb.dbo.sysjobs a
-					join [' + @cServerName + '].msdb.dbo.sysjobhistory b on a.job_id = b.job_id
+					from msdb.dbo.sysjobs a
+					join msdb.dbo.sysjobhistory b on a.job_id = b.job_id
 						and b.step_id <> 0
-					join [' + @cServerName + '].msdb.dbo.sysjobsteps c on a.job_id = c.job_id
+					join msdb.dbo.sysjobsteps c on a.job_id = c.job_id
 						and b.step_id = c.step_id
-					where left(run_date, 4) + ''-'' +
-						left(right(run_date, 4), 2) + ''-'' +
-						right(run_date, 2) + '' '' +
-						left(right(''000000'' + convert(varchar(20), run_time), 6), 2) + '':'' +
-						left(right(right(''000000'' + convert(varchar(20), run_time), 6), 4), 2) + '':'' +
-						right(right(''000000'' + convert(varchar(20), run_time), 6), 2) + ''.000'' >= ''' + convert(varchar(20), @dLastJobData, 120) + '''
-					order by a.job_id, b.run_date, b.run_time, b.step_id
+					where left(run_date, 4) + ''''-'''' +
+						left(right(run_date, 4), 2) + ''''-'''' +
+						right(run_date, 2) + '''' '''' +
+						left(right(''''000000'''' + convert(varchar(20), run_time), 6), 2) + '''':'''' +
+						left(right(right(''''000000'''' + convert(varchar(20), run_time), 6), 4), 2) + '''':'''' +
+						right(right(''''000000'''' + convert(varchar(20), run_time), 6), 2) + ''''.000'''' >= ''''' + convert(varchar(20), @dLastJobData, 120) + '''''
+					order by a.job_id, b.run_date, b.run_time, b.step_id'')
 			end'
+
+
+		--set @cSQLString = '
+		--	create procedure ' + @cProcedureName + '
+		--	as
+		--	begin
+		--		-- jobs
+		--		insert into #jobHistory (job_id, jobName, jobOutcome, runningSeconds, ymd, isSuccess, isEnabled)
+		--		select
+		--			a.job_id,
+		--			left(a.[name], 1000) as jobName,
+		--			case when message not like ''%the job succeeded%'' then left(b.message, 8000) else '''' end as jobOutcome,
+
+		--			right(convert(varchar(10), run_duration), 2) +
+		--				left(right(''000000'' + convert(varchar(10), run_duration), 4), 2) * 60 +
+		--				left(right(''000000'' + convert(varchar(10), run_duration), 6), 2) * 60 * 60 as runningSeconds,
+
+		--			left(run_date, 4) + ''-'' +
+		--				left(right(run_date, 4), 2) + ''-'' +
+		--				right(run_date, 2) + '' '' +
+		--				left(right(''000000'' + convert(varchar(20), run_time), 6), 2) + '':'' +
+		--				left(right(right(''000000'' + convert(varchar(20), run_time), 6), 4), 2) + '':'' +
+		--				right(right(''000000'' + convert(varchar(20), run_time), 6), 2) + ''.000'' as ymd,
+
+		--			b.run_status as isSuccess,
+		--			a.enabled as isEnabled
+
+		--			from [' + @cServerName + '].msdb.dbo.sysjobs a
+		--			join [' + @cServerName + '].msdb.dbo.sysjobhistory b on a.job_id = b.job_id
+		--				and b.step_id = 0
+		--			where left(run_date, 4) + ''-'' +
+		--				left(right(run_date, 4), 2) + ''-'' +
+		--				right(run_date, 2) + '' '' +
+		--				left(right(''000000'' + convert(varchar(20), run_time), 6), 2) + '':'' +
+		--				left(right(right(''000000'' + convert(varchar(20), run_time), 6), 4), 2) + '':'' +
+		--				right(right(''000000'' + convert(varchar(20), run_time), 6), 2) + ''.000'' >= ''' + convert(varchar(20), @dLastJobData, 120) + '''
+		--			order by a.job_id, b.run_date, right(''000000'' + convert(varchar(20), b.run_time), 6)
+
+		--		-- steps
+		--		insert into #jobStepHistory (job_id, jobName, stepName, stepOutcome, runningSeconds, ymd, isSuccess, stepCommand, stepNumber)
+		--		select
+		--			a.job_id, left(a.[name], 1000) as jobName, left(b.step_name, 1000) as stepName,
+		--			case when message not like ''%the step succeeded%'' then left(b.message, 8000) else '''' end as stepOutcome,
+
+		--			right(convert(varchar(10), run_duration), 2) +
+		--				left(right(''000000'' + convert(varchar(10), run_duration), 4), 2) * 60 +
+		--				left(right(''000000'' + convert(varchar(10), run_duration), 6), 2) * 60 * 60 as runningSeconds,
+
+		--			left(run_date, 4) + ''-'' +
+		--				left(right(run_date, 4), 2) + ''-'' +
+		--				right(run_date, 2) + '' '' +
+		--				left(right(''000000'' + convert(varchar(20), run_time), 6), 2) + '':'' +
+		--				left(right(right(''000000'' + convert(varchar(20), run_time), 6), 4), 2) + '':'' +
+		--				right(right(''000000'' + convert(varchar(20), run_time), 6), 2) + ''.000'' as ymd,
+
+		--			b.run_status as isSuccess,
+		--			left(c.command, 8000),
+		--			b.step_id
+
+		--			from [' + @cServerName + '].msdb.dbo.sysjobs a
+		--			join [' + @cServerName + '].msdb.dbo.sysjobhistory b on a.job_id = b.job_id
+		--				and b.step_id <> 0
+		--			join [' + @cServerName + '].msdb.dbo.sysjobsteps c on a.job_id = c.job_id
+		--				and b.step_id = c.step_id
+		--			where left(run_date, 4) + ''-'' +
+		--				left(right(run_date, 4), 2) + ''-'' +
+		--				right(run_date, 2) + '' '' +
+		--				left(right(''000000'' + convert(varchar(20), run_time), 6), 2) + '':'' +
+		--				left(right(right(''000000'' + convert(varchar(20), run_time), 6), 4), 2) + '':'' +
+		--				right(right(''000000'' + convert(varchar(20), run_time), 6), 2) + ''.000'' >= ''' + convert(varchar(20), @dLastJobData, 120) + '''
+		--			order by a.job_id, b.run_date, b.run_time, b.step_id
+		--	end'
 
 		if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
 			execute('drop procedure ' + @cProcedureName)
@@ -1571,7 +1655,7 @@ begin
 			set spidStartTime = b.spidStartTime
 			from #runningJobs a
 			join (
-				select a.job_id, min(isnull(c.login_time, isnull(c.lastBatchTime, getDate()))) as spidStartTime
+				select a.job_id, min(isnull(c.login_time, isnull(c.lastBatchTime, c.ymd))) as spidStartTime
 					from #runningJobs a
 					left outer join #processes c on c.programName like '%' + a.job_id_char + '%'
 					group by a.job_id

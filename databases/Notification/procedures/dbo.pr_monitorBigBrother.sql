@@ -1,6 +1,6 @@
 USE [notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_monitorBigBrother]    Script Date: 01/16/2012 08:44:58 ******/
+/****** Object:  StoredProcedure [dbo].[pr_monitorBigBrother]    Script Date: 01/20/2012 16:41:58 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -1557,6 +1557,10 @@ begin
 				b.serverName is not null
 				and dateDiff(second, a.startTime, getDate()) > 500
 				)
+
+	-- if we changed the proc, don't send any alerts
+	if exists (select top 1 ukey from notificationLog (nolock) where ymd >= dateAdd(minute, -15, getDate()) and message like '%changed since it was compiled%')
+		delete from #results where subject like 'detailed check of%'
 
 	-- only send the alert once every 10 minutes
 	delete #results
