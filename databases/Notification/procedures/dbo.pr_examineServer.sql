@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 01/21/2012 10:34:35 ******/
+/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 01/25/2012 13:08:18 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -668,6 +668,7 @@ begin
 				or rtrim(ltrim(hostName)) = '.'
 				or rtrim(ltrim(hostname)) = @@servername
 				or rtrim(ltrim(hostname)) = (select settingValue from dm_settings where settingName = 'Current machine name' and settingValue is not null)
+				or (ISNULL(login, '') like '%system' and bufferContents like '%regularTrim%' and DATEDIFF(second, lastBatchTime, ymd) < 90) -- we want to filter out the regular trim job
 
 		-- blocked
 		update #processes
@@ -684,7 +685,6 @@ begin
 						and a.spid <> b.spid
 						and not (isnull(a.login, '') = 'CORP\SQLADMIN' and isnull(b.login, '') = 'CORP\SQLADMIN')
 						and not (isnull(b.login, '') = '' and isnull(rtrim(b.command), '') = '')
-						and not (ISNULL(b.login, '') like '%system' and b.command like '%regularTrim%' and DATEDIFF(second, b.lastBatchTime, b.ymd) < 60) -- we want to filter out the regular trim job
 				) b on a.spid = b.spid
 
 		update #processes
@@ -1138,6 +1138,7 @@ begin
 				where a.isBlocked = 1
 					and a.blockedBy <> ''
 					and a.ignoreSPID = 0
+					and ISNULL(b.ignoreSPID, 0) = 0
 					and abs(dateDiff(second, b.lastBatchTime, a.lastBatchTime)) >= @nBlockingSecondsThreshold
 --		end
 
