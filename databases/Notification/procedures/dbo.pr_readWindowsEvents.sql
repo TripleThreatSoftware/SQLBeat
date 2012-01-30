@@ -1,6 +1,6 @@
 USE [notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_readWindowsEvents]    Script Date: 01/20/2012 00:57:04 ******/
+/****** Object:  StoredProcedure [dbo].[pr_readWindowsEvents]    Script Date: 01/27/2012 23:31:34 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -14,11 +14,11 @@ GO
 --go
 --truncate table eventLog_history
 --go
--- select * from eventLog_history where ymd >= '2010-05-31 11:20:00.000' and ukey_group = 1 order by ukey_group, ymd
+-- select top 100 * from eventLog_history order by ymd desc
 -- pr_readWindowsEvents 1
 -- select lastEventLogCheck, serverName from dm_servers where isEnabled = 1 and eventLogCheck = 1 order by lastEventLogCheck
 -- select * from notificationLog_stage
- --update dm_servers set lastEventLogCheck = '7/28/2010' where servername = 'web03'
+ --update dm_servers set lastEventLogCheck = '2012-01-28 15:00:00.000' where servername = 'web03'
  --delete from eventLog where timeWritten >= '2010-05-26'
 -- select * from eventLog_stage order by timeWritten desc
 -- select top 500 * from eventLog order by timeWritten desc
@@ -64,6 +64,7 @@ begin
 	declare @nRowCount int
 	declare @cLastFieldName varchar(100)
 	declare @cServerNamePart varchar(100)
+	declare @cDateString varchar(100)
 
 	set @cServerName = ''
 
@@ -127,10 +128,20 @@ begin
 
 		insert into eventLog_history (notes, serverName, ukey_group) values ('Reading events since ' + convert(varchar(20), @dLastEventLogCheck, 120), @cServerName, @nUkeyGroup)
 
+		set @cDateString =
+				right('00' + convert(varchar(2), datePart(month, @dLastEventLogCheck)), 2) + '-' +
+				right('00' + convert(varchar(2), datePart(day, @dLastEventLogCheck)), 2) + '-' +
+				convert(varchar(4), datePart(year, @dLastEventLogCheck)) + ' ' +
+
+				right('00' + convert(varchar(2), datePart(hour, @dLastEventLogCheck)), 2) + ':' +
+				right('00' + convert(varchar(2), datePart(minute, @dLastEventLogCheck)), 2) + ':' +
+				right('00' + convert(varchar(2), datePart(second, @dLastEventLogCheck)), 2) + '.000'
+
+
 		if isnull(@cUserName, '') = ''
-			set @cSQLString = 'powershell -file ' + @cScriptPath + 'readevents.ps1 -cServerName ' + @cServerNamePart + ' -cTimestamp ' + dbo.fn_returnUTCDate(@dLastEventLogCheck)
+			set @cSQLString = 'powershell -file ' + @cScriptPath + 'readevents.ps1 -cServerName ' + @cServerNamePart + ' -cTimestamp ' + @cDateString
 		else
-			set @cSQLString = 'powershell -file ' + @cScriptPath + 'readevents.ps1 -cServerName ' + @cServerNamePart + ' -cUserName "' + @cUsername + '" -cPassword "' + @cPassword + '" -cTimestamp ' + dbo.fn_returnUTCDate(@dLastEventLogCheck)
+			set @cSQLString = 'powershell -file ' + @cScriptPath + 'readevents.ps1 -cServerName ' + @cServerNamePart + ' -cUserName "' + @cUsername + '" -cPassword "' + @cPassword + '" -cTimestamp ' + @cDateString
 
 --		print @cSQLString
 
