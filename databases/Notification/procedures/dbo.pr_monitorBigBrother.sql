@@ -1,6 +1,6 @@
 USE [notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_monitorBigBrother]    Script Date: 01/20/2012 16:41:58 ******/
+/****** Object:  StoredProcedure [dbo].[pr_monitorBigBrother]    Script Date: 02/10/2012 15:47:42 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -552,8 +552,9 @@ begin
 
 
 	end
-	else
-	begin
+
+	--else
+	--begin
 
 		--*********************************************************************************************************************
 		-- Job average runtimes
@@ -763,7 +764,7 @@ begin
 			from #runningJobs a
 			left outer join master..sysprocesses c (nolock) on substring(c.program_name,32,32)= a.job_id_char
 
-	end
+	--end
 
 	--*********************************************************************************************************************
 	-- Add job data to local mart tables
