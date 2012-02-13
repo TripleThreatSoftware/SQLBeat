@@ -1,6 +1,6 @@
 USE [notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_monitorBigBrother]    Script Date: 02/10/2012 15:47:42 ******/
+/****** Object:  StoredProcedure [dbo].[pr_monitorBigBrother]    Script Date: 02/13/2012 14:57:22 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -953,6 +953,9 @@ begin
 			or jobName like '%LSAlert%'
 
 			or jobName like 'MP%'
+
+			or jobName like 'AppDb%'
+			or jobName like 'Restore%'
 
 	-- jobs that we have a history for
 	insert into #results (message, severity, subject, isLongRunningJob)
