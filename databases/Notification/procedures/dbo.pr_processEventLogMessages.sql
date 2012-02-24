@@ -1,6 +1,6 @@
 USE [notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_processEventLogMessages]    Script Date: 01/13/2012 10:03:28 ******/
+/****** Object:  StoredProcedure [dbo].[pr_processEventLogMessages]    Script Date: 02/24/2012 09:41:13 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -239,6 +239,9 @@ begin
 					or message like '%thermal%'
 					or message like '%shutdown%'
 					or message like '%eaas%'
+					or message like '%address conflict%'
+					or message like '%port blocking rule%'
+					or message like '%virus%'
 					or message like '%degraded%'
 					or message like '%lost communication%'
 					or message like '%network adapter%'
