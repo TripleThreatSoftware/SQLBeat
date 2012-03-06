@@ -1,6 +1,6 @@
 USE [notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_monitorBigBrother]    Script Date: 02/13/2012 14:57:22 ******/
+/****** Object:  StoredProcedure [dbo].[pr_monitorBigBrother]    Script Date: 03/06/2012 15:49:09 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -1078,14 +1078,43 @@ begin
 
 	-- first, identify failures of jobs
 	declare @dJobFailure dateTime
+	declare @bIsSystemJob bit
 	set @nThisUkey = 0
 
-	select ukey, ukey_job, ymd, jobOutcome, runningSeconds
+	select a.ukey, a.ukey_job, a.ymd, a.jobOutcome, a.runningSeconds, c.jobName,
+		CONVERT(bit, 0) as isSystemJob
 		into #failures
-		from jobHistory (nolock)
-		where ukey_server = @nUkeyServer
-			and isSuccess = 0
-			and ymd >= dateAdd(minute, -@nMinutesBackToLook, getDate())
+		from jobHistory a (nolock)
+		join dm_serverJobs c (nolock) on c.ukey_server = @nUkeyServer
+			and a.ukey_job = c.ukey
+		where a.ukey_server = @nUkeyServer
+			and a.isSuccess = 0
+			and (
+				a.ymd >= dateAdd(minute, -@nMinutesBackToLook, getDate())
+				or dateAdd(second, a.runningSeconds, a.ymd) >= dateAdd(minute, -@nMinutesBackToLook, getDate())
+				)
+
+	update #failures
+		set isSystemJob = 1
+		where jobName like '%trim history%'
+			or jobName like '%eventlog check%'
+			or jobName like '%fragmentation check%'
+			or jobName like '%configuration check%'
+			or jobName like '%detailed check%'
+			or jobName like '%maintain report metadata%'
+			or jobName like '%integrity check%'
+			or jobName like '%import weblogs%'
+			or jobName like '%monitor sql objects%'
+			or jobName like '%monitor sql statistics%'
+			or jobName like '%monitor table sizes%'
+			or jobName like '%monitor indexing%'
+			or jobName like '%monitor installed%'
+			or jobName like '%monitor myself%'
+			or jobName like 'maintenance%'
+			or jobName like '%mart%'
+			or jobName like '%backup%'
+			or jobName like '%production connections%'
+			or jobName like '%execution statistics%'
 
 	update #failures
 		set jobOutcome = jobOutcome + isnull('<br>' + b.stepOutcome, '')
@@ -1109,14 +1138,13 @@ begin
 			@nThisUkey = a.ukey,
 			@nUkeyJob = a.ukey_job,
 			@dJobFailure = a.ymd,
-			@cThisMessage = 'Job ' + b.jobName + ' failed at ' + convert(varchar(20), a.ymd, 120) + '.<br>' +
+			@bIsSystemJob = isSystemJob,
+			@cThisMessage = 'Job ' + a.jobName + ' failed at ' + convert(varchar(20), a.ymd, 120) + '.<br>' +
 				'Message: ' + isnull(a.jobOutcome, 'N/A') + '<br>' +
 				'Runtime: ' + convert(varchar(20), isnull(runningSeconds, 0)) + 's<br>',
-			@cThisSubject = left('Job ' + b.jobName + ' failed at ' + convert(varchar(20), a.ymd, 120) + '.', 300),
-			@cJobName = b.jobName
+			@cThisSubject = left('Job ' + a.jobName + ' failed at ' + convert(varchar(20), a.ymd, 120) + '.', 300),
+			@cJobName = a.jobName
 			from #failures a
-			join dm_serverJobs b (nolock) on a.ukey_job = b.ukey
-				and b.ukey_server = @nUkeyServer
 			where a.ukey > @nThisUkey
 
 		select
@@ -1185,7 +1213,7 @@ begin
 
 				-- don't send a message for this time block
 				if dbo.fn_returnTimeBlock(@dJobFailure) < dbo.fn_returnTimeBlock(getDate())
-					insert into #results (ymd, subject, message, severity, isJobFailure) values (@dJobFailure, @cThisSubject, @cThisMessage, 3, 1)
+					insert into #results (ymd, subject, message, severity, isJobFailure) values (@dJobFailure, @cThisSubject, @cThisMessage, case when @bIsSystemJob = 1 then 3 else 2 end, 1)
 
 				-- since we've sent out a wrapup email, remove any other mentions of this job
 				delete from #failures where ukey_job = @nUkeyJob
@@ -1218,7 +1246,7 @@ begin
 
 			-- silence permanently any job failure messages due to a database restore
 			if @cThisMessage not like '%in the middle of a restore%' and @cThisMessage not like '%has changed since it was compiled%'
-				insert into #results (ymd, subject, message, severity, isJobFailure) values (@dJobFailure, @cThisSubject, @cThisMessage, 3, 1)
+				insert into #results (ymd, subject, message, severity, isJobFailure) values (@dJobFailure, @cThisSubject, @cThisMessage, case when @bIsSystemJob = 1 then 3 else 2 end, 1)
 		end
 	end
 
@@ -1253,7 +1281,8 @@ begin
 				'Message: ' + isnull(a.stepOutcome, 'N/A') + '<br>' +
 				'Runtime: ' + convert(varchar(20), isnull(a.runningSeconds, 0)) + 's<br>' +
 				'Text   : ' + isnull(c.stepCommand, ''),
-			@cThisSubject = left('Job step ' + c.stepName + ' of job ' + b.jobName + ' failed at ' + convert(varchar(20), a.ymd, 120) + '.', 300)
+			@cThisSubject = left('Job step ' + c.stepName + ' of job ' + b.jobName + ' failed at ' + convert(varchar(20), a.ymd, 120) + '.', 300),
+			@cJobName = b.jobName
 			from jobStepHistory a (nolock)
 			join dm_serverJobs b (nolock) on a.ukey_job = b.ukey
 				and b.ukey_server = @nUkeyServer
@@ -1272,7 +1301,30 @@ begin
 							and ymd >= dateAdd(minute, -@nMinutesBackToLook, getDate())
 					)
 
-		insert into #results (ymd, subject, message, severity, isJobFailure) values (@dJobFailure, @cThisSubject, @cThisMessage, 3, 1)
+		if @cJobName like '%trim history%'
+			or @cJobName like '%eventlog check%'
+			or @cJobName like '%fragmentation check%'
+			or @cJobName like '%configuration check%'
+			or @cJobName like '%detailed check%'
+			or @cJobName like '%maintain report metadata%'
+			or @cJobName like '%integrity check%'
+			or @cJobName like '%import weblogs%'
+			or @cJobName like '%monitor sql objects%'
+			or @cJobName like '%monitor sql statistics%'
+			or @cJobName like '%monitor table sizes%'
+			or @cJobName like '%monitor indexing%'
+			or @cJobName like '%monitor installed%'
+			or @cJobName like '%monitor myself%'
+			or @cJobName like 'maintenance%'
+			or @cJobName like '%mart%'
+			or @cJobName like '%backup%'
+			or @cJobName like '%production connections%'
+			or @cJobName like '%execution statistics%'
+			set @bIsSystemJob = 1
+		else
+			set @bIsSystemJob = 0
+
+		insert into #results (ymd, subject, message, severity, isJobFailure) values (@dJobFailure, @cThisSubject, @cThisMessage, case when @bIsSystemJob = 1 then 3 else 2 end, 1)
 	end
 
 	insert into #results (ymd, serverName, subject, message, severity, isJobFailure)
