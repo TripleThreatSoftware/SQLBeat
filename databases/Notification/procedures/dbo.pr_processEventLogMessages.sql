@@ -1,6 +1,6 @@
 USE [notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_processEventLogMessages]    Script Date: 02/24/2012 09:41:13 ******/
+/****** Object:  StoredProcedure [dbo].[pr_processEventLogMessages]    Script Date: 03/23/2012 09:09:20 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -257,6 +257,7 @@ begin
 					or ((sourceName like '%clussvc%' or sourceName like '%mssqlserver%') and type = 'Error')
 					or sourceName in ('Kernel-General', 'EventLog', 'USER32', 'Microsoft-Windows-Kernel-General')
 					)
+				and message not like '%a validation error has occurred%'
 				then 1
 				else 2 end,
 			emailSubject = 'EventLog @ ' + left(right(convert(varchar(20), convert(dateTime, timeWritten), 120), 8), 5) + ' : ' +
