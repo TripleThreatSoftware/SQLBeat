@@ -1,6 +1,6 @@
 USE [notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_processEventLogMessages]    Script Date: 03/23/2012 09:09:20 ******/
+/****** Object:  StoredProcedure [dbo].[pr_processEventLogMessages]    Script Date: 04/10/2012 07:31:33 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -210,6 +210,7 @@ begin
 			and message not like '%extensible counter%'
 			and message not like '%flushed by the application%'
 
+			and message not like '%Unable to read Server Queue performance data from the Server service%'
 
 			and isnull(message, '') <> ''
 
