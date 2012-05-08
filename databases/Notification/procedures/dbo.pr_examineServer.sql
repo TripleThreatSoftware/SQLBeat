@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 01/25/2012 13:08:18 ******/
+/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 05/08/2012 14:56:59 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -1104,6 +1104,9 @@ begin
 --		end
 --		else
 --		begin
+
+-- print 'lots of blocking'
+
 			-- here, we have a lot of blocking and we're very concerned
 			insert into #results (message, severity, subject, isBlocking)
 			select distinct left('A process which belongs to SPID ' + isnull(convert(varchar(20), a.spid), 'A') + '(' + isnull(a.hostname, '') + ':' + isnull(a.login, '') + ') ' +
@@ -1142,93 +1145,106 @@ begin
 					and abs(dateDiff(second, b.lastBatchTime, a.lastBatchTime)) >= @nBlockingSecondsThreshold
 --		end
 
-		-- wild
-		insert into #results (message, severity, subject, isLongRunningProcess)
-		select left('A process which belongs to ' + isnull(login, 'N/A') + ' ' +
-				'(' + rtrim(isnull(hostname, '')) + ') ' +
-				'is running wicked long in the ' + isnull(dbName, 'N/A') + ' database.' + char(13) + char(13) +
-				'Current CPU: ' + convert(varchar(20), sum(isnull(cpuTime, 0))) + char(13) +
-				'Current DISK: ' + convert(varchar(20), sum(isnull(diskio, 0))) + char(13) +
+-- print 'wild processes'
+		begin try
 
-				'CPU Delta: ' +
-					convert(varchar(20),
-						convert(decimal(20,2),
-							(
-								convert(decimal(20,2), sum(isnull(cpuTime, 0)) - sum(isnull(lastCPU, 0))) /
-								convert(decimal(20,2),
-									dateDiff(second,
-										min(isnull(case when datePart(year, lastData) = 1900 or isnull(lastData, '') = '' then isnull(lastBatchTime, ymd) else lastData end, '')),
-										ymd
+			-- wild
+			insert into #results (message, severity, subject, isLongRunningProcess)
+			select left('A process which belongs to ' + isnull(login, 'N/A') + ' ' +
+					'(' + rtrim(isnull(hostname, '')) + ') ' +
+					'is running wicked long in the ' + isnull(dbName, 'N/A') + ' database.' + char(13) + char(13) +
+					'Current CPU: ' + convert(varchar(30), sum(isnull(cpuTime, 0))) + char(13) +
+					'Current DISK: ' + convert(varchar(30), sum(isnull(diskio, 0))) + char(13) +
+
+					'CPU Delta: ' +
+						convert(varchar(30),
+							convert(decimal(30,2),
+								(
+									convert(decimal(30,2), sum(isnull(cpuTime, 0)) - sum(isnull(lastCPU, 0))) /
+									convert(decimal(30,2),
+										dateDiff(second,
+											min(isnull(case when datePart(year, lastData) = 1900 or isnull(lastData, '') = '' then isnull(lastBatchTime, ymd) else lastData end, '')),
+											ymd
+											)
 										)
-									)
-								) / 60.00
-							)
-						) + '/min' + char(13) +
+									) / 60.00
+								)
+							) + '/min' + char(13) +
 
-				'DISK Delta: ' +
-					convert(varchar(20),
-						convert(decimal(20,2),
-							(
-								convert(decimal(20,2), sum(isnull(diskio, 0)) - sum(isnull(lastDisk, 0))) /
-								convert(decimal(20,2),
-									dateDiff(second,
-										min(isnull(case when datePart(year, lastData) = 1900 or isnull(lastData, '') = '' then isnull(lastBatchTime, ymd) else lastData end, '')),
-										ymd
+					'DISK Delta: ' +
+						convert(varchar(30),
+							convert(decimal(30,2),
+								(
+									convert(decimal(30,2), sum(isnull(diskio, 0)) - sum(isnull(lastDisk, 0))) /
+									convert(decimal(30,2),
+										dateDiff(second,
+											min(isnull(case when datePart(year, lastData) = 1900 or isnull(lastData, '') = '' then isnull(lastBatchTime, ymd) else lastData end, '')),
+											ymd
+											)
 										)
-									)
-								) / 60.00
-							)
-						) + '/min' + char(13) +
+									) / 60.00
+								)
+							) + '/min' + char(13) +
 
-				'Runtime of this batch: ' +
-					convert(varchar(20),
-						convert(decimal(20,2),
-							convert(decimal(20,2),
-								dateDiff(second, isnull(lastBatchTime, ymd), ymd)
-								) / 60
-							)
-						) + 'mins' + char(13) +
+					'Runtime of this batch: ' +
+						convert(varchar(30),
+							convert(decimal(30,2),
+								convert(decimal(30,2),
+									dateDiff(second, isnull(lastBatchTime, ymd), ymd)
+									) / 60.00
+								)
+							) + 'mins' + char(13) +
 
-				'Current Batch: ' + convert(varchar(20), isnull(lastBatchTime, ''), 120) + char(13) +
-				'Last Snap: ' + case when isnull(min(lastData), '') = '' then 'N/A' else convert(varchar(20), isnull(min(lastData), ''), 120) end + char(13) +
+					'Current Batch: ' + convert(varchar(20), isnull(lastBatchTime, ''), 120) + char(13) +
+					'Last Snap: ' + case when isnull(min(lastData), '') = '' then 'N/A' else convert(varchar(20), isnull(min(lastData), ''), 120) end + char(13) +
 
-				'********************************************' + char(13) +
-				'SPID ' + convert(varchar(20), isnull(SPID, 0)) + ' locks: ' + char(13) +
-				'********************************************' + char(13) +
-					isnull(locks, '') + char(13) +
-				'********************************************' + char(13) +
-				'Executing (' + rtrim(isnull(command, '')) + ') : ' + char(13) +
-				'********************************************' + char(13) +
-					isnull(buffercontents, '')
-				, 8000) as message,
+					'********************************************' + char(13) +
+					'SPID ' + convert(varchar(20), isnull(SPID, 0)) + ' locks: ' + char(13) +
+					'********************************************' + char(13) +
+						isnull(locks, '') + char(13) +
+					'********************************************' + char(13) +
+					'Executing (' + rtrim(isnull(command, '')) + ') : ' + char(13) +
+					'********************************************' + char(13) +
+						isnull(buffercontents, '')
+					, 8000) as message,
 
-			-- weight the severity based on how long it's been running, and whether or not it's business hours
-			case
-				when @bIsOffHours = 1 and convert(decimal(20,2), convert(decimal(20,2), dateDiff(second, isnull(lastBatchTime, ymd), ymd)) / 60) > 45 then 1
-				when @bIsOffHours = 0 and convert(decimal(20,2), convert(decimal(20,2), dateDiff(second, isnull(lastBatchTime, ymd), ymd)) / 60) > 15 then 1
-				else 2
-				end as severity,
+				-- weight the severity based on how long it's been running, and whether or not it's business hours
+				case
+					when @bIsOffHours = 1 and convert(decimal(30,2), convert(decimal(30,2), dateDiff(second, isnull(lastBatchTime, ymd), ymd)) / 60.00) > 45.00 then 1
+					when @bIsOffHours = 0 and convert(decimal(30,2), convert(decimal(30,2), dateDiff(second, isnull(lastBatchTime, ymd), ymd)) / 60.00) > 15.00 then 1
+					else 2
+					end
+					as severity,
 
-			'User ' + isnull(login, 'N/A') + ' ' +
-				'(' + convert(varchar(20), isnull(SPID, 0)) + ') ' +
-				'started a wild process ' +
-				'in ' + isnull(dbName, '') + ' ' +
-				'at ' + right(convert(varchar(20), isnull(lastBatchTime, ''), 120), 8) + '.' as subject,
-			1 as isLongRunningProcess
-			from #processes
-			where isWild = 1
-				and ignoreSPID = 0
-			group by login,
-				dbname,
-				command,
-				buffercontents,
-				lastBatchTime,
-				hostname,
-				SPID,
-				locks,
-				ymd
-			having sum(isnull(cpuTime, 0)) - sum(isnull(lastCPU, 0)) > 0
-				or sum(isnull(diskio, 0)) - sum(isnull(lastDisk, 0)) > 0
+				'User ' + isnull(login, 'N/A') + ' ' +
+					'(' + convert(varchar(20), isnull(SPID, 0)) + ') ' +
+					'started a wild process ' +
+					'in ' + isnull(dbName, '') + ' ' +
+					'at ' + right(convert(varchar(20), isnull(lastBatchTime, ''), 120), 8) + '.'
+					 as subject,
+				1 as isLongRunningProcess
+				from #processes
+				where isWild = 1
+					and ignoreSPID = 0
+				group by login,
+					dbname,
+					command,
+					buffercontents,
+					lastBatchTime,
+					hostname,
+					SPID,
+					locks,
+					ymd
+				having sum(isnull(cpuTime, 0)) - sum(isnull(lastCPU, 0)) > 0
+					or sum(isnull(diskio, 0)) - sum(isnull(lastDisk, 0)) > 0
+		end try
+		begin catch
+			insert into #results (message, severity, subject, isLongRunningProcess) values ('Very long running processes.', 1, 'Very long running process', 1)
+			--insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Error determining running processes resource utilization', @cSQLString, @nUkeyGroup)
+		end catch
+
+--print 'serial blocking'
+
 
 -- 		-- serial blocking offenses
  		insert into #results (message, severity, subject, isBlocking)
