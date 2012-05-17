@@ -1,6 +1,6 @@
-USE [Notification]
+USE [notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_processStagedAlerts]    Script Date: 04/28/2010 09:36:32 ******/
+/****** Object:  StoredProcedure [dbo].[pr_processStagedAlerts]    Script Date: 05/17/2012 10:55:30 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -82,6 +82,8 @@ begin
 	--***************************************************************************************************
 	-- Get rid of duplicate messages
 	--***************************************************************************************************
+
+	delete from notificationLog_stage where message like '%the activated proc%'
 
 	-- get rid of doubles in the staged messages
 	delete a
