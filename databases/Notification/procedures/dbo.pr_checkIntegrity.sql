@@ -47,11 +47,11 @@ begin
 			where serverName > @cServerName
 				and isEnabled = 1
 				and integrityCheck = 1
---				and ukey_group = @nServerGroup
-and ukey = 45
---				and (lastIntegrityCheck is null or dateDiff(minute, lastIntegrityCheck, getDate()) > isnull(integrityCheckMinuteInterval, 5))
---				and right(convert(varchar(20), getDate(), 120), 8) >= right(convert(varchar(20), maintenanceWindowStart, 120), 8)
---				and right(convert(varchar(20), getDate(), 120), 8) <= right(convert(varchar(20), maintenanceWindowStop, 120), 8)
+				and ukey_group = @nServerGroup
+--				and ukey = 45
+				and (lastIntegrityCheck is null or dateDiff(minute, lastIntegrityCheck, getDate()) > isnull(integrityCheckMinuteInterval, 5))
+				and right(convert(varchar(20), getDate(), 120), 8) >= right(convert(varchar(20), maintenanceWindowStart, 120), 8)
+				and right(convert(varchar(20), getDate(), 120), 8) <= right(convert(varchar(20), maintenanceWindowStop, 120), 8)
 		)
 	begin
 		truncate table #results
@@ -66,14 +66,14 @@ and ukey = 45
 			where serverName > @cServerName
 				and isEnabled = 1
 				and integrityCheck = 1
---				and ukey_group = @nServerGroup
-and ukey = 45
---				and (lastIntegrityCheck is null or dateDiff(minute, lastIntegrityCheck, getDate()) > isnull(integrityCheckMinuteInterval, 5))
---				and right(convert(varchar(20), getDate(), 120), 8) >= right(convert(varchar(20), maintenanceWindowStart, 120), 8)
---				and right(convert(varchar(20), getDate(), 120), 8) <= right(convert(varchar(20), maintenanceWindowStop, 120), 8)
+				and ukey_group = @nServerGroup
+--				and ukey = 45
+				and (lastIntegrityCheck is null or dateDiff(minute, lastIntegrityCheck, getDate()) > isnull(integrityCheckMinuteInterval, 5))
+				and right(convert(varchar(20), getDate(), 120), 8) >= right(convert(varchar(20), maintenanceWindowStart, 120), 8)
+				and right(convert(varchar(20), getDate(), 120), 8) <= right(convert(varchar(20), maintenanceWindowStop, 120), 8)
 			order by serverName
 
-		print @cServerName
+--		print @cServerName
 
 		exec @nReturnStatus = pr_pingServer @cServerName
 
