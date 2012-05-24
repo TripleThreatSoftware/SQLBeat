@@ -1,3 +1,8 @@
+/****** Object:  StoredProcedure [dbo].[pr_checkIntegrity]    Script Date: 05/24/2012 08:44:48 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 ALTER  procedure [dbo].[pr_checkIntegrity] (@nServerGroup int)
 as
 begin
@@ -148,6 +153,7 @@ begin
 						serverName = @cServerName
 					where ISNULL(databaseName, '') = ''
 
+
 				if not exists (
 					select top 1 ukey
 						from #results
@@ -157,9 +163,22 @@ begin
 					)
 				begin
 					-- here, we found an error for a database
-
 					update #results
 						set isError = 1
+						where databaseName = @cDatabaseName
+							and serverName = @cServerName
+				end
+
+				if exists (
+					select top 1 ukey
+						from #results
+						where resultLine like '%timeout expired%'
+							and databaseName = @cDatabaseName
+							and serverName = @cServerName
+					)
+				begin
+					-- here, we need to discard the results
+					delete from #results
 						where databaseName = @cDatabaseName
 							and serverName = @cServerName
 				end
