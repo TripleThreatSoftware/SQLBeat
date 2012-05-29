@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[pr_checkIntegrity]    Script Date: 05/24/2012 08:44:48 ******/
+/****** Object:  StoredProcedure [dbo].[pr_checkIntegrity]    Script Date: 05/29/2012 08:48:49 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -172,7 +172,7 @@ begin
 				if exists (
 					select top 1 ukey
 						from #results
-						where resultLine like '%timeout expired%'
+						where (resultLine like '%timeout expired%' or resultLine like '%general network%')
 							and databaseName = @cDatabaseName
 							and serverName = @cServerName
 					)
