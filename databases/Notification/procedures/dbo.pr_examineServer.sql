@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 05/08/2012 14:56:59 ******/
+/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 06/29/2012 10:13:10 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -7,7 +7,7 @@ GO
 -- exec pr_examineServer 'sqlcluster01', 600
 -- select architecture, * from dm_servers
 -- update dm_servers set password = 'REDACTED', wmiPassword = 'REDACTED'
--- exec pr_examineServer 'web03', 600
+-- exec pr_examineServer 'web04', 600
 ALTER procedure [dbo].[pr_examineServer] (@cServerName varchar(100), @nMinutesBackToLook int)
 as
 begin
@@ -1993,7 +1993,7 @@ begin
 						'<th>Step</th><th>Runtime</th><th>Outcome</th><th>Start Time</th>' +
 					'</tr>'
 
-			select top 3
+			select top 20
 				@cThisMessage = @cThisMessage +
 					'<tr>' +
 						'<td><b>' + isnull(b.stepName, 'N/A') + '</b></td>' +
@@ -2016,7 +2016,7 @@ begin
 					and a.ukey_jobHistory = d.ukey
 
 				where a.ukey_server = @nUkeyServer
-				order by a.ymd desc
+				order by a.ymd desc, a.ukey desc
 
 			set @cThisMessage = @cThisMessage + '</table>'
 
@@ -2113,28 +2113,106 @@ begin
 			end
 		end
 
-		-- then, identify failures of steps where the job succeeded
-		insert into #results (ymd, subject, message, severity, isJobFailure)
-		select
-			a.ymd,
-			left('Job step ' + c.stepName + ' of job ' + b.jobName + ' failed at ' + convert(varchar(20), a.ymd, 120) + '.', 300),
-			'Job step ' + c.stepName + ' of job ' + b.jobName + ' failed at ' + convert(varchar(20), a.ymd, 120) + '.<br>' +
-				'Message: ' + isnull(a.stepOutcome, 'N/A') + '<br>' +
-				'Runtime: ' + convert(varchar(20), isnull(a.runningSeconds, 0)) + 's<br>' +
-				'Text   : ' + isnull(c.stepCommand, ''),
-			2, 1
-			from #jobStepHistory a (nolock)
-			join dm_serverJobs b (nolock) on a.job_id = b.job_id
-				and b.ukey_server = @nUkeyServer
-			join dm_serverJobSteps c (nolock) on a.stepNumber = c.stepNumber
-				and b.ukey = c.ukey_job
-				and c.ukey_server = @nUkeyServer
+		-- create table #jobStepHistory (ukey int identity, job_id uniqueIdentifier, jobName varchar(1000), stepName varchar(1000), stepOutcome varchar(8000), runningSeconds int, ymd dateTime, isSuccess bit, ymd_jobRun dateTime, stepCommand varchar(8000), stepNumber int)
+
+		-- identify all the steps that have failed, where the job itself succeeeded
+		-- we need to compile the results of possibly multiple step failure records
+		select distinct job_id, stepNumber, a.ymd, IDENTITY(int) as ukey
+			into #failedSteps
+			from #jobStepHistory a
 			where a.isSuccess = 0
 				and a.job_id not in (
 					select distinct job_id
 						from #jobHistory (nolock)
 						where isSuccess = 0
 					)
+
+		if @@ROWCOUNT > 0
+		begin
+			declare @nJobStep int
+			declare @cStepCommand varchar(8000)
+
+			set @cJobID = ''
+			set @nJobStep = 0
+			set @nThisUkey = 0
+			set @dJobFailure = ''
+
+			while exists (select top 1 ukey from #failedSteps where ukey > @nThisUkey)
+			begin
+				select top 1
+					@nThisUkey = ukey,
+					@cJobID = job_id,
+					@nJobStep = stepNumber,
+					@dJobFailure = ymd
+					from #failedSteps
+					where ukey > @nThisUkey
+					order by ukey
+
+				set @cThisSubject = ''
+				set @cThisMessage = ''
+				set @cStepCommand = ''
+
+				select top 1
+					@cThisSubject = left('Job step ' + b.stepName + ' of job ' + a.jobName + ' failed at ' + convert(varchar(20), @dJobFailure, 120) + '.', 300),
+					@cStepCommand = b.stepCommand
+					from dm_serverJobs a (nolock)
+					join dm_serverJobSteps b (nolock) on a.ukey_server = b.ukey_server
+						and a.ukey = b.ukey_job
+					where a.job_id = @cJobID
+						and a.ukey_server = @nUkeyServer
+						and b.stepNumber = @nJobStep
+
+				set @cThisMessage = @cThisSubject + '<br>'
+
+				select @cThisMessage = @cThisMessage +
+					'Message: ' + isnull(stepOutcome, 'N/A') + '<br>' +
+					'Runtime: ' + convert(varchar(20), isnull(runningSeconds, 0)) + 's<br>' +
+					'===========<br>'
+					from (
+						select top 500 *
+							from #jobStepHistory
+							where job_id = @cJobID
+								and stepNumber = @nJobStep
+								and ymd = @dJobFailure
+							order by ukey
+						) a
+
+				set @cThisMessage = @cThisMessage + '<br><br>' + 'Text: ' + @cStepCommand
+
+				if @bTesting = 1
+					print @cThisSubject
+
+				if @bTesting = 1
+					print @cThisMessage
+
+				insert into #results (ymd, subject, message, severity, isJobFailure) values (@dJobFailure, @cThisSubject, @cThisMessage, 2, 1)
+			end
+		end
+
+		drop table #failedSteps
+
+		---- then, identify failures of steps where the job succeeded
+		--insert into #results (ymd, subject, message, severity, isJobFailure)
+		--select
+		--	a.ymd,
+		--	left('Job step ' + c.stepName + ' of job ' + b.jobName + ' failed at ' + convert(varchar(20), a.ymd, 120) + '.', 300),
+		--	'Job step ' + c.stepName + ' of job ' + b.jobName + ' failed at ' + convert(varchar(20), a.ymd, 120) + '.<br>' +
+		--		'Message: ' + isnull(a.stepOutcome, 'N/A') + '<br>' +
+		--		'Runtime: ' + convert(varchar(20), isnull(a.runningSeconds, 0)) + 's<br>' +
+		--		'Text   : ' + isnull(c.stepCommand, ''),
+		--	2, 1
+		--	from #jobStepHistory a (nolock)
+		--	join dm_serverJobs b (nolock) on a.job_id = b.job_id
+		--		and b.ukey_server = @nUkeyServer
+		--	join dm_serverJobSteps c (nolock) on a.stepNumber = c.stepNumber
+		--		and b.ukey = c.ukey_job
+		--		and c.ukey_server = @nUkeyServer
+		--	where a.isSuccess = 0
+		--		and a.job_id not in (
+		--			select distinct job_id
+		--				from #jobHistory (nolock)
+		--				where isSuccess = 0
+		--			)
 
 
 --		-- now, set in the better failure description for MP failures
