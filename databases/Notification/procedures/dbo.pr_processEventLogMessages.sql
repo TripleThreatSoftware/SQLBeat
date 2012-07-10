@@ -1,6 +1,6 @@
 USE [notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_processEventLogMessages]    Script Date: 04/10/2012 07:31:33 ******/
+/****** Object:  StoredProcedure [dbo].[pr_processEventLogMessages]    Script Date: 07/11/2012 08:53:25 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -122,6 +122,8 @@ begin
 			and message not like '%printer%'
 			and message not like '%backup%'
 			and message not like '%restore%'
+			and message not like '%mssqlserver%'
+			and message not like '%connection to sql server%'
 			and message not like '%dtc%'
 			and message not like '%12Hive%'
 			and message not like '%exceeded time limits%'
@@ -244,6 +246,8 @@ begin
 					or message like '%port blocking rule%'
 					or message like '%virus%'
 					or message like '%degraded%'
+					or message like '%connection to sql server%'
+					or message like '%mssqlserver%service%'
 					or message like '%lost communication%'
 					or message like '%network adapter%'
 					or message like '%cluster node%'
