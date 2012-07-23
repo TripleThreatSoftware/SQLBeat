@@ -1,6 +1,6 @@
 USE [notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_processEventLogMessages]    Script Date: 07/11/2012 08:53:25 ******/
+/****** Object:  StoredProcedure [dbo].[pr_processEventLogMessages]    Script Date: 07/23/2012 11:10:10 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -237,6 +237,7 @@ begin
 			severity = case when
 				message not like '%sspi%'
 				and message not like '%unable to cycle%'
+				and message not like '%system time has changed%'
 				and (
 					message like '%temperature%'
 					or message like '%thermal%'
