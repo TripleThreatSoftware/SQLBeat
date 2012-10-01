@@ -1,6 +1,3 @@
-USE [notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_monitorSQLErrorLogs]    Script Date: 01/14/2012 08:42:22 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -34,6 +31,7 @@ begin
 				or logMessage like '%upgrade%'
 				or logMessage like '%local node that is running the server%'
 				or logMessage like '%execution of%'
+				or processInfo = 'Server'
 				)
 			and logMessage not like '%reinitialized%'
 			and logMessage not like '%logging sql server messages%'
