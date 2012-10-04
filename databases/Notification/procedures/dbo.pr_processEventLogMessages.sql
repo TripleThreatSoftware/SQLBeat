@@ -1,6 +1,3 @@
-USE [notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_processEventLogMessages]    Script Date: 07/23/2012 11:10:10 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -253,6 +250,8 @@ begin
 					or message like '%network adapter%'
 					or message like '%cluster node%'
 					or message like '%sensor%'
+					or message like '%checkout_step%'
+					or message like '%permission was denied%'
 					or message like '%sqsrvres%'
 					or message like '%drive array%'
 					or message like '%power supply%'
