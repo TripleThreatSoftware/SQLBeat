@@ -27,6 +27,8 @@ begin
 				or (logMessage like '%error%' and logMessage not like '%0 errors%' and logMessage not like '%without errors%')
 				or logMessage like '%a significant part%'
 				or logMessage like '%terminating%'
+				or logMessage like '%inconsistency%'
+--				or logMessage like '%dump%'
 				or logMessage like '%shutdown%'
 				or logMessage like '%upgrade%'
 				or logMessage like '%local node that is running the server%'
@@ -106,6 +108,7 @@ begin
 	declare @cProcessInfo varchar(200)
 	declare @nNumFailures int
 	declare @cSubject varchar(8000)
+	declare @nSeverity int
 
 	set @cServerName = ''
 	while exists (select top 1 serverName from #loginFailures where serverName > @cServerName)
@@ -220,7 +223,16 @@ begin
 					order by ukey
 				) a
 
-		insert into notificationLog_stage (ymd, serverName, severity, subject, message) values (@dYMDBegin, @cServerName, 2, @cSubject, @cMessage)
+		if @cMessage like '%inconsistency%'
+--			or @cMessage like '%dump%'
+			or @cMessage like '%shutdown%'
+		begin
+			set @nSeverity = 1
+		end
+		else
+			set @nSeverity = 2
+
+		insert into notificationLog_stage (ymd, serverName, severity, subject, message) values (@dYMDBegin, @cServerName, @nSeverity, @cSubject, @cMessage)
 	end
 
 	insert into notificationLog_stage (ymd, serverName, severity, subject, message)
