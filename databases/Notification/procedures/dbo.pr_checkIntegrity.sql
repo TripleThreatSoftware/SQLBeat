@@ -1,8 +1,3 @@
-/****** Object:  StoredProcedure [dbo].[pr_checkIntegrity]    Script Date: 05/29/2012 08:48:49 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
 ALTER  procedure [dbo].[pr_checkIntegrity] (@nServerGroup int)
 as
 begin
@@ -286,6 +281,7 @@ begin
 			1 as severity,
 			serverName
 			from #results
+			where serverName + '.' + databaseName = @cDatabaseName
 	end
 
 	-- create table integrityLog (ukey int identity, ymd dateTime default getDate(), serverName varchar(100), ukey_server int, databaseName varchar(500), resultLine varchar(500), isError bit default 0)
