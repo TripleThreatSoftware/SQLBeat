@@ -1,6 +1,3 @@
-USE [notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_monitorBigBrother]    Script Date: 03/06/2012 15:49:09 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -10,8 +7,9 @@ GO
 
 -- select top 100 * from messagesSent order by ymd desc
 -- select top 100 * from notificationLog order by ymd desc
+-- select * from notificationLog_stage
 
-ALTER       procedure [dbo].[pr_monitorBigBrother]
+alter procedure [dbo].[pr_monitorBigBrother]
 as
 begin
 	set nocount on
@@ -1464,8 +1462,6 @@ begin
 			join #failingServers b on a.serverName = b.serverName
 	end
 
-	drop table #failingServers
-
 	delete from #detailedChecks where startTime < dateAdd(minute, -30, getDate())
 
 	-- no need to build buffer history for these
@@ -1598,8 +1594,15 @@ begin
 				'Run History: ' + char(13) +
 				isnull(a.runHistory, 'N/A'),
 			8000) as message,
-		case when a.isSuccess = 0 and a.isRunning = 0 and ISNULL(a.jobHistory, '') not like '%invalid object name%'
-			then 1
+		case
+			when a.isSuccess = 0 and a.isRunning = 0 and ISNULL(a.jobHistory, '') not like '%invalid object name%' then
+				-- here, we know it's important
+				case
+					-- if the server has already failed once, this is a bigger deal
+					when a.serverName in (select servername from #failingServers where numFailures >= 1) then 1
+					-- if this is the first failure, we can deprioritize it somewhat
+					else 2
+					end
 			else 3
 			end as severity
 		from #detailedChecks a
@@ -1613,6 +1616,9 @@ begin
 				b.serverName is not null
 				and dateDiff(second, a.startTime, getDate()) > 500
 				)
+
+	drop table #failingServers
+
 
 	-- if we changed the proc, don't send any alerts
 	if exists (select top 1 ukey from notificationLog (nolock) where ymd >= dateAdd(minute, -15, getDate()) and message like '%changed since it was compiled%')

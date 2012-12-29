@@ -1,8 +1,3 @@
-/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 06/29/2012 10:13:10 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
 --select top 100 * from notificationLog_history order by ymd desc
 -- exec pr_examineServer 'sqlcluster01', 600
 -- select architecture, * from dm_servers
@@ -2793,6 +2788,8 @@ begin
 		serverName)
 	select isnull(ymd, getDate()), message,
 		case
+			-- silence all severity 1 blocking alerts during our maintenance window
+			when @cFriendlyName = 'web08' and datename(weekday, GETDATE()) = 'Sunday' and DATEPART(hour, getDate()) between 2 and 6 and ISNULL(severity, 3) = 1 and isBlocking = 1 then 2
 			when @bIsOffHours = 1 and @nOffHoursPriority <> 1 and isnull(severity, 3) = 1 then 2
 			else severity
 			end,
