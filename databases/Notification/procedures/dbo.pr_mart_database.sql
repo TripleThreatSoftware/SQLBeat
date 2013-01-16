@@ -1,15 +1,15 @@
--- select * from mart_database_byHour order by serverName, dbName, ymd, ymd_hour
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 
---truncate table mart_database_byHour
---go
-
-create procedure pr_mart_database
+ALTER procedure [dbo].[pr_mart_database]
 as
 begin
 	declare @dStartDate dateTime
 	-- be sure we're looking at full hour blocks
 	set @dStartDate = dateAdd(hour, -5, dateAdd(hour, datePart(hour, getDate()) + 1, convert(varchar(10), getDate(), 120)))
-	print 'Starting: ' + convert(varchar(20), @dStartDate, 120)
+	--print 'Starting: ' + convert(varchar(20), @dStartDate, 120)
 
 	set nocount on
 
@@ -42,7 +42,8 @@ begin
 		group by serverName, spid, hostname, login, programName, login_time, lastBatchTime, dbName
 		order by serverName, spid, dbName, hostname, programName, login_time, lastBatchTime
 
-	create unique index ix_tmp_activity on #activity (keyString, ukey) with fillfactor = 100
+--	create unique index ix_tmp_activity_keystring_ukey_lastBatchTime on #activity (keyString, ukey, lastbatchtime) with fillfactor = 80
+	create unique index ix_tmp_activity_ukey_keystring_lastBatchTime on #activity (ukey, keyString, lastbatchtime) with fillfactor = 80
 
 	update a
 		set prevBatchTime = b.lastBatchTime
@@ -50,7 +51,7 @@ begin
 		join #activity b on a.keyString = b.keyString
 			and a.ukey = b.ukey + 1
 
-	--create index ix_tmp_activity_prevBatch on #activity (prevBatchTime, keyString) with fillfactor = 100
+--	create index ix_tmp_activity_prevBatch_keyString_lastBatch on #activity (prevBatchTime, keyString, lastBatchTime) with fillfactor = 100
 
 	update a
 		set cpuTime_delta = a.cpuTime_delta + (a.cpuTime_min - c.cpuTime_max),
@@ -76,29 +77,34 @@ begin
 	delete from #activity where prevBatchTime < @dStartDate --or isnull(prevBatchTime, '') = ''
 	-- we need to consider the previous few hours in order to know starting cpu and diskio values for this hour
 	delete from #activity where ymd < dateAdd(hour, 2, @dStartDate)
-	print 'Removing all data before: ' + convert(varchar(20), dateAdd(hour, 2, @dStartDate), 120)
+	--print 'Removing all data before: ' + convert(varchar(20), dateAdd(hour, 2, @dStartDate), 120)
+
+	declare @allServerHours table (serverName varchar(200), ymd dateTime, ymd_hour int, dbName varchar(500))
+
+	insert into @allServerHours
+	select distinct a.serverName, a.ymd, a.ymd_hour, b.dbName
+		from (
+			select distinct
+				serverName,
+				convert(varchar(10), ymd, 120) as ymd,
+				datePart(hour, ymd) as ymd_hour
+				from #activity
+			) a, (
+			select distinct serverName, dbName from #activity
+			) b
+			where a.serverName = b.serverName
 
 	delete mart_database_byHour with (rowlock)
 		from mart_database_byHour a
-		join (
-			select distinct serverName, convert(varchar(10), ymd, 120) as ymd, datePart(hour, ymd) as ymd_hour
-				from #activity
-			) b on a.serverName = b.serverName
+		join @allServerHours b on a.serverName = b.serverName
 			and a.ymd = b.ymd
 			and a.ymd_hour = b.ymd_hour
 
+	create index ix_tmp_activity_serverName_dbName_ymd_userString_cpuTime_diskIO on #activity (serverName, dbName, ymd, userString) include (cpuTime_delta, diskIO_delta) with fillfactor = 80
+
 	insert into mart_database_byHour (serverName, dbName, ymd, ymd_hour, numUsers, cpuTime, diskIO)
 	select a.serverName, a.dbName, a.ymd, a.ymd_hour, isnull(b.numUsers, 0), isnull(b.cpuTime, 0), isnull(b.diskIO, 0)
-		from (
-			select distinct a.serverName, a.ymd, a.ymd_hour, b.dbName
-				from (
-					select distinct serverName, convert(varchar(10), ymd, 120) as ymd, datePart(hour, ymd) as ymd_hour
-						from #activity
-					) a, (
-					select distinct serverName, dbName from #activity
-					) b
-					where a.serverName = b.serverName
-			) a
+		from @allServerHours a
 		left outer join (
 			select
 				serverName,
@@ -120,7 +126,3 @@ begin
 
 	drop table #activity
 end
-
-
--- select * from mart_database_byHour
-GO

@@ -418,7 +418,7 @@ begin
 			and isnumeric(a.newValue) = 1
 			and isnumeric(a.oldValue) = 1
 
-	print 'Added ' + convert(varchar(20), @@rowcount) + ' drive space records'
+	--print 'Added ' + convert(varchar(20), @@rowcount) + ' drive space records'
 
 --	-- drive space below relative threshold
 --	insert into #messageStage (serverName, subject, message, isDriveSpace)
@@ -615,8 +615,8 @@ begin
 				and subject = @cThisSubject
 			order by ukey
 
-		print @cThisSubject
-		print @cThisMessage
+		--print @cThisSubject
+		--print @cThisMessage
 
 		insert into notification..notificationLog_stage (serverName, subject, message, severity, isConfiguration, isService, isDriveSpace) values (
 			@cThisServer, @cThisSubject, @cThisMessage, @nSeverity, 1, @bIsService, @bIsDriveSpace)

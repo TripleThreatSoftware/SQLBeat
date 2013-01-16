@@ -12,6 +12,7 @@ begin
 --return
 
 	set nocount on
+	--set ansi_warnings off
 
 	--***************************************
 	-- I'm important!
@@ -166,8 +167,8 @@ begin
 	-- Temporary Tables
 	--*********************************************************************************************************************
 
-	create table #jobHistory (ukey int identity, job_id uniqueIdentifier, jobName varchar(1000), jobOutcome varchar(8000), runningSeconds int, ymd dateTime, isSuccess bit, isEnabled bit)
-	create table #jobStepHistory (ukey int identity, job_id uniqueIdentifier, jobName varchar(1000), stepName varchar(1000), stepOutcome varchar(8000), runningSeconds int, ymd dateTime, isSuccess bit, ymd_jobRun dateTime, stepCommand varchar(8000), stepNumber int)
+	create table #jobHistory (ukey int identity, job_id uniqueIdentifier, jobName varchar(800), jobOutcome varchar(8000), runningSeconds int, ymd dateTime, isSuccess bit, isEnabled bit)
+	create table #jobStepHistory (ukey int identity, job_id uniqueIdentifier, jobName varchar(800), stepName varchar(1000), stepOutcome varchar(8000), runningSeconds int, ymd dateTime, isSuccess bit, ymd_jobRun dateTime, stepCommand varchar(8000), stepNumber int)
 
 	create table #orphanedUsers (dbName varchar(200), userName varchar(200))
 

@@ -1,6 +1,3 @@
-USE [notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_readWindowsEvents]    Script Date: 01/27/2012 23:31:34 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -18,7 +15,7 @@ GO
 -- pr_readWindowsEvents 1
 -- select lastEventLogCheck, serverName from dm_servers where isEnabled = 1 and eventLogCheck = 1 order by lastEventLogCheck
 -- select * from notificationLog_stage
- --update dm_servers set lastEventLogCheck = '2012-01-28 15:00:00.000' where servername = 'web03'
+ --update dm_servers set lastEventLogCheck = '2012-05-01 15:00:00.000' where servername = 'web05'
  --delete from eventLog where timeWritten >= '2010-05-26'
 -- select * from eventLog_stage order by timeWritten desc
 -- select top 500 * from eventLog order by timeWritten desc

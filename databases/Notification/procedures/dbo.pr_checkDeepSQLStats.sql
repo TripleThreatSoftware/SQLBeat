@@ -1,6 +1,3 @@
-USE [notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_checkDeepSQLStats]    Script Date: 01/11/2012 10:31:54 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -75,7 +72,7 @@ begin
 		exec master..xp_cmdShell @cSQLString
 
 
-		print 'Found ' + convert(varchar(20), @@rowcount) + ' measures'
+		--print 'Found ' + convert(varchar(20), @@rowcount) + ' measures'
 
 		update #performance set nastyLine = rtrim(ltrim(replace(replace(replace(nastyLine, char(9), ''), char(13), ''), '  ', ' ')))
 
