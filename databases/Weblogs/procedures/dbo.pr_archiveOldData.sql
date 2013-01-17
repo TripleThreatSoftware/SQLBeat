@@ -1,6 +1,3 @@
-USE [Weblogs]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_archiveOldData]    Script Date: 01/10/2012 11:59:35 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -9,23 +6,23 @@ GO
 --create table mart_page_byday_archive (ukey int, ukey_site int, ukey_uristem int, requestStatus int, ymd dateTime, numRequests int, numRequests_human int,
 --	uniques int, uniques_human int, pageLoadTime int, pagePostTime int, getTime int, postTime int)
 
-ALTER procedure [dbo].[pr_archiveOldData]
+create procedure [dbo].[pr_archiveOldData]
 as
 begin
 
 	insert into mart_page_byday_archive (ukey, ukey_site, ukey_uristem, requestStatus, ymd, numRequests, numRequests_human, uniques, uniques_human, pageLoadTime, pagePostTime, getTime, postTime)
 	select ukey, ukey_site, ukey_uristem, requestStatus, ymd, numRequests, numRequests_human, uniques, uniques_human, pageLoadTime, pagePostTime, getTime, postTime
 		from mart_page_byday (nolock)
-		where ymd < dateAdd(month, -2, getDate())
+		where ymd < dateAdd(month, -3, getDate())
 
-	delete from mart_page_byday with (tablock) where ymd < dateAdd(month, -2, getDate())
+	delete from mart_page_byday with (tablock) where ymd < dateAdd(month, -3, getDate())
 
 	insert into mart_page_byhour_archive (ukey, ukey_site, ukey_uriStem, requestStatus, ymd, hour, numRequests, numRequests_human, uniques, uniques_human, pageLoadTime, pagePostTime, getTime, postTime)
 	select ukey, ukey_site, ukey_uriStem, requestStatus, ymd, hour, numRequests, numRequests_human, uniques, uniques_human, pageLoadTime, pagePostTime, getTime, postTime
 		from mart_page_byhour (nolock)
-		where ymd < dateAdd(month, -1, getDate())
+		where ymd < dateAdd(month, -2, getDate())
 
-	delete from mart_page_byhour with (tablock) where ymd < dateAdd(month, -1, getDate())
+	delete from mart_page_byhour with (tablock) where ymd < dateAdd(month, -2, getDate())
 
 	select distinct ukey_uriStem
 		into #usedURIs
@@ -46,3 +43,6 @@ begin
 
 	drop table #usedURIs
 end
+
+--select * from scheduler.dbo.jobs order by jobname
+--select * from scheduler.dbo.jobHistory where ukey_job = 276 order by ukey
