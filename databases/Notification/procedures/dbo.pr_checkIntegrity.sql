@@ -30,6 +30,7 @@ begin
 	declare @dLastScan dateTime
 	declare @nUkeyServer int
 	declare @cMessage varchar(8000)
+	declare @dStartDate dateTime
 
 	set @cSharedFolder = (select top 1 settingValue from notification.dbo.dm_settings where settingName = 'Shared Folder')
 	set @cThisServerName = (select settingValue from dm_settings where settingName = 'Current machine name')
@@ -74,6 +75,8 @@ begin
 			order by serverName
 
 --		print @cServerName
+
+		set @dStartDate = GETDATE()
 
 		exec @nReturnStatus = pr_pingServer @cServerName
 
@@ -202,7 +205,7 @@ begin
 		delete from dm_settings where settingValue = 'Semaphore ' + @cServerName
 
 		update dm_servers with (rowlock)
-			set lastIntegrityCheck = getDate()
+			set lastIntegrityCheck = @dStartDate
 			where serverName = @cServerName
 
 		print 'Done with ' + @cServerName
