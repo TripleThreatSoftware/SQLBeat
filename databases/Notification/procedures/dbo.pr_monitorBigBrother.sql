@@ -9,7 +9,7 @@ GO
 -- select top 100 * from notificationLog order by ymd desc
 -- select * from notificationLog_stage
 
-alter procedure [dbo].[pr_monitorBigBrother]
+ALTER procedure [dbo].[pr_monitorBigBrother]
 as
 begin
 	set nocount on
@@ -1430,7 +1430,7 @@ begin
 		where startTime >= dateAdd(minute, -60, getDate())
 		group by a.serverName
 		having sum(case when isSuccess = 1 then 1 else 0 end) = 0
-			and sum(case when isSuccess = 0 then 1 else 0 end) >= 10
+			and sum(case when isSuccess = 0 then 1 else 0 end) >= 5
 			and (
 				max(case when isSuccess = 0 then startTime else null end) > max(case when isSuccess = 1 then startTime else null end)
 				or max(case when isSuccess = 1 then startTime else null end) is null
@@ -1451,8 +1451,8 @@ begin
 		select serverName,
 			'SQL Detailed Checks disabled after ' + convert(varchar(20), numFailures) + ' consecutive failures' as subject,
 			'SQL Detailed Checks disabled after ' + convert(varchar(20), numFailures) + ' consecutive failures.<br>' +
-				'Last success: ' + convert(varchar(20), latestSuccess, 120) + '<br>' +
-				'Last failure: ' + convert(varchar(20), latestFailure, 120)	as message,
+				'Last success: ' + isnull(convert(varchar(20), latestSuccess, 120), 'N/A') + '<br>' +
+				'Last failure: ' + isnull(convert(varchar(20), latestFailure, 120), 'N/A')	as message,
 			1
 			from #failingServers
 

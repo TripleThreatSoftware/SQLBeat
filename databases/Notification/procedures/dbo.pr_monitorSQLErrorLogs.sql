@@ -226,6 +226,11 @@ begin
 		if @cMessage like '%inconsistency%'
 --			or @cMessage like '%dump%'
 			or @cMessage like '%shutdown%'
+			or @cMessage like '%transaction log%is full%'
+			or @cMessage like '%sql server is terminating%'
+			or @cMessage like '%external dump%'
+			or @cMessage like '%terminat%abnormal%'
+			or @cMessage like '%insufficient%memory%'
 		begin
 			set @nSeverity = 1
 		end
