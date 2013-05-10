@@ -10,7 +10,7 @@ ALTER procedure [dbo].[pr_monitorSQLErrorLogs]
 as
 begin
 	declare @dMinDate dateTime
-	set @dMinDate = dateAdd(hour, -2, getDate())
+	set @dMinDate = dateAdd(hour, -6, getDate())
 --	set @dMinDate = dateAdd(minute, 15 * datePart(minute, getDate()) / 15, convert(varchar(14), getDate(), 120) + '00.000')
 
 	create table #errorsFound (ymd dateTime, serverName varchar(200), processInfo varchar(500), logMessage varchar(8000),
@@ -122,6 +122,14 @@ begin
 			group by serverName
 			order by serverName
 
+		set @cSubject = 'Login failure for ' + convert(varchar(20), @nNumFailures) + ' users at ' + convert(varchar(20), @dYMDBegin, 120) + '.'
+		set @cMessage = ''
+
+		select @cMessage = @cMessage + '<br>' + [message]
+			from #loginFailures
+			where serverName = @cServerName
+			order by ymd
+
 		-- if we've got lots of failures for a long time, increase the priority
 		if (
 			select top 1 b.isProduction
@@ -142,18 +150,14 @@ begin
 					)
 				)
 		begin
-			set @cSubject = 'Login failure for ' + convert(varchar(20), @nNumFailures) + ' users at ' + convert(varchar(20), @dYMDBegin, 120) + '.'
-			set @cMessage = ''
-
-			select @cMessage = @cMessage + '<br>' + [message]
-				from #loginFailures
-				where serverName = @cServerName
-				order by ymd
-
 			insert into notificationLog_stage (serverName, subject, message, severity) values (@cServerName, @cSubject, @cMessage, 1)
-
-			delete from #loginFailures where serverName = @cServerName
 		end
+		else
+		begin
+			insert into notificationLog_stage (serverName, subject, message, severity) values (@cServerName, @cSubject, @cMessage, 2)
+		end
+
+		delete from #loginFailures where serverName = @cServerName
 	end
 
 
@@ -185,12 +189,12 @@ begin
 	end
 
 
-	delete #loginFailures
-		from #loginFailures a
-		join dm_servers b on a.serverName = b.serverName
-		left outer join dm_serverGroups c on b.ukey_group = c.ukey
-			and c.isProduction = 1
-		where c.ukey is null
+	--delete #loginFailures
+	--	from #loginFailures a
+	--	join dm_servers b on a.serverName = b.serverName
+	--	left outer join dm_serverGroups c on b.ukey_group = c.ukey
+	--		and c.isProduction = 1
+	--	where c.ukey is null
 
 	select distinct serverName, processInfo, ymd, identity(int) as ukey
 		into #otherErrors
@@ -241,8 +245,8 @@ begin
 	end
 
 	insert into notificationLog_stage (ymd, serverName, severity, subject, message)
-	select distinct ymd, serverName, 2, subject, message from #loginFailures
-	union
+	--select distinct ymd, serverName, severity, subject, message from #loginFailures
+	--union
 	select distinct ymd, serverName, 1, subject, message from #deadlocks
 
 
