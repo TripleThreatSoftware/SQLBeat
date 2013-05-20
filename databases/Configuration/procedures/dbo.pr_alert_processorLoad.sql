@@ -107,8 +107,8 @@ begin
 		set @nNumAlerts = (select count(*) from notification..notificationLog (nolock) where serverName = @cThisServer and subject like '%cpu load%' and ymd >= dateAdd(hour, -1, getDate()))
 
 		set @nSeverity = case
-			when @nNumAlerts = 0 then 2
-			when @nNumAlerts = 1 then 1
+			when @nNumAlerts = 0 or DATEPART(hour, getDate()) between 0 and 7 then 2
+			when @nNumAlerts >= 1 then 1
 			else 1 end
 
 

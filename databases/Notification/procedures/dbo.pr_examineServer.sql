@@ -1886,7 +1886,8 @@ begin
 			-- if runtime > 2x, then it's a critical alert
 			-- otherwise, sit on it
 			case
-				when minutesRunning > expectedRunningSeconds * 5 then 2
+				when secondsRunning > expectedRunningSeconds * 1.25 and minutesRunning > 60 then 2
+				when secondsRunning > expectedRunningSeconds * 1.5 then 2
 				else 3
 				end as severity,
 			'Job [' + isnull(rtrim(ltrim(jobName)), '') + '] has been running for more than ' + convert(varchar(20), convert(int, (minutesRunning/10)) * 10) + ' minutes.' as subject,
