@@ -1,3 +1,8 @@
+/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 9/17/2013 10:25:38 AM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 --select top 100 * from notificationLog_history order by ymd desc
 -- exec pr_examineServer 'sqlcluster01', 600
 -- select architecture, * from dm_servers
@@ -2753,8 +2758,8 @@ begin
 			-- weight based on how long and whether this is the first alert in the last 10 minutes
 			case
 				when @bIsMaintenancePeriod = 1 or @nNumOldAlerts > 0 then 3
-				when msWaiting > 25000 and @nNumAlerts > 2 and @bIsOffHours = 0 then 1
-				else 2 end as severity,
+				when msWaiting > 25000 and @nNumAlerts > 2 and @bIsOffHours = 0 then 2
+				else 3 end as severity,
 			convert(varchar(20), isnull(a.numRequests, 0)) + ' requests ' +
 				'waiting for ' + convert(varchar(20), a.msWaiting) + 'ms on "' + isnull(left(b.filePath, 3), 'N/A') + '"' as subject,
 			'Time: ' + convert(varchar(20), getDate(), 120) + '<br>' +
