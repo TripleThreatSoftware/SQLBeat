@@ -1,3 +1,6 @@
+USE [Scheduler]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_runScheduledJob]    Script Date: 9/26/2013 11:12:01 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -12,6 +15,7 @@ begin
 	declare @nRuntime bigint
 	declare @bIsSuccess bit
 	declare @bIsLicenseValid bit
+	declare @nMySPID int
 
 	;RECEIVE TOP(1) @cConversationHandle = conversation_handle FROM ScheduledJobQueue
 
@@ -29,7 +33,9 @@ begin
 	begin
 		set @dStartTime = getDate()
 		set @bIsSuccess = 0
-		update jobs with (rowlock) set lastRun = getDate(), lastRunStatus = '', lastRunSuccess = null, currentStatus = 'Running' where ukey = @nUkeyJob
+		set @nMySPID = @@SPID
+
+		update jobs with (rowlock) set lastRun = getDate(), lastRunStatus = '', lastRunSuccess = null, currentStatus = 'Running (' + convert(varchar(5), @nMySPID) + ')' where ukey = @nUkeyJob
 
 		insert into jobHistory (ukey_job, ukey_jobStep, isError, stepOutput) values (
 			@nUkeyJob, 0, 0, 'Starting')
