@@ -1,7 +1,11 @@
+USE [Notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_monitorJobIntervals]    Script Date: 9/27/2013 3:32:55 PM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 
 ALTER procedure [dbo].[pr_monitorJobIntervals]
 as
@@ -20,7 +24,15 @@ begin
 			from scheduler.dbo.jobs (nolock)
 			where isEnabled = 1
 				and dateDiff(minute, nextRun, getDate()) > 60
-				and ukey not in (select distinct ukey_job from scheduler.dbo.jobHistory (nolock) where ymd >= dateAdd(hour, -1, getDate()))
+				and ukey not in (select distinct ukey_job from scheduler.dbo.jobHistory (nolock) where ymd >= dateAdd(hour, -12, getDate()))
+
+		insert into @jobsToStart
+		select ukey
+			from scheduler.dbo.jobs (nolock)
+			where isEnabled = 1
+				and isnull(currentStatus, '') = 'Running'
+				and ukey not in (select distinct ukey_job from scheduler.dbo.jobHistory (nolock) where ymd >= dateAdd(hour, -12, getDate()))
+
 
 		set @nUkeyJob = 0
 
@@ -32,6 +44,7 @@ begin
 				where ukey_job > @nUkeyJob
 				order by ukey_job
 
+			exec scheduler.dbo.pr_job_stop @nUkeyJob
 			exec scheduler.dbo.pr_job_start @nUkeyJob
 		end
 
