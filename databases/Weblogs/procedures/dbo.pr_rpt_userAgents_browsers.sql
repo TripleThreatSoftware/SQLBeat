@@ -1,6 +1,6 @@
 USE [Weblogs]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_rpt_userAgents_browsers]    Script Date: 04/20/2012 16:13:21 ******/
+/****** Object:  StoredProcedure [dbo].[pr_rpt_userAgents_browsers]    Script Date: 9/30/2013 3:52:02 PM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -10,7 +10,7 @@ GO
 -- exec weblogs..pr_rpt_userAgents_browsers 'AppDb'
 -- select * from dm_sites
 -- select * from dm_userAgent where browserName like '%safari%' and userAgent not like '%htc%safari%' and userAgent not like '%blackberry%safari%' and userAgent not like '%droid%safari%' and userAgent not like '%iphone%safari%' and userAgent not like '%ipad%safari%' and userAgent not like '%chrome%safari%' order by dateAdded desc
--- select * from dm_userAgent where browserName like '%FireFox%' order by dateAdded desc
+-- select * from dm_userAgent where useragent like '%trident%rv%11%' order by dateAdded desc
 
 ALTER procedure [dbo].[pr_rpt_userAgents_browsers] (@cSiteName varchar(100))
 as
@@ -18,6 +18,8 @@ begin
 
 	select
 		case
+			when c.userAgent like '%trident%rv%11%' then 'MSIE 11.x'
+			when c.browserName like '%msie 10%' then 'MSIE 10.x'
 			when c.browserName like '%msie 9%' then 'MSIE 9.x'
 			when c.browserName like '%msie 8%' then 'MSIE 8.x'
 			when c.browserName like '%msie 7%' then 'MSIE 7.x'
@@ -69,6 +71,8 @@ begin
 		where a.ymd >= dateAdd(week, -2, getDate())
 
 		group by case
+			when c.userAgent like '%trident%rv%11%' then 'MSIE 11.x'
+			when c.browserName like '%msie 10%' then 'MSIE 10.x'
 			when c.browserName like '%msie 9%' then 'MSIE 9.x'
 			when c.browserName like '%msie 8%' then 'MSIE 8.x'
 			when c.browserName like '%msie 7%' then 'MSIE 7.x'
