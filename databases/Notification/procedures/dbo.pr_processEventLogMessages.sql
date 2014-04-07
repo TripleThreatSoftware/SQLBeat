@@ -1,3 +1,6 @@
+USE [Notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_processEventLogMessages]    Script Date: 4/7/2014 9:55:32 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -211,6 +214,8 @@ begin
 
 			and message not like '%Unable to read Server Queue performance data from the Server service%'
 
+			and message not like '%max pool size was reached%'
+
 			and isnull(message, '') <> ''
 
 	update #eventLog
@@ -234,6 +239,7 @@ begin
 			severity = case when
 				message not like '%sspi%'
 				and message not like '%unable to cycle%'
+				and message not like '%httpexception%'
 				and message not like '%system time has changed%'
 				and (
 					message like '%temperature%'
