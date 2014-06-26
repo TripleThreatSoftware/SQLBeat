@@ -1,11 +1,11 @@
 USE [Weblogs]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_mart_site]    Script Date: 05/03/2013 13:07:48 ******/
+/****** Object:  StoredProcedure [dbo].[pr_mart_site]    Script Date: 6/26/2014 3:31:20 PM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
--- exec pr_mart_site '2013-05-02', '2013-05-02'
+-- exec pr_mart_site '2008-10-21', '2008-10-21'
 ALTER procedure [dbo].[pr_mart_site] (@dStartDate dateTime, @dEndDate dateTime)
 as
 begin
@@ -60,6 +60,38 @@ begin
 		where a.ymd >= @dStartDate
 			and a.ymd < dateAdd(day, 1, @dEndDate)
 
+	select
+		a.ukey_site,
+		a.ukey_uristem,
+		a.ukey_userAgent,
+		a.requestStatus,
+		convert(varchar(10), ymd, 120) as ymd,
+		count(*) as numRequests,
+
+		count(distinct
+			case
+				when isnull(appSessionID, '') <> '' then appSessionID
+				when isnull(sessionID, '') <> '' then sessionID
+				else convert(varchar(20), ukey_clientIP)
+				end +
+				convert(varchar(20), ukey_userAgent)
+			) as uniques,
+
+		avg(timeTaken) as pageLoadTime
+
+		into #results
+
+		from v_fact_weblogs_all a
+
+		where a.ymd >= @dStartDate
+			and a.ymd < dateAdd(day, 1, @dEndDate)
+
+		group by convert(varchar(10), ymd, 120), datePart(hour, ymd),
+			a.ukey_site,
+			a.ukey_uristem,
+			a.ukey_userAgent,
+			a.requestStatus
+
 	-- grab these details from the other mart tables
 	update mart_site_byday
 		set pageviews = b.pageviews,
@@ -80,10 +112,24 @@ begin
 				sum(convert(bigint, case when requestStatus <> '404' then numRequests - numRequests_human else 0 end)) as pageviews_nonhuman,
 				sum(convert(bigint, numRequests - numRequests_human)) as pageRequests_nonhuman,
 				avg(convert(bigint, pageLoadTime)) as pageLoadTime
-				from mart_page_byday a
-				where a.ymd >= @dStartDate
-					and a.ymd < dateAdd(day, 1, @dEndDate)
-				group by ukey_site
+				from (
+				select
+					a.ukey_site,
+					a.requestStatus,
+					a.ymd,
+					sum(numRequests) as numRequests,
+					sum(case when c.isHuman = 1 then numRequests else 0 end) as numRequests_human,
+					sum(uniques) as uniques,
+					sum(case when c.isHuman = 1 then uniques else 0 end) as uniques_human,
+					sum(pageLoadTime * numRequests) / sum(numRequests) as pageLoadTime
+
+					from #results a
+					join dm_uriStem b on a.ukey_uriStem = b.ukey
+						and b.isPage = 1
+					join dm_userAgent c on a.ukey_userAgent = c.ukey
+
+					group by a.ymd, a.ukey_site, a.requestStatus
+					) a
 			) b on a.ukey_site = b.ukey_site
 		where a.ymd >= @dStartDate
 			and a.ymd < dateAdd(day, 1, @dEndDate)

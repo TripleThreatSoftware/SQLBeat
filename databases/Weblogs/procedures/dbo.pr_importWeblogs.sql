@@ -1,3 +1,6 @@
+USE [Weblogs]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_importWeblogs]    Script Date: 6/26/2014 3:35:39 PM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -6,7 +9,7 @@ GO
 -- select top 100 * from dm_sourceFiles order by ukey desc
 -- select top 100 * from fact_weblogs_stage_hist
 --
---exec pr_importWeblogs 10
+-- exec pr_importWeblogs 40
 -- select * from fact_weblogs_stage_hist order by ukey
 
 ALTER  procedure [dbo].[pr_importWeblogs] (@nUkeySource int)
@@ -147,14 +150,14 @@ begin
 	delete from #filesToImport where filePath like '%ex071124.log' or filePath like '%ex071123.log'
 	delete from #filesToImport where filePath like '%.log%' and right(filePath, 4) <> '.log'
 
-	-- we really don't want to pull in more than 50 files at a time
+	-- we really don't want to pull in more than 10 files at a time
 	delete from #filesToImport
 		where fileDate < (
 			select top 1 fileDate
 				from (
-					select top 50 fileDate
+					select top 10 fileDate
 						from #filesToImport
-						where fileDate > dateAdd(month, -6, getDate())
+--						where fileDate > dateAdd(month, -@nMonthsBackToLook, getDate())
 						order by fileDate desc
 					) a
 				order by fileDate
@@ -311,6 +314,11 @@ begin
 
 				if @bIsIIS = 1
 				begin
+					-- date time s-sitename s-computername s-ip cs-method cs-uri-stem cs-uri-query s-port cs-username c-ip cs-version
+					-- cs(User-Agent) cs(Cookie) cs(Referer) cs-host sc-status sc-substatus sc-win32-status sc-bytes cs-bytes time-taken
+
+					-- date time s-computername s-ip cs-method cs-uri-stem cs-uri-query s-port cs-username c-ip cs(User-Agent) cs(Cookie)
+					-- cs(Referer) cs-host sc-status sc-substatus sc-win32-status sc-bytes cs-bytes time-taken
 					set @cTableField = case
 						when @cFieldName = 'date' then 'date'
 						when @cFieldName = 'time' then 'time'
@@ -333,6 +341,8 @@ begin
 						when @cFieldName = 's-sitename' then 'siteName'
 						when @cFieldName = 'cs(Cookie)' then 'cookie'
 						when @cFieldName = 'cs-host' then 'hostName'
+
+						when @cFieldName = 'cs-version' then 'version'
 						else ''
 						end
 				end
@@ -558,7 +568,12 @@ begin
 		else
 		begin
 			delete from fact_weblogs with (tablock) where ukey_sourceFile = @nUkeySourceFile and ymd >= @dMinYMD and ymd <= @dMaxYMD
-			delete from v_fact_weblogs_all where ukey_sourceFile = @nUkeySourceFile and ymd >= @dMinYMD and ymd <= @dMaxYMD
+			begin try
+				delete from v_fact_weblogs_all where ukey_sourceFile = @nUkeySourceFile and ymd >= @dMinYMD and ymd <= @dMaxYMD
+			end try
+			begin catch
+				print error_message()
+			end catch
 
 			update dm_sourceFiles with (rowlock)
 				set fileDate = @dFileDate,
