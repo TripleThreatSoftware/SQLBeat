@@ -1,6 +1,6 @@
 USE [Weblogs]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_importWeblogs]    Script Date: 6/26/2014 3:35:39 PM ******/
+/****** Object:  StoredProcedure [dbo].[pr_importWeblogs]    Script Date: 7/11/2014 8:51:43 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -600,7 +600,7 @@ begin
 
 		set @nUkeySite = (select ukey_site from dm_sourceFiles where ukey = @nUkeySourceFile)
 
-		insert into fact_weblogs_stage_hist (stepName) values ('Adding dimensions')
+		insert into fact_weblogs_stage_hist (stepName) values ('Adding dm_sourceIP')
 
 		begin try
 			insert into dm_sourceIP (sourceIP)
@@ -615,6 +615,8 @@ begin
 			insert into fact_weblogs_stage_hist (stepName) values (left(@cThisMessage, 5000))
 		end catch
 
+		insert into fact_weblogs_stage_hist (stepName) values ('Adding dm_method')
+
 		begin try
 			insert into dm_method (method)
 			select a.method
@@ -627,6 +629,8 @@ begin
 
 			insert into fact_weblogs_stage_hist (stepName) values (left(@cThisMessage, 5000))
 		end catch
+
+		insert into fact_weblogs_stage_hist (stepName) values ('Adding dm_uriStem')
 
 		begin try
 			insert into dm_uriStem (uriStem, isPage)
@@ -646,7 +650,7 @@ begin
 					then 1
 					else 0
 					end
-				from ( select distinct uriStem from fact_weblogs_stage ) a
+				from ( select distinct left(uriStem, 800) as uriStem from fact_weblogs_stage ) a
 				left outer join dm_uriStem b on a.uriStem = b.uriStem
 				where b.ukey is null
 		end try
@@ -655,6 +659,8 @@ begin
 
 			insert into fact_weblogs_stage_hist (stepName) values (left(@cThisMessage, 5000))
 		end catch
+
+		insert into fact_weblogs_stage_hist (stepName) values ('Adding dm_clientIP')
 
 		begin try
 			insert into dm_clientIP (clientIP)
@@ -668,6 +674,8 @@ begin
 
 			insert into fact_weblogs_stage_hist (stepName) values (left(@cThisMessage, 5000))
 		end catch
+
+		insert into fact_weblogs_stage_hist (stepName) values ('Adding dm_userAgent')
 
 		begin try
 			insert into dm_userAgent (userAgent, isHuman, browsername, serviceName, osName)
