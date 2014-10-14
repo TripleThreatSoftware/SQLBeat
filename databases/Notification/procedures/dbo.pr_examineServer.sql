@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 9/17/2013 10:25:38 AM ******/
+/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 10/14/2014 10:15:23 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -1154,14 +1154,14 @@ begin
 			select left('A process which belongs to ' + isnull(login, 'N/A') + ' ' +
 					'(' + rtrim(isnull(hostname, '')) + ') ' +
 					'is running wicked long in the ' + isnull(dbName, 'N/A') + ' database.' + char(13) + char(13) +
-					'Current CPU: ' + convert(varchar(30), sum(isnull(cpuTime, 0))) + char(13) +
-					'Current DISK: ' + convert(varchar(30), sum(isnull(diskio, 0))) + char(13) +
+					'Current CPU: ' + convert(varchar(30), sum(convert(bigint, isnull(cpuTime, 0)))) + char(13) +
+					'Current DISK: ' + convert(varchar(30), sum(convert(bigint, isnull(diskio, 0)))) + char(13) +
 
 					'CPU Delta: ' +
 						convert(varchar(30),
 							convert(decimal(30,2),
 								(
-									convert(decimal(30,2), sum(isnull(cpuTime, 0)) - sum(isnull(lastCPU, 0))) /
+									convert(decimal(30,2), sum(convert(bigint, isnull(cpuTime, 0))) - sum(convert(bigint, isnull(lastCPU, 0)))) /
 									convert(decimal(30,2),
 										dateDiff(second,
 											min(isnull(case when datePart(year, lastData) = 1900 or isnull(lastData, '') = '' then isnull(lastBatchTime, ymd) else lastData end, '')),
@@ -1176,7 +1176,7 @@ begin
 						convert(varchar(30),
 							convert(decimal(30,2),
 								(
-									convert(decimal(30,2), sum(isnull(diskio, 0)) - sum(isnull(lastDisk, 0))) /
+									convert(decimal(30,2), sum(convert(bigint, isnull(diskio, 0))) - sum(convert(bigint, isnull(lastDisk, 0)))) /
 									convert(decimal(30,2),
 										dateDiff(second,
 											min(isnull(case when datePart(year, lastData) = 1900 or isnull(lastData, '') = '' then isnull(lastBatchTime, ymd) else lastData end, '')),
@@ -1236,8 +1236,8 @@ begin
 					SPID,
 					locks,
 					ymd
-				having sum(isnull(cpuTime, 0)) - sum(isnull(lastCPU, 0)) > 0
-					or sum(isnull(diskio, 0)) - sum(isnull(lastDisk, 0)) > 0
+				having sum(convert(bigint, isnull(cpuTime, 0))) - sum(convert(bigint, isnull(lastCPU, 0))) > 0
+					or sum(convert(bigint, isnull(diskio, 0))) - sum(convert(bigint, isnull(lastDisk, 0))) > 0
 		end try
 		begin catch
 			insert into #results (message, severity, subject, isLongRunningProcess) values ('Very long running processes.', 1, 'Very long running process', 1)
