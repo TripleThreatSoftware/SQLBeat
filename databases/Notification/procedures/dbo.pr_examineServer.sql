@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 10/14/2014 10:15:23 AM ******/
+/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 10/31/2014 2:22:12 PM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -447,7 +447,7 @@ begin
 	-- SQL Error Log
 	--*********************************************************************************************************************
 
-	if replace(@cVersion, space(1), space(0)) like '%sqlserver2005%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2008%'
+	if replace(@cVersion, space(1), space(0)) like '%sqlserver2005%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2008%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2012%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2014%'
 	begin
 		create table #sqlErrors (ymd dateTime, processInfo varchar(100), logMessage varchar(8000), nastyLine varchar(max), ukey int identity)
 
@@ -551,7 +551,7 @@ begin
 
 		create clustered index ix_tmp_processes on #processes (spid) with fillfactor = 80
 
-		if replace(@cVersion, space(1), space(0)) like '%sqlserver2005%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2008%'
+		if replace(@cVersion, space(1), space(0)) like '%sqlserver2005%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2008%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2012%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2014%'
 		begin
 			create table #processActivity (spid int, cpuTime bigint, pagesInMemory bigint, reads bigint, writes bigint, logicalReads bigint)
 			create table #processLocks (spid int, numLocks bigint)
@@ -2563,7 +2563,7 @@ begin
 				select * from openquery([' + @cServerName + '], ''select *, db_name(database_id) as databaseName from sys.dm_io_virtual_file_stats(null, null)'')
 				'
 
-		if @cVersion like '%sql server 2008%'
+		if @cVersion like '%sql server 2008%' or @cVersion like '%sql server 2012%' or @cVersion like '%sql server 2014%'
 		begin
 			set @cSQLString = @cSQLString + '
 				insert into #serverStartDate
@@ -2633,7 +2633,7 @@ begin
 	-- CPU and Disk queues
 	--*********************************************************************************************************************
 
-	if replace(@cVersion, space(1), space(0)) like '%sqlserver2005%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2008%'
+	if replace(@cVersion, space(1), space(0)) like '%sqlserver2005%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2008%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2012%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2014%'
 	begin
 		create table #cpuTasks (cpuNumber varchar(20), currentTasks int, waitingTasks int)
 
