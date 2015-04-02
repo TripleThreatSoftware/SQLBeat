@@ -1,14 +1,9 @@
-/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 10/31/2014 2:22:12 PM ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
 --select top 100 * from notificationLog_history order by ymd desc
 -- exec pr_examineServer 'sqlcluster01', 600
 -- select architecture, * from dm_servers
 -- update dm_servers set password = 'REDACTED', wmiPassword = 'REDACTED'
 -- exec pr_examineServer 'web04', 600
-ALTER procedure [dbo].[pr_examineServer] (@cServerName varchar(100), @nMinutesBackToLook int)
+alter procedure [dbo].[pr_examineServer] (@cServerName varchar(100), @nMinutesBackToLook int)
 as
 begin
 -- 	declare @cServerName varchar(100)
@@ -173,7 +168,8 @@ begin
 	--*********************************************************************************************************************
 
 	create table #jobHistory (ukey int identity, job_id uniqueIdentifier, jobName varchar(800), jobOutcome varchar(8000), runningSeconds int, ymd dateTime, isSuccess bit, isEnabled bit)
-	create table #jobStepHistory (ukey int identity, job_id uniqueIdentifier, jobName varchar(800), stepName varchar(1000), stepOutcome varchar(8000), runningSeconds int, ymd dateTime, isSuccess bit, ymd_jobRun dateTime, stepCommand varchar(8000), stepNumber int)
+	create table #jobStepHistory (ukey int identity, job_id uniqueIdentifier, jobName varchar(800), stepName varchar(1000), stepOutcome varchar(8000), runningSeconds int, ymd dateTime, isSuccess bit, ymd_jobRun dateTime, stepCommand varchar(8000), stepNumber
+ int)
 
 	create table #orphanedUsers (dbName varchar(200), userName varchar(200))
 
@@ -447,7 +443,8 @@ begin
 	-- SQL Error Log
 	--*********************************************************************************************************************
 
-	if replace(@cVersion, space(1), space(0)) like '%sqlserver2005%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2008%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2012%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2014%'
+	if replace(@cVersion, space(1), space(0)) like '%sqlserver2005%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2008%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2012%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2
+014%'
 	begin
 		create table #sqlErrors (ymd dateTime, processInfo varchar(100), logMessage varchar(8000), nastyLine varchar(max), ukey int identity)
 
@@ -551,7 +548,8 @@ begin
 
 		create clustered index ix_tmp_processes on #processes (spid) with fillfactor = 80
 
-		if replace(@cVersion, space(1), space(0)) like '%sqlserver2005%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2008%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2012%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2014%'
+		if replace(@cVersion, space(1), space(0)) like '%sqlserver2005%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2008%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2012%' or replace(@cVersion, space(1), space(0)) like '%sqlserver
+2014%'
 		begin
 			create table #processActivity (spid int, cpuTime bigint, pagesInMemory bigint, reads bigint, writes bigint, logicalReads bigint)
 			create table #processLocks (spid int, numLocks bigint)
@@ -1108,11 +1106,28 @@ begin
 
 -- print 'lots of blocking'
 
-			-- here, we have a lot of blocking and we're very concerned
+			-- here, we have many SPIDs being blocked
+			insert into #results (message, severity, subject, isBlocking)
+			select
+				convert(varchar(20), count(distinct spid)) + ' SPIDs involved in blocking. Max time ' + convert(varchar(20), max(waitTime)) + 'ms.',
+				1 as severity,
+				convert(varchar(20), count(distinct spid)) + ' SPIDs involved in blocking at ' + right(convert(varchar(20), max(ymd), 120), 8) + '. ' as subject,
+				1 as isBlocking
+				from #processes a
+				where (a.isBlocked = 1 or isBlocker = 1)
+					and a.blockedBy <> ''
+					and a.ignoreSPID = 0
+				group by ymd
+				having count(distinct spid) >= 10
+					and max(waitTime) > 15000
+
+
+			-- here, we have a lot of long blocking and we're very concerned
 			insert into #results (message, severity, subject, isBlocking)
 			select distinct left('A process which belongs to SPID ' + isnull(convert(varchar(20), a.spid), 'A') + '(' + isnull(a.hostname, '') + ':' + isnull(a.login, '') + ') ' +
 				'is being blocked in the ' + isnull(a.dbName, '') + ' database ' +
-				'by SPID ' + isnull(convert(varchar(20), b.spid), 'B') + '(' + isnull(b.hostname, '') + ':' + isnull(b.login, '') + '). ' + char(13) + char(13) +
+				'by SPID ' + isnull(convert(varchar(20), b.spid), 'B') + '(' + isnull(b.hostname, '') + ':' + isnull(b.login, '') + '). ' + char(13) +
+				'Waiting time: ' + convert(varchar(20), a.waitTime) + 'ms' + char(13) +  char(13) +
 				'********************************************' + char(13) +
 				'Blockee Code (' + isnull(rtrim(a.command), '') + '): ' + char(13) +
 				'Batch Start: ' + convert(varchar(20), a.lastBatchTime, 120) + char(13) +
@@ -1143,7 +1158,8 @@ begin
 					and a.blockedBy <> ''
 					and a.ignoreSPID = 0
 					and ISNULL(b.ignoreSPID, 0) = 0
-					and abs(dateDiff(second, b.lastBatchTime, a.lastBatchTime)) >= @nBlockingSecondsThreshold
+					and (a.waitTime/1000) > @nBlockingSecondsThreshold
+					--and abs(dateDiff(second, b.lastBatchTime, a.lastBatchTime)) >= @nBlockingSecondsThreshold
 --		end
 
 -- print 'wild processes'
@@ -1797,6 +1813,8 @@ begin
 							or dateAdd(second, runningSeconds, a.ymd) between dateAdd(week, -3, dateAdd(minute, -60, getDate())) and dateAdd(week, -3, dateAdd(minute, 60, getDate()))
 							or dateAdd(second, runningSeconds, a.ymd) between dateAdd(week, -4, dateAdd(minute, -60, getDate())) and dateAdd(week, -4, dateAdd(minute, 60, getDate()))
 							)
+						-- added 2014/11/12 DJB
+						and a.isSuccess = 1
 					group by b.job_id
 				) b on a.job_id = b.job_id
 
@@ -1825,6 +1843,8 @@ begin
 							or dateAdd(second, runningSeconds, a.ymd) between dateAdd(day, -3, dateAdd(minute, -60, getDate())) and dateAdd(day, -3, dateAdd(minute, 60, getDate()))
 							or dateAdd(second, runningSeconds, a.ymd) between dateAdd(day, -4, dateAdd(minute, -60, getDate())) and dateAdd(day, -4, dateAdd(minute, 60, getDate()))
 							)
+						-- added 2014/11/12 DJB
+						and a.isSuccess = 1
 					group by b.job_id
 				) b on a.job_id = b.job_id
 			where isnull(a.expectedRunningSeconds, 0) = 0
@@ -2633,7 +2653,8 @@ begin
 	-- CPU and Disk queues
 	--*********************************************************************************************************************
 
-	if replace(@cVersion, space(1), space(0)) like '%sqlserver2005%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2008%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2012%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2014%'
+	if replace(@cVersion, space(1), space(0)) like '%sqlserver2005%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2008%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2012%' or replace(@cVersion, space(1), space(0)) like '%sqlserver
+2014%'
 	begin
 		create table #cpuTasks (cpuNumber varchar(20), currentTasks int, waitingTasks int)
 
