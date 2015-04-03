@@ -1,9 +1,14 @@
+/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 4/3/2015 8:00:46 AM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 --select top 100 * from notificationLog_history order by ymd desc
 -- exec pr_examineServer 'sqlcluster01', 600
 -- select architecture, * from dm_servers
 -- update dm_servers set password = 'REDACTED', wmiPassword = 'REDACTED'
 -- exec pr_examineServer 'web04', 600
-alter procedure [dbo].[pr_examineServer] (@cServerName varchar(100), @nMinutesBackToLook int)
+ALTER procedure [dbo].[pr_examineServer] (@cServerName varchar(100), @nMinutesBackToLook int)
 as
 begin
 -- 	declare @cServerName varchar(100)
@@ -1161,6 +1166,13 @@ begin
 					and (a.waitTime/1000) > @nBlockingSecondsThreshold
 					--and abs(dateDiff(second, b.lastBatchTime, a.lastBatchTime)) >= @nBlockingSecondsThreshold
 --		end
+
+		-- for AppDb, if altering a view as a part of the normal morning process and the alter statement is causing a blocking chain, downgrade the alert
+		if exists (select top 1 spid from #processes where (command like '%alter view%' or command like '%create view%') and (isBlocked = 1 or isBlocker = 1))
+			and datePart(hour, getDate()) in (4, 5, 6, 7, 8)
+		begin
+			update #results set severity = 2 where isBlocking = 1 and severity = 1
+		end
 
 -- print 'wild processes'
 		begin try
