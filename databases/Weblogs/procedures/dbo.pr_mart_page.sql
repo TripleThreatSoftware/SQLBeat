@@ -1,3 +1,6 @@
+USE [Weblogs]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_mart_page]    Script Date: 8/19/2015 1:07:07 PM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -6,11 +9,19 @@ GO
 
 
 --set statistics io on
---exec pr_mart_page '2010-02-10', '2010-02-11'
+--exec pr_mart_page '2014-07-13', '2014-07-13'
+
+-- alter table mart_page_byday add friendlyPageName varchar(100)
 
 ALTER procedure [dbo].[pr_mart_page] (@dStartDate dateTime, @dEndDate dateTime)
 as
 begin
+
+--declare @dStartDate dateTime
+--declare @dEndDate dateTime
+--set @dStartDate = '2014-07-13'
+--set @dEndDate = '2014-07-13'
+
 	declare @nUkeyPost int
 	declare @nUkeyGet int
 
@@ -48,7 +59,7 @@ begin
 
 		into #results
 
-		from v_fact_weblogs_all a
+		from v_fact_weblogs_all a (nolock)
 
 		where a.ymd >= @dStartDate
 			and a.ymd < dateAdd(day, 1, @dEndDate)
@@ -59,58 +70,62 @@ begin
 			a.ukey_userAgent,
 			a.requestStatus
 
-	insert into mart_page_byhour (ukey_site, ukey_uriStem, requestStatus, ymd, hour,
+	select
+		b.ukey, b.uriStem, convert(varchar(8000),
+		case
+			when b.uriStem in ('/checkout_step1.aspx', '/checkout_step2.aspx', '/checkout_thanks.aspx') then b.uriStem
+			when b.uriStem like '/products/%' or b.uriStem like '/p/%' then '/productDetails.aspx'
+			when b.uriStem like '/cars/%html' or b.uriStem like '/s/%' then '/refineCar.aspx'
+			when b.uriStem like '/a/%html' then '/showAssembly.aspx'
+			when b.uriStem like '/g/%' then '/accessories.aspx'
+			when b.uriStem like '/go/%' then '/landingpage.aspx'
+			when b.uriStem like '/manufacturers/%' then '/manufacturers.aspx'
+			when b.uriStem like '/policies%' then 'Policies'
+			when b.uriStem like '/bikes/%html' then '/refineCar.aspx'
+			when b.uriStem like '%refinecar.aspx' or b.uriStem like '/cars/%' then '/refineCar.aspx'
+			when b.uriStem like '/sitemaps/%' then 'Sitemaps'
+			when b.uriStem = '/cart.aspx' then '/cart.aspx'
+			when b.uriStem like '/categories/%html' or b.uriStem = '/productSearch.aspx' then '/productSearch.aspx'
+			when b.uriStem = '/default.aspx' then '/'
+			when uristem like '/%.html' and charindex('_', uriStem) > 0 then '/'
+			when b.uriStem like '%.css' then 'CSS'
+--			when b.uriStem like '%.php' then 'Hack Attempt'
+			else 'Other'
+			end) as friendlyPageName
+		into #pagesUsed
+		from (select distinct ukey_uristem from #results) a
+		join dm_uristem b on a.ukey_uriStem = b.ukey
+			and b.isPage = 1
+
+
+-- select * from #pagesUsed where friendlyPageName = 'Other' and uristem like '/%.html' and charindex('_', uriStem) > 0
+
+	insert into mart_page_byday (ukey_site, friendlyPageName, requestStatus, ymd,
 		numRequests, numRequests_human,
 		uniques, uniques_human, pageLoadTime, getTime, postTime)
 	select
 		a.ukey_site,
-		a.ukey_uriStem,
+		friendlyPageName,
 		a.requestStatus,
 		a.ymd,
-		a.[hour],
-		sum(numRequests) as numRequests,
-		sum(case when c.isHuman = 1 then numRequests else 0 end) as numRequests_human,
-		sum(uniques) as uniques,
-		sum(case when c.isHuman = 1 then uniques else 0 end) as uniques_human,
+		sum(numRequests),
+		sum(case when c.isHuman = 1 then numRequests else 0 end),
+		sum(uniques),
+		sum(case when c.isHuman = 1 then uniques else 0 end),
 		sum(pageLoadTime * numRequests) / sum(numRequests) as pageLoadTime,
 		avg(getTime) as getTime,
 		avg(postTime) as postTime
 
 		from #results a
-		join dm_uriStem b on a.ukey_uriStem = b.ukey
-			and b.isPage = 1
+		join #pagesUsed b on a.ukey_uriStem = b.ukey
 		join dm_userAgent c on a.ukey_userAgent = c.ukey
-
-		group by a.ymd, a.hour, a.ukey_site, a.ukey_uriStem, a.requestStatus
-
-	insert into mart_page_byday (ukey_site, ukey_uriStem, requestStatus, ymd,
-		numRequests, numRequests_human,
-		uniques, uniques_human, pageLoadTime, getTime, postTime)
-
-	select
-		a.ukey_site,
-		a.ukey_uriStem,
-		a.requestStatus,
-		a.ymd,
-		sum(numRequests),
-		sum(numRequests_human),
-		sum(uniques),
-		sum(uniques_human),
-		sum(pageLoadTime * numRequests) / sum(numRequests) as pageLoadTime,
-		avg(getTime) as getTime,
-		avg(postTime) as postTime
-
-		from mart_page_byhour a (nolock)
 
 		where a.ymd >= @dStartDate
 			and a.ymd < dateAdd(day, 1, @dEndDate)
 
-		group by a.ymd,
-			a.ukey_site,
-			a.ukey_uriStem,
-			a.requestStatus
+		group by a.ymd, a.ukey_site, friendlyPageName, a.requestStatus
 
 	drop table #results
-
+	drop table #pagesUsed
 
 end
