@@ -1,3 +1,6 @@
+USE [Weblogs]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_archiveOldData]    Script Date: 3/15/2016 9:45:04 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -6,18 +9,20 @@ GO
 --create table mart_page_byday_archive (ukey int, ukey_site int, ukey_uristem int, requestStatus int, ymd dateTime, numRequests int, numRequests_human int,
 --	uniques int, uniques_human int, pageLoadTime int, pagePostTime int, getTime int, postTime int)
 
-create procedure [dbo].[pr_archiveOldData]
+-- select max(ymd) from weblogs_archive.dbo.mart_page_byday_archive
+
+ALTER procedure [dbo].[pr_archiveOldData]
 as
 begin
 
-	insert into mart_page_byday_archive (ukey, ukey_site, ukey_uristem, requestStatus, ymd, numRequests, numRequests_human, uniques, uniques_human, pageLoadTime, pagePostTime, getTime, postTime)
+	insert into weblogs_archive.dbo.mart_page_byday_archive (ukey, ukey_site, ukey_uristem, requestStatus, ymd, numRequests, numRequests_human, uniques, uniques_human, pageLoadTime, pagePostTime, getTime, postTime)
 	select ukey, ukey_site, ukey_uristem, requestStatus, ymd, numRequests, numRequests_human, uniques, uniques_human, pageLoadTime, pagePostTime, getTime, postTime
 		from mart_page_byday (nolock)
 		where ymd < dateAdd(month, -3, getDate())
 
 	delete from mart_page_byday with (tablock) where ymd < dateAdd(month, -3, getDate())
 
-	insert into mart_page_byhour_archive (ukey, ukey_site, ukey_uriStem, requestStatus, ymd, hour, numRequests, numRequests_human, uniques, uniques_human, pageLoadTime, pagePostTime, getTime, postTime)
+	insert into weblogs_archive.dbo.mart_page_byhour_archive (ukey, ukey_site, ukey_uriStem, requestStatus, ymd, hour, numRequests, numRequests_human, uniques, uniques_human, pageLoadTime, pagePostTime, getTime, postTime)
 	select ukey, ukey_site, ukey_uriStem, requestStatus, ymd, hour, numRequests, numRequests_human, uniques, uniques_human, pageLoadTime, pagePostTime, getTime, postTime
 		from mart_page_byhour (nolock)
 		where ymd < dateAdd(month, -2, getDate())
@@ -26,15 +31,17 @@ begin
 
 	select distinct ukey_uriStem
 		into #usedURIs
-		from mart_page_byday (nolock)
+		from v_fact_weblogs_all (nolock)
 
 	create clustered index ix_tmp_usedURIs on #usedURIs (ukey_uriStem) with fillfactor = 100
 
-	insert into dm_uriStem_archive (ukey, uriStem, dateAdded, isPage)
+	insert into weblogs_archive.dbo.dm_uriStem_archive (ukey, uriStem, dateAdded, isPage)
 	select a.ukey, a.uriStem, a.dateAdded, a.isPage
 		from dm_uriStem a (nolock)
 		left outer join #usedURIs b on a.ukey = b.ukey_uriStem
+		left outer join weblogs_archive.dbo.dm_uriStem_archive c on a.ukey = c.ukey
 		where b.ukey_uriStem is null
+			and c.ukey is null
 
 	delete dm_uriStem with (tablock)
 		from dm_uriStem a
