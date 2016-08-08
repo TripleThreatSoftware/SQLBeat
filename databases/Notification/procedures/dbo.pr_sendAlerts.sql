@@ -1,23 +1,19 @@
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-
 -- exec pr_sendAlerts '', 1, 0, 1
 -- delete from messageRules where ukey = 18
 
-ALTER procedure [dbo].[pr_sendAlerts] (@cUserName varchar(100) = '', @bIsPreview bit = 0, @bOverride bit = 0, @bClearQueue bit = 0)
+alter procedure [dbo].[pr_sendAlerts] (@cUserName varchar(100) = '', @bIsPreview bit = 0, @bOverride bit = 0, @bClearQueue bit = 0)
 as
 begin
---	if @bIsPreview = 0
---		return
+	if @bIsPreview = 0
+		return
 
 	set nocount off
 
+	--Changed @cThisMessage to varchar(max) from varchar(8000).  4/16/2014 DJB.
 	declare @bIsBusinessHours bit
 	declare @nUkeyMessage int
 	declare @cThisSubject varchar(1000)
-	declare @cThisMessage varchar(8000)
+	declare @cThisMessage varchar(max)
 	declare @cEmailAddress varchar(200)
 
 	set @bIsPreview = isnull(@bIsPreview, 0)
@@ -82,7 +78,7 @@ begin
 				or isnull(b.ukey_group, 0) = 0
 --				or isnull(d.ukey_group, 0) = 0
 				)
-			and a.ymd >= dateAdd(hour, -72, getdate())
+			and (a.ymd >= dateAdd(hour, -72, getdate()) or @bIsPreview = 1)
 
 	delete #messages
 		from #messages a

@@ -1,6 +1,6 @@
 USE [Notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_processEventLogMessages]    Script Date: 5/6/2014 8:56:03 AM ******/
+/****** Object:  StoredProcedure [dbo].[pr_processEventLogMessages]    Script Date: 8/8/2016 3:29:00 PM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -314,7 +314,7 @@ begin
 
 	insert into notificationLog_stage (message, severity, subject, serverName, isEventLog, ymd)
 	select distinct
-		left(emailMessage, 2000) as message,
+		left('Type: ' + isnull(logtype, '') + char(13) + emailMessage, 2000) as message,
 		severity,
 		left(emailSubject, 300) as subject,
 		computerName,
@@ -326,7 +326,7 @@ begin
 	insert into notificationLog_stage (message, severity, subject, serverName, isEventLog, ymd)
 	select distinct
 		'Between ' + convert(varchar(20), minYMD, 120) + ' and ' + convert(varchar(20), maxYMD, 120) + ', the following alert has triggered ' + convert(varchar(20), numAlerts) + ' times.<br><br>' +
-			'Log: ' + isnull(logType, '') + '<br>' +
+			'Type: ' + isnull(logType, '') + '<br>' +
 			'Source: ' + isnull(sourceName, '') + '<br>' +
 			'Message: ' + isnull(message, '') as message,
 		2 as severity,
