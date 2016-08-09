@@ -1,11 +1,19 @@
+USE [Notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_sendAlerts]    Script Date: 8/9/2016 8:49:46 AM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
 -- exec pr_sendAlerts '', 1, 0, 1
 -- delete from messageRules where ukey = 18
 
-alter procedure [dbo].[pr_sendAlerts] (@cUserName varchar(100) = '', @bIsPreview bit = 0, @bOverride bit = 0, @bClearQueue bit = 0)
+ALTER procedure [dbo].[pr_sendAlerts] (@cUserName varchar(100) = '', @bIsPreview bit = 0, @bOverride bit = 0, @bClearQueue bit = 0)
 as
 begin
-	if @bIsPreview = 0
-		return
+	--if @bIsPreview = 0
+	--	return
 
 	set nocount off
 
