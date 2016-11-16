@@ -1,6 +1,6 @@
 USE [Notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_processEventLogMessages]    Script Date: 8/8/2016 3:29:00 PM ******/
+/****** Object:  StoredProcedure [dbo].[pr_processEventLogMessages]    Script Date: 11/16/2016 11:36:08 PM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -278,6 +278,10 @@ begin
 					else isnull(message, 'BAD MESSAGE')
 					end
 		where isInformational = 0
+
+	update #eventLog
+		set severity = 1
+		where sourceName in ('SuperMicro Health Assistant')
 
 	select computerName, logType, message, sourceName, count(*) as numAlerts, min(timeWritten) as minYMD, max(timeWritten) as maxYMD
 		into #repeatingAlerts
