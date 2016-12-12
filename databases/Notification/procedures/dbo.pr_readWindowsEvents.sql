@@ -1,3 +1,6 @@
+USE [Notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_readWindowsEvents]    Script Date: 12/12/2016 11:56:16 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -151,6 +154,19 @@ begin
 
 		update #results set serverName = @cServerName where serverName is null
 
+		if (select count(*) from #results where wideString like '%access is denied%' and serverName = @cServerName) > 0
+		begin
+			print 'Credentials to monitor are invalid'
+			insert into eventLog_history (notes, serverName, ukey_group) values ('Credentials to monitor are invalid.', @cServerName, @nUkeyGroup)
+
+			set @cWideString = (select top 1 wideString from #results where wideString like '%access is denied%' and serverName = @cServerName)
+			insert into notificationLog_stage (serverName, subject, message, severity) values (@cServerName, 'Credentials to monitor WMI are invalid.', @cWideString, 2)
+
+			delete from #results where serverName = @cServerName
+
+			continue
+		end
+
 		update dm_servers set lastEventLogCheck = getDate() where serverName = @cServerName
 	end
 
@@ -160,6 +176,8 @@ begin
 		insert into eventLog_history (notes, serverName, ukey_group) values ('Powershell appears to be disabled.', @cServerName, @nUkeyGroup)
 		return
 	end
+
+
 
 -- select * from #results
 
