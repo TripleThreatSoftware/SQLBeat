@@ -1,6 +1,6 @@
 USE [Notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_readWindowsEvents]    Script Date: 12/12/2016 11:56:16 AM ******/
+/****** Object:  StoredProcedure [dbo].[pr_readWindowsEvents]    Script Date: 12/20/2016 5:54:44 PM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -155,6 +155,7 @@ begin
 		update #results set serverName = @cServerName where serverName is null
 
 		if (select count(*) from #results where wideString like '%access is denied%' and serverName = @cServerName) > 0
+			and (select count(*) from #results where serverName = @cServerName) <= 50
 		begin
 			print 'Credentials to monitor are invalid'
 			insert into eventLog_history (notes, serverName, ukey_group) values ('Credentials to monitor are invalid.', @cServerName, @nUkeyGroup)
