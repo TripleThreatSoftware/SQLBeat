@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 4/3/2015 8:00:46 AM ******/
+/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 5/18/2017 2:15:14 PM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -192,8 +192,10 @@ begin
 
 	create table #buffer (eventType varchar(30), parameters int, eventInfo varchar(255))
 
+	-- Change diskio from int to bigint as we were having data coming in from WEB04 that was a bigint
+	-- JReed - 04.14.16
 	create table #processes (spid int, status varchar(100), login varchar(100), hostname varchar(128),
-		blockedBy varchar(20), dbName varchar(128), command varchar(100), cputime int, diskio int,
+		blockedBy varchar(20), dbName varchar(128), command varchar(100), cputime int, diskio bigint,
 		lastBatch varchar(100), programName varchar(100), buffercontents varchar(3000),
 		lastBatchTime dateTime, locks varchar(4000),
 		isBlocked bit default 0, isBlocker bit default 0, isWild bit default 0,
@@ -228,7 +230,6 @@ begin
 	--*********************************************************************************************************************
 	-- Trap the SQLServer version
 	--*********************************************************************************************************************
-
  	set @cSQLString = '
 		create procedure ' + @cProcedureName + '
 		as
@@ -242,11 +243,28 @@ begin
 
 	insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'SQL Version', @cSQLString, @nUkeyGroup)
 
-	exec sp_executeSQL @cSQLString
+	begin try
 
-	if @bTesting = 1
-		print @cSQLString
-	EXECUTE(@cProcedureName)
+		exec sp_executeSQL @cSQLString
+
+		if @bTesting = 1
+			print @cSQLString
+		EXECUTE(@cProcedureName)
+
+	end try
+	begin catch
+		set @cSQLString = error_message()
+		insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Failed to determine SQL Version', @cSQLString, @nUkeyGroup)
+
+		set @cThisSubject = 'Server not responding at ' + convert(varchar(20), getDate(), 120)
+		set @cThisMessage = 'Server not responding at ' + convert(varchar(20), getDate(), 120) + '. <br>' + @cSQLString
+
+		insert into notificationLog_stage (ymd, severity, subject, message, isJobFailure, isLogShippingJobFailure, isLongRunningJob, isBlocking, isLongRunningProcess, isDriveSpace, isLogSize, isEventLog, serverName) values
+			(getDate(), 1, @cThisSubject, @cThisMessage, 0, 0, 0, 0, 0, 0, 0, 0, @cServerName)
+
+		return
+
+	end catch
 
 	declare @cVersion varchar(500)
 	set @cVersion = (select top 1 results from #junkString)
@@ -277,7 +295,6 @@ begin
 	--*********************************************************************************************************************
 	-- Create a list of all remote databases
 	--*********************************************************************************************************************
-
 	set @cSQLString = '
 		create procedure ' + @cProcedureName + '
 		as
@@ -318,11 +335,9 @@ begin
 		print @cSQLString
 	EXECUTE(@cProcedureName)
 
-
 	--*********************************************************************************************************************
 	-- Identify any suspect remote databases
 	--*********************************************************************************************************************
-
 	if (select count(*) from #databaseNames where isSuspect = 1) > 0
 	begin
 		-- pause for 5 seconds to allow any database state change in progress to complete, just in case
@@ -444,12 +459,14 @@ begin
 			from #orphanedUsers
 	end
 
+
 	--*********************************************************************************************************************
 	-- SQL Error Log
 	--*********************************************************************************************************************
-
-	if replace(@cVersion, space(1), space(0)) like '%sqlserver2005%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2008%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2012%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2
-014%'
+	if replace(@cVersion, space(1), space(0)) like '%sqlserver2005%'
+		or replace(@cVersion, space(1), space(0)) like '%sqlserver2008%'
+		or replace(@cVersion, space(1), space(0)) like '%sqlserver2012%'
+		or replace(@cVersion, space(1), space(0)) like '%sqlserver2014%'
 	begin
 		create table #sqlErrors (ymd dateTime, processInfo varchar(100), logMessage varchar(8000), nastyLine varchar(max), ukey int identity)
 
@@ -553,8 +570,7 @@ begin
 
 		create clustered index ix_tmp_processes on #processes (spid) with fillfactor = 80
 
-		if replace(@cVersion, space(1), space(0)) like '%sqlserver2005%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2008%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2012%' or replace(@cVersion, space(1), space(0)) like '%sqlserver
-2014%'
+		if replace(@cVersion, space(1), space(0)) like '%sqlserver2005%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2008%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2012%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2014%'
 		begin
 			create table #processActivity (spid int, cpuTime bigint, pagesInMemory bigint, reads bigint, writes bigint, logicalReads bigint)
 			create table #processLocks (spid int, numLocks bigint)
@@ -1111,11 +1127,16 @@ begin
 
 -- print 'lots of blocking'
 
+			declare @nNumRecentAlerts int
+
+			set @nNumRecentAlerts = (select count(*) from notificationLog (nolock) where isBlocking = 1 and ymd >= dateAdd(minute, -15, getDate()) and servername = @cServerName)
+
 			-- here, we have many SPIDs being blocked
 			insert into #results (message, severity, subject, isBlocking)
 			select
-				convert(varchar(20), count(distinct spid)) + ' SPIDs involved in blocking. Max time ' + convert(varchar(20), max(waitTime)) + 'ms.',
-				1 as severity,
+				convert(varchar(20), count(distinct spid)) + ' SPIDs involved in blocking. Max time ' + convert(varchar(20), max(waitTime)) + 'ms. '+ char(13) +
+					'In the last 15 minutes, ' + convert(varchar(20), @nNumRecentAlerts) + ' other instances of extreme blocking observed.',
+				case when @nNumRecentAlerts >= 1 then 1 else 2 end as severity,
 				convert(varchar(20), count(distinct spid)) + ' SPIDs involved in blocking at ' + right(convert(varchar(20), max(ymd), 120), 8) + '. ' as subject,
 				1 as isBlocking
 				from #processes a
@@ -1126,45 +1147,48 @@ begin
 				having count(distinct spid) >= 10
 					and max(waitTime) > 15000
 
-
-			-- here, we have a lot of long blocking and we're very concerned
-			insert into #results (message, severity, subject, isBlocking)
-			select distinct left('A process which belongs to SPID ' + isnull(convert(varchar(20), a.spid), 'A') + '(' + isnull(a.hostname, '') + ':' + isnull(a.login, '') + ') ' +
-				'is being blocked in the ' + isnull(a.dbName, '') + ' database ' +
-				'by SPID ' + isnull(convert(varchar(20), b.spid), 'B') + '(' + isnull(b.hostname, '') + ':' + isnull(b.login, '') + '). ' + char(13) +
-				'Waiting time: ' + convert(varchar(20), a.waitTime) + 'ms' + char(13) +  char(13) +
-				'********************************************' + char(13) +
-				'Blockee Code (' + isnull(rtrim(a.command), '') + '): ' + char(13) +
-				'Batch Start: ' + convert(varchar(20), a.lastBatchTime, 120) + char(13) +
-				'********************************************' + char(13) +
-					left(isnull(a.buffercontents, ''), 500) + char(13) + char(13) +
-				'********************************************' + char(13) +
-				'Blocker Code (' + isnull(rtrim(b.command), '') + '): ' + char(13) +
-				'Batch Start: ' + convert(varchar(20), b.lastBatchTime, 120) + char(13) +
-				'********************************************' + char(13) +
-					left(isnull(b.bufferContents, ''), 500) + char(13) + char(13) +
-				'********************************************' + char(13) +
-				'Blockee locks: ' + char(13) +
-				'********************************************' + char(13) +
-					isnull(a.locks, '') + char(13) +
-				'********************************************' + char(13) +
-				'Blocker locks: ' + char(13) +
-				'********************************************' + char(13) +
-					isnull(b.locks, '')
-				, 8000),
-				1 as severity,
-				'User ' + isnull(b.login, '') + ' (' + isnull(convert(varchar(20), b.spid), 'B') + ') ' +
-					'began blocking in ' + isnull(a.dbName, '') + ' ' +
-					'at ' + right(convert(varchar(20), isnull(b.lastBatchTime, ''), 120), 8) + '. ' as subject,
-				1 as isBlocking
-				from #processes a
-				left outer join #processes b on a.blockedBy = b.spid
-				where a.isBlocked = 1
-					and a.blockedBy <> ''
-					and a.ignoreSPID = 0
-					and ISNULL(b.ignoreSPID, 0) = 0
-					and (a.waitTime/1000) > @nBlockingSecondsThreshold
-					--and abs(dateDiff(second, b.lastBatchTime, a.lastBatchTime)) >= @nBlockingSecondsThreshold
+			-- if there's a lot of blocking being reported above already, don't bother with the detail
+			if @@rowcount = 0
+			begin
+				-- here, we have a lot of long blocking and we're very concerned
+				insert into #results (message, severity, subject, isBlocking)
+				select distinct left('A process which belongs to SPID ' + isnull(convert(varchar(20), a.spid), 'A') + '(' + isnull(a.hostname, '') + ':' + isnull(a.login, '') + ') ' +
+					'is being blocked in the ' + isnull(a.dbName, '') + ' database ' +
+					'by SPID ' + isnull(convert(varchar(20), b.spid), 'B') + '(' + isnull(b.hostname, '') + ':' + isnull(b.login, '') + '). ' + char(13) +
+					'Waiting time: ' + convert(varchar(20), a.waitTime) + 'ms' + char(13) +  char(13) +
+					'********************************************' + char(13) +
+					'Blockee Code (' + isnull(rtrim(a.command), '') + '): ' + char(13) +
+					'Batch Start: ' + convert(varchar(20), a.lastBatchTime, 120) + char(13) +
+					'********************************************' + char(13) +
+						left(isnull(a.buffercontents, ''), 500) + char(13) + char(13) +
+					'********************************************' + char(13) +
+					'Blocker Code (' + isnull(rtrim(b.command), '') + '): ' + char(13) +
+					'Batch Start: ' + convert(varchar(20), b.lastBatchTime, 120) + char(13) +
+					'********************************************' + char(13) +
+						left(isnull(b.bufferContents, ''), 500) + char(13) + char(13) +
+					'********************************************' + char(13) +
+					'Blockee locks: ' + char(13) +
+					'********************************************' + char(13) +
+						isnull(a.locks, '') + char(13) +
+					'********************************************' + char(13) +
+					'Blocker locks: ' + char(13) +
+					'********************************************' + char(13) +
+						isnull(b.locks, '')
+					, 8000),
+					1 as severity,
+					'User ' + isnull(b.login, '') + ' (' + isnull(convert(varchar(20), b.spid), 'B') + ') ' +
+						'began blocking in ' + isnull(a.dbName, '') + ' ' +
+						'at ' + right(convert(varchar(20), isnull(b.lastBatchTime, ''), 120), 8) + '. ' as subject,
+					1 as isBlocking
+					from #processes a
+					left outer join #processes b on a.blockedBy = b.spid
+					where a.isBlocked = 1
+						and a.blockedBy <> ''
+						and a.ignoreSPID = 0
+						and ISNULL(b.ignoreSPID, 0) = 0
+						and (a.waitTime/1000) > @nBlockingSecondsThreshold
+						--and abs(dateDiff(second, b.lastBatchTime, a.lastBatchTime)) >= @nBlockingSecondsThreshold
+			end
 --		end
 
 		-- for AppDb, if altering a view as a part of the normal morning process and the alter statement is causing a blocking chain, downgrade the alert
@@ -2665,8 +2689,7 @@ begin
 	-- CPU and Disk queues
 	--*********************************************************************************************************************
 
-	if replace(@cVersion, space(1), space(0)) like '%sqlserver2005%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2008%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2012%' or replace(@cVersion, space(1), space(0)) like '%sqlserver
-2014%'
+	if replace(@cVersion, space(1), space(0)) like '%sqlserver2005%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2008%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2012%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2014%'
 	begin
 		create table #cpuTasks (cpuNumber varchar(20), currentTasks int, waitingTasks int)
 

@@ -1,6 +1,6 @@
 USE [Notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_monitorBigBrother]    Script Date: 9/17/2013 10:27:44 AM ******/
+/****** Object:  StoredProcedure [dbo].[pr_monitorBigBrother]    Script Date: 5/17/2017 9:02:38 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -1442,7 +1442,7 @@ begin
 	set @nNumFailure = @@rowcount
 
 	-- disable further checks of any server that consistently fails
-	if @nNumFailure > 0
+	if @nNumFailure > 0 and 3=4 -- CG disabling this because we can't be trusted to pay attention to critical alerts
 	begin
 		set @cThisSubject = 'SQL Detailed checks disabled for ' + convert(varchar(20), @nNumFailure) + ' failing servers.'
 		set @cThisMessage = ''
