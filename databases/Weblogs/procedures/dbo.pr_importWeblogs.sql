@@ -1,6 +1,6 @@
 USE [Weblogs]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_importWeblogs]    Script Date: 7/11/2014 8:51:43 AM ******/
+/****** Object:  StoredProcedure [dbo].[pr_importWeblogs]    Script Date: 6/8/2017 11:06:39 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -150,12 +150,12 @@ begin
 	delete from #filesToImport where filePath like '%ex071124.log' or filePath like '%ex071123.log'
 	delete from #filesToImport where filePath like '%.log%' and right(filePath, 4) <> '.log'
 
-	-- we really don't want to pull in more than 10 files at a time
+	-- we really don't want to pull in more than 25 files at a time
 	delete from #filesToImport
 		where fileDate < (
 			select top 1 fileDate
 				from (
-					select top 10 fileDate
+					select top 25 fileDate
 						from #filesToImport
 --						where fileDate > dateAdd(month, -@nMonthsBackToLook, getDate())
 						order by fileDate desc
@@ -712,7 +712,10 @@ begin
 				f.ukey as ukey_clientIP,
 				g.ukey as ukey_userAgent,
 				[requestStatus],[requestSubStatus],[win32Status],
-				a.referer, a.siteName, a.cookie, a.hostName, a.timeTaken, a.bytes
+				left(a.referer, 1000),
+				a.siteName,
+				left(a.cookie, 2000),
+				a.hostName, a.timeTaken, a.bytes
 
 				FROM fact_weblogs_stage a
 				join dm_sourceIP b on isnull(a.sourceIP, '') = b.sourceIP
