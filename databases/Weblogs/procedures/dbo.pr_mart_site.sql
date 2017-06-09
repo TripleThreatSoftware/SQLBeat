@@ -1,10 +1,11 @@
 USE [Weblogs]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_mart_site]    Script Date: 6/26/2014 3:31:20 PM ******/
+/****** Object:  StoredProcedure [dbo].[pr_mart_site]    Script Date: 6/9/2017 8:39:14 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+-- select top 100 * from mart_site_byday order by ymd desc
 -- exec pr_mart_site '2008-10-21', '2008-10-21'
 ALTER procedure [dbo].[pr_mart_site] (@dStartDate dateTime, @dEndDate dateTime)
 as
@@ -30,12 +31,13 @@ begin
 		sum(case when a.requestStatus = '404' then 1 else 0 end) as pageNotFoundErrors,
 		sum(case when a.requestStatus like '4%' or a.requestStatus like '5%' then 1 else 0 end) as allErrors
 
-		from v_fact_weblogs_all a
+		from v_fact_weblogs_all a (nolock)
 
 		where a.ymd >= @dStartDate
 			and a.ymd < dateAdd(day, 1, @dEndDate)
 
 		group by ukey_site, convert(varchar(10), ymd, 120)
+
 
 
 	update mart_site_byday
@@ -48,6 +50,7 @@ begin
 		join (
 			select
 				ukey_site,
+				a.ymd,
 				sum(convert(bigint, uniques)) as uniques,
 				sum(convert(bigint, case when b.isHuman = 1 then uniques else 0 end)) as uniques_human,
 				sum(convert(bigint, case when b.isHuman = 1 then requests else 0 end)) as requests_human,
@@ -55,10 +58,12 @@ begin
 				sum(convert(bigint, case when b.isHuman = 0 then requests else 0 end)) as requests_nonhuman
 				from mart_userAgent_byday a (nolock)
 				join dm_userAgent b (nolock) on a.ukey_userAgent = b.ukey
-				group by a.ukey_site
+				where a.ymd >= @dStartDate
+					and a.ymd < dateAdd(day, 1, @dEndDate)
+				group by a.ukey_site, a.ymd
 			) b on a.ukey_site = b.ukey_site
-		where a.ymd >= @dStartDate
-			and a.ymd < dateAdd(day, 1, @dEndDate)
+			and a.ymd = b.ymd
+
 
 	select
 		a.ukey_site,
@@ -130,6 +135,7 @@ begin
 
 					group by a.ymd, a.ukey_site, a.requestStatus
 					) a
+				group by ukey_site
 			) b on a.ukey_site = b.ukey_site
 		where a.ymd >= @dStartDate
 			and a.ymd < dateAdd(day, 1, @dEndDate)

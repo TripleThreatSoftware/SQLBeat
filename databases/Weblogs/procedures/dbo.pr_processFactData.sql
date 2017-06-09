@@ -1,4 +1,11 @@
-create procedure pr_processFactData
+USE [Weblogs]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_processFactData]    Script Date: 6/9/2017 9:52:12 AM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+ALTER procedure [dbo].[pr_processFactData]
 as
 begin
 	declare @dStartDate dateTime
@@ -23,7 +30,7 @@ begin
 		max(convert(varchar(10), ymd, 120)) as endDate,
 		count(*) as numRecords
 		into #datesImported
-		from fact_weblogs
+		from fact_weblogs (nolock)
 		group by ukey_site, ukey_sourceFile, datePart(week, ymd), datePart(year, ymd)
 
 	create clustered index ix_tmp_datesImported on #datesImported (startDate, endDate, ukey_site, ukey_sourceFile) with fillfactor = 100
@@ -100,16 +107,21 @@ begin
 	insert into fact_weblogs_stage_hist (stepName) values ('Partitioning')
 
 	begin try
-		exec pr_partitionTableDaily 'fact_weblogs', 'ymd', 'ukey_site, ukey_sourceFile, ukey_uriStem, ukey_clientIP, ukey_userAgent, ukey', 0
+		--exec pr_partitionTableDaily 'fact_weblogs', 'ymd', 'ukey_site, ukey_sourceFile, ukey_uriStem, ukey_clientIP, ukey_userAgent, ukey', 0
+		-- I'm not sure that supplying the @cKeyFieldList value does anything for us here .. but I don't think it hurts either. Hard to tell what comes of it downstream. I think it's for de-duplication.
+		exec pr_partitionTableDaily 'fact_weblogs', 'ymd', 'ukey_site, ukey_sourcefile, ymd, ukey', 0, 'Cluster'
 
 		insert into fact_weblogs_stage_hist (stepName) values ('Creating indexes')
-		exec pr_createIndexOnAllPartitionTables 'fact_weblogs', 'ukeySite', 'ukey_site, ukey_sourceFile, ymd', 70
+		exec pr_createIndexOnAllPartitionTables 'fact_weblogs', 'site_source_ymd', 'ukey_site, ukey_sourcefile, ymd', 80
 	end try
 
 	begin catch
 		-- if daily tables have been recreated on top of weekly tables, try and combine daily and weekly tables
 		if error_message() like '%partitioning column%'
-			exec pr_archiveOldPartitionedTables 'fact_weblogs', 'ymd', 'ukey_site, ukey_sourceFile, ukey_uriStem, ukey_clientIP, ukey_userAgent, ukey'
+		begin
+			--exec pr_archiveOldPartitionedTables 'fact_weblogs', 'ymd', 'ukey_site, ukey_sourceFile, ukey_uriStem, ukey_clientIP, ukey_userAgent, ukey'
+			exec pr_archiveOldPartitionedTables 'fact_weblogs', 'ymd', 'ukey_site, ukey_sourcefile, ymd, ukey'
+		end
 
 		insert into fact_weblogs_stage_hist (stepName) values ('Error: ' + convert(varchar(20), @@error))
 		insert into fact_weblogs_stage_hist (stepName) values (error_message())
