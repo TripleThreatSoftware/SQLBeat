@@ -1,10 +1,10 @@
-/****** Object:  StoredProcedure [dbo].[pr_partitionTableDaily]    Script Date: 6/9/2017 9:49:53 AM ******/
+/****** Object:  StoredProcedure [dbo].[pr_partitionTableDaily]    Script Date: 6/12/2017 8:42:00 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
 -- The keyFieldList variable should not contain ymd_id or ymd fields
-ALTER   procedure [dbo].[pr_partitionTableDaily] (@cTableName varchar(100), @cDateField varchar(100), @cKeyfieldList varchar(100), @lMakeUkey bit)
+ALTER   procedure [dbo].[pr_partitionTableDaily] (@cTableName varchar(100), @cDateField varchar(100), @cKeyfieldList varchar(100), @lMakeUkey bit, @cPrimaryIndexType varchar(100) = 'PK')
 as
 begin
 	set noCount on
@@ -409,13 +409,27 @@ create table [' + @cArchiveTableName + '_' + @cToday + '] (' + @cTableStructure 
 					set @cPKString = case when @cPKString = '' then @cDateField else @cPKString + ', ' + @cDateField end
 			end
 
-			set @cSQLString = 'use ' + @cDatabaseName + '
-				ALTER TABLE ' + @cArchiveTableName + '_' + @cToday + '
-					ADD CONSTRAINT [PK_' + @cArchiveTableName + '_' + @cToday + ']
-					PRIMARY KEY CLUSTERED (' + case when @cPKString <> '' then @cPKString + ', ' else '' end + @cKeyfieldList + ')
-					WITH  FILLFACTOR = 80'
---			print @cSQLString
-			exec sp_executesql @cSQLString
+			if isnull(@cPrimaryIndexType, 'PK') = 'PK'
+			begin
+				set @cSQLString = 'use ' + @cDatabaseName + '
+					ALTER TABLE ' + @cArchiveTableName + '_' + @cToday + '
+						ADD CONSTRAINT [PK_' + @cArchiveTableName + '_' + @cToday + ']
+						PRIMARY KEY CLUSTERED (' + case when @cPKString <> '' then @cPKString + ', ' else '' end + @cKeyfieldList + ')
+						WITH  FILLFACTOR = 80'
+	--			print @cSQLString
+				exec sp_executesql @cSQLString
+			end
+
+			if isnull(@cPrimaryIndexType, 'PK') = 'Cluster'
+			begin
+				-- create clustered index ix_fact_weblogs_201703_week13_ymd on [fact_weblogs_201703_week13] (ymd) with fillfactor = 60
+				set @cSQLString = 'use ' + @cDatabaseName + '
+					create clustered index ix_' + @cArchiveTableName + '_' + @cToday + '_' + @cDateField + ' ' +
+						'on [' + @cArchiveTableName + '_' + @cToday + '] ' +
+						'(' + @cDateField + ') with fillfactor = 80'
+	--			print @cSQLString
+				exec sp_executesql @cSQLString
+			end
 		end
 	end
 
@@ -423,7 +437,7 @@ create table [' + @cArchiveTableName + '_' + @cToday + '] (' + @cTableStructure 
 
 --	print 'Archiving old tables'
 
-	exec pr_archiveOldPartitionedTables @cTableName, @cDateField, @cKeyfieldList
+	exec pr_archiveOldPartitionedTables @cTableName, @cDateField, @cKeyfieldList, @cPrimaryIndexType
 
 	insert into hist_partitionTableDaily (stepName) values ('Old tables archived')
 

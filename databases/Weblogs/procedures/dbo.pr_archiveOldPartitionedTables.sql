@@ -1,10 +1,12 @@
-/****** Object:  StoredProcedure [dbo].[pr_archiveOldPartitionedTables]    Script Date: 12/04/2009 18:51:44 ******/
+USE [Weblogs]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_archiveOldPartitionedTables]    Script Date: 6/12/2017 8:58:39 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER OFF
 GO
 -- The keyFieldList variable should not contain ymd_id or ymd fields
-CREATE  procedure [dbo].[pr_archiveOldPartitionedTables] (@cTableName varchar(100), @cDateField varchar(100), @cKeyfieldList varchar(100))
+ALTER  procedure [dbo].[pr_archiveOldPartitionedTables] (@cTableName varchar(100), @cDateField varchar(100), @cKeyfieldList varchar(100), @cPrimaryIndexType varchar(100) = 'PK')
 as
 begin
 --	print 'Beginning to archive old partitioned tables'
@@ -221,13 +223,29 @@ begin
 --					exec sp_executeSQL @cSQLString
 --				end
 
-				set @cSQLString = 'use ' + @cThisDatabase + '
-					ALTER TABLE ' + @cWeekTable + '
-						ADD CONSTRAINT [PK_' + @cWeekTable + ']
-						PRIMARY KEY CLUSTERED (' + case when @cPKString <> '' then @cPKString + ', ' else '' end + @cKeyfieldList + ')
-						WITH  FILLFACTOR = 80'
---				print @cSQLString
-				exec sp_executesql @cSQLString
+				if isnull(@cPrimaryIndexType, 'PK') = 'PK'
+				begin
+
+					set @cSQLString = 'use ' + @cThisDatabase + '
+						ALTER TABLE ' + @cWeekTable + '
+							ADD CONSTRAINT [PK_' + @cWeekTable + ']
+							PRIMARY KEY CLUSTERED (' + case when @cPKString <> '' then @cPKString + ', ' else '' end + @cKeyfieldList + ')
+							WITH  FILLFACTOR = 80'
+	--				print @cSQLString
+					exec sp_executesql @cSQLString
+				end
+
+				if isnull(@cPrimaryIndexType, 'PK') = 'Cluster'
+				begin
+					-- create clustered index ix_fact_weblogs_201703_week13_ymd on [fact_weblogs_201703_week13] (ymd) with fillfactor = 60
+					-- at this point, nobody is adding records. Reduce the fill factor dramatically over the day tables to save space
+					set @cSQLString = 'use ' + @cThisDatabase + '
+						create clustered index ix_' + @cWeekTable + '_' + @cDateField + ' ' +
+							'on [' + @cWeekTable + '] ' +
+							'(' + @cDateField + ') with fillfactor = 90'
+		--			print @cSQLString
+					exec sp_executesql @cSQLString
+				end
 			end
 			else
 			begin
@@ -289,4 +307,3 @@ begin
 end
 
 -- exec pr_archiveOldPartitionedTables 'mart_vehicle_byday_daily', 'ukey_auto'
-GO

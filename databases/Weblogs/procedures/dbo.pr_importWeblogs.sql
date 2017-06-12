@@ -1,6 +1,6 @@
 USE [Weblogs]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_importWeblogs]    Script Date: 6/8/2017 11:06:39 AM ******/
+/****** Object:  StoredProcedure [dbo].[pr_importWeblogs]    Script Date: 6/12/2017 10:21:01 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -23,6 +23,7 @@ begin
 	declare @bisApache bit
 	declare @cTimeStamp varchar(100)
 	declare @nMonthsBackToLook int
+	declare @cSQLCommand varchar(2000)
 
 	select @cWeblogPath = sourcePath,
 		@bReadHeader = readHeader,
@@ -150,12 +151,12 @@ begin
 	delete from #filesToImport where filePath like '%ex071124.log' or filePath like '%ex071123.log'
 	delete from #filesToImport where filePath like '%.log%' and right(filePath, 4) <> '.log'
 
-	-- we really don't want to pull in more than 25 files at a time
+	-- we really don't want to pull in more than 75 files at a time
 	delete from #filesToImport
 		where fileDate < (
 			select top 1 fileDate
 				from (
-					select top 25 fileDate
+					select top 75 fileDate
 						from #filesToImport
 --						where fileDate > dateAdd(month, -@nMonthsBackToLook, getDate())
 						order by fileDate desc
@@ -184,7 +185,7 @@ begin
 		print 'File Size: ' + convert(varchar(20), @nFileSize)
 
 		insert into fact_weblogs_stage_hist (stepName) values ('File Name: ' + @cModifiedFile)
-		insert into fact_weblogs_stage_hist (stepName) values ('File Date: ' + convert(varchar(20), @dFileDate))
+		insert into fact_weblogs_stage_hist (stepName) values ('File Date: ' + convert(varchar(20), @dFileDate, 120))
 		insert into fact_weblogs_stage_hist (stepName) values ('File Size: ' + convert(varchar(20), @nFileSize))
 
 		insert into fact_weblogs_stage_hist (stepName) values ('Inserting from ' + @cModifiedFile)
@@ -567,9 +568,12 @@ begin
 		end
 		else
 		begin
+			-- if this is a source we have already processed, then remove record of it from the fact tables so we can repopulate
+
 			delete from fact_weblogs with (tablock) where ukey_sourceFile = @nUkeySourceFile and ymd >= @dMinYMD and ymd <= @dMaxYMD
 			begin try
-				delete from v_fact_weblogs_all where ukey_sourceFile = @nUkeySourceFile and ymd >= @dMinYMD and ymd <= @dMaxYMD
+				set @cSQLCommand = 'delete from *tablename* where ukey_sourceFile = ' + convert(varchar(10), @nUkeySourceFile) + ' and ymd >= ''' + convert(varchar(20), @dMinYMD, 120) + ''' and ymd <= ''' + convert(varchar(20), @dMaxYMD, 120) + ''''
+				exec pr_runOnAllPartitionTables 'fact_weblogs', @cSQLCommand
 			end try
 			begin catch
 				print error_message()
@@ -677,16 +681,24 @@ begin
 
 		insert into fact_weblogs_stage_hist (stepName) values ('Adding dm_userAgent')
 
+		-- select top 100 * from fact_weblogs_stage order by len(userAgent) desc
 		begin try
+
+			select distinct left(isnull(userAgent, ''), 900) as userAgent
+				into #allAgents
+				from fact_weblogs_stage
+
 			insert into dm_userAgent (userAgent, isHuman, browsername, serviceName, osName)
 			select a.userAgent,
 				dbo.fn_isHuman(a.userAgent) as isHuman,
 				dbo.fn_decodeUserAgent_browser(a.userAgent) as browserName,
 				dbo.fn_decodeUserAgent_service(a.userAgent) as serviceName,
 				dbo.fn_decodeUserAgent_os(a.userAgent) as osName
-				from ( select distinct isnull(userAgent, '') as userAgent from fact_weblogs_stage ) a
+				from #allAgents a
 				left outer join dm_userAgent b on a.userAgent = b.userAgent
-				where b.ukey is null
+				where b.userAgent is null
+
+			drop table #allAgents
 		end try
 		begin catch
 			set @cThisMessage = 'Error adding to dm_userAgent:' + isnull(ERROR_MESSAGE(), 'N/A')

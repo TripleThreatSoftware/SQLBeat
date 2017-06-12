@@ -1,6 +1,6 @@
 USE [Weblogs]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_processFactData]    Script Date: 6/9/2017 9:52:12 AM ******/
+/****** Object:  StoredProcedure [dbo].[pr_processFactData]    Script Date: 6/12/2017 10:25:43 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -44,28 +44,28 @@ begin
 
 		set @bRecordsDeleted = 0
 
-		if (select sum(numRecords) from #datesImported) < 1000000
-		begin
-			insert into fact_weblogs_stage_hist (stepName) values ('Deleting duplicates from view')
+		--if (select sum(numRecords) from #datesImported) < 1000000
+		--begin
+		--	insert into fact_weblogs_stage_hist (stepName) values ('Deleting duplicates from view')
 
-			-- this code deletes any existing records for this import file, which assumes the files are fairly small
-			-- and there is not a significant overhead to replacing all the records
-			begin try
-				delete v_fact_weblogs_all
-					from v_fact_weblogs_all a
-					join #datesImported b on a.ukey_sourceFile = b.ukey_sourceFile
-						and a.ukey_site = b.ukey_site
-						and a.ymd >= b.startDate
-						and a.ymd <= b.endDate
-					where a.ymd >= @dStartDate
-						and a.ymd < dateAdd(day, 1, @dEndDate)
+		--	-- this code deletes any existing records for this import file, which assumes the files are fairly small
+		--	-- and there is not a significant overhead to replacing all the records
+		--	begin try
+		--		delete v_fact_weblogs_all
+		--			from v_fact_weblogs_all a
+		--			join #datesImported b on a.ukey_sourceFile = b.ukey_sourceFile
+		--				and a.ukey_site = b.ukey_site
+		--				and a.ymd >= b.startDate
+		--				and a.ymd <= b.endDate
+		--			where a.ymd >= @dStartDate
+		--				and a.ymd < dateAdd(day, 1, @dEndDate)
 
-				set @bRecordsDeleted = 1
-			end try
-			begin catch
-				print error_message()
-			end catch
-		end
+		--		set @bRecordsDeleted = 1
+		--	end try
+		--	begin catch
+		--		print error_message()
+		--	end catch
+		--end
 
 		if @bRecordsDeleted = 0
 		begin
