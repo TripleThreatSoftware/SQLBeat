@@ -1,6 +1,6 @@
 USE [Notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_processEventLogMessages]    Script Date: 11/16/2016 11:36:08 PM ******/
+/****** Object:  StoredProcedure [dbo].[pr_processEventLogMessages]    Script Date: 6/14/2017 2:08:32 PM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -341,6 +341,19 @@ begin
 		from #repeatingAlerts
 
 	insert into eventLog_history (notes, ukey_group) values ('Alerts staged', @nUkeyGroup)
+
+	--*********************************************************************************************************************
+	-- Check for DNS issues
+	--*********************************************************************************************************************
+
+	insert into notificationLog_stage (serverName, severity, isEventLog, ymd, subject, message)
+	select computername, 1, 1, max(timeWritten),
+		convert(varchar(20), count(*)) + ' DNS errors from SMTP since ' + convert(varchar(20), min(timeWritten), 120),
+		convert(varchar(20), count(*)) + ' DNS errors from SMTP between ' + convert(varchar(20), min(timeWritten), 120) + ' and ' + convert(varchar(20), max(timeWritten), 120) + '. Please confirm that there is not a DNS issue on this server.'
+		from eventLog (nolock)
+		where [message] like '%dns%' and [message] like '%message delivery%' and timeWritten >= dateadd(hour, -1, getDate())
+		group by computername
+		having count(*) >= 10
 
 	--*********************************************************************************************************************
 	-- Get rid of what we just processed
