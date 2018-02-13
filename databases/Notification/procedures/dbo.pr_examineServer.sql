@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 5/18/2017 2:15:14 PM ******/
+/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 2/13/2018 8:14:10 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -7,7 +7,7 @@ GO
 -- exec pr_examineServer 'sqlcluster01', 600
 -- select architecture, * from dm_servers
 -- update dm_servers set password = 'REDACTED', wmiPassword = 'REDACTED'
--- exec pr_examineServer 'web04', 600
+-- exec pr_examineServer 'web16-remote', 30
 ALTER procedure [dbo].[pr_examineServer] (@cServerName varchar(100), @nMinutesBackToLook int)
 as
 begin
@@ -270,9 +270,9 @@ begin
 	set @cVersion = (select top 1 results from #junkString)
 
 	update dm_servers with (rowlock)
-		set serverVersion = lefT(@cVersion , 50)
+		set serverVersion = @cVersion
 		where ukey = @nUkeyServer
-			and isnull(serverVersion, '') <> lefT(@cVersion , 50)
+			and isnull(serverVersion, '') <> @cVersion
 
 	if @@ROWCOUNT > 0
 	begin
@@ -1824,85 +1824,85 @@ begin
 
 		insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Setting job properties', '', @nUkeyGroup)
 
-		-- first, look at last weeks at exactly this time
-		update #runningJobs
-			set expectedRunningSeconds = b.expectedRunningSeconds,
-				maxRunningSeconds = b.maxRunningSeconds
-			from #runningJobs a
-			join (
-				select b.job_id,
-					avg(runningSeconds) as expectedRunningSeconds,
-					max(runningSeconds) as maxRunningSeconds
-					from jobHistory a (nolock)
-					join dm_serverJobs b (nolock) on a.ukey_job = b.ukey
-						and b.ukey_server = @nUkeyServer
-					join #runningJobs c on b.job_id = c.job_id
-					where a.ukey_server = @nUkeyServer
-						and (
-							a.ymd between dateAdd(week, -1, dateAdd(minute, -60, c.startTime)) and dateAdd(week, -1, dateAdd(minute, 60, c.startTime))
-							or a.ymd between dateAdd(week, -2, dateAdd(minute, -60, c.startTime)) and dateAdd(week, -2, dateAdd(minute, 60, c.startTime))
-							or a.ymd between dateAdd(week, -3, dateAdd(minute, -60, c.startTime)) and dateAdd(week, -3, dateAdd(minute, 60, c.startTime))
-							or a.ymd between dateAdd(week, -4, dateAdd(minute, -60, c.startTime)) and dateAdd(week, -4, dateAdd(minute, 60, c.startTime))
+		---- first, look at last weeks at exactly this time
+		--update #runningJobs
+		--	set expectedRunningSeconds = b.expectedRunningSeconds,
+		--		maxRunningSeconds = b.maxRunningSeconds
+		--	from #runningJobs a
+		--	join (
+		--		select b.job_id,
+		--			avg(runningSeconds) as expectedRunningSeconds,
+		--			max(runningSeconds) as maxRunningSeconds
+		--			from jobHistory a (nolock)
+		--			join dm_serverJobs b (nolock) on a.ukey_job = b.ukey
+		--				and b.ukey_server = @nUkeyServer
+		--			join #runningJobs c on b.job_id = c.job_id
+		--			where a.ukey_server = @nUkeyServer
+		--				and (
+		--					a.ymd between dateAdd(week, -1, dateAdd(minute, -60, c.startTime)) and dateAdd(week, -1, dateAdd(minute, 60, c.startTime))
+		--					or a.ymd between dateAdd(week, -2, dateAdd(minute, -60, c.startTime)) and dateAdd(week, -2, dateAdd(minute, 60, c.startTime))
+		--					or a.ymd between dateAdd(week, -3, dateAdd(minute, -60, c.startTime)) and dateAdd(week, -3, dateAdd(minute, 60, c.startTime))
+		--					or a.ymd between dateAdd(week, -4, dateAdd(minute, -60, c.startTime)) and dateAdd(week, -4, dateAdd(minute, 60, c.startTime))
 
-							or dateAdd(second, runningSeconds, a.ymd) between dateAdd(week, -1, dateAdd(minute, -60, getDate())) and dateAdd(week, -1, dateAdd(minute, 60, getDate()))
-							or dateAdd(second, runningSeconds, a.ymd) between dateAdd(week, -2, dateAdd(minute, -60, getDate())) and dateAdd(week, -2, dateAdd(minute, 60, getDate()))
-							or dateAdd(second, runningSeconds, a.ymd) between dateAdd(week, -3, dateAdd(minute, -60, getDate())) and dateAdd(week, -3, dateAdd(minute, 60, getDate()))
-							or dateAdd(second, runningSeconds, a.ymd) between dateAdd(week, -4, dateAdd(minute, -60, getDate())) and dateAdd(week, -4, dateAdd(minute, 60, getDate()))
-							)
-						-- added 2014/11/12 DJB
-						and a.isSuccess = 1
-					group by b.job_id
-				) b on a.job_id = b.job_id
+		--					or dateAdd(second, runningSeconds, a.ymd) between dateAdd(week, -1, dateAdd(minute, -60, getDate())) and dateAdd(week, -1, dateAdd(minute, 60, getDate()))
+		--					or dateAdd(second, runningSeconds, a.ymd) between dateAdd(week, -2, dateAdd(minute, -60, getDate())) and dateAdd(week, -2, dateAdd(minute, 60, getDate()))
+		--					or dateAdd(second, runningSeconds, a.ymd) between dateAdd(week, -3, dateAdd(minute, -60, getDate())) and dateAdd(week, -3, dateAdd(minute, 60, getDate()))
+		--					or dateAdd(second, runningSeconds, a.ymd) between dateAdd(week, -4, dateAdd(minute, -60, getDate())) and dateAdd(week, -4, dateAdd(minute, 60, getDate()))
+		--					)
+		--				-- added 2014/11/12 DJB
+		--				and a.isSuccess = 1
+		--			group by b.job_id
+		--		) b on a.job_id = b.job_id
 
-		-- if that didn't work, look at last few days at this time
-		update #runningJobs
-			set expectedRunningSeconds = b.expectedRunningSeconds,
-				maxRunningSeconds = b.maxRunningSeconds
-			from #runningJobs a
-			join (
-				select b.job_id,
-					avg(runningSeconds) as expectedRunningSeconds,
-					max(runningSeconds) as maxRunningSeconds
-					from jobHistory a (nolock)
-					join dm_serverJobs b (nolock) on a.ukey_job = b.ukey
-						and b.ukey_server = @nUkeyServer
-					join #runningJobs c on b.job_id = c.job_id
-					where a.ukey_server = @nUkeyServer
-						and (
-							a.ymd between dateAdd(day, -1, dateAdd(minute, -60, c.startTime)) and dateAdd(day, -1, dateAdd(minute, 60, c.startTime))
-							or a.ymd between dateAdd(day, -2, dateAdd(minute, -60, c.startTime)) and dateAdd(day, -2, dateAdd(minute, 60, c.startTime))
-							or a.ymd between dateAdd(day, -3, dateAdd(minute, -60, c.startTime)) and dateAdd(day, -3, dateAdd(minute, 60, c.startTime))
-							or a.ymd between dateAdd(day, -4, dateAdd(minute, -60, c.startTime)) and dateAdd(day, -4, dateAdd(minute, 60, c.startTime))
+		---- if that didn't work, look at last few days at this time
+		--update #runningJobs
+		--	set expectedRunningSeconds = b.expectedRunningSeconds,
+		--		maxRunningSeconds = b.maxRunningSeconds
+		--	from #runningJobs a
+		--	join (
+		--		select b.job_id,
+		--			avg(runningSeconds) as expectedRunningSeconds,
+		--			max(runningSeconds) as maxRunningSeconds
+		--			from jobHistory a (nolock)
+		--			join dm_serverJobs b (nolock) on a.ukey_job = b.ukey
+		--				and b.ukey_server = @nUkeyServer
+		--			join #runningJobs c on b.job_id = c.job_id
+		--			where a.ukey_server = @nUkeyServer
+		--				and (
+		--					a.ymd between dateAdd(day, -1, dateAdd(minute, -60, c.startTime)) and dateAdd(day, -1, dateAdd(minute, 60, c.startTime))
+		--					or a.ymd between dateAdd(day, -2, dateAdd(minute, -60, c.startTime)) and dateAdd(day, -2, dateAdd(minute, 60, c.startTime))
+		--					or a.ymd between dateAdd(day, -3, dateAdd(minute, -60, c.startTime)) and dateAdd(day, -3, dateAdd(minute, 60, c.startTime))
+		--					or a.ymd between dateAdd(day, -4, dateAdd(minute, -60, c.startTime)) and dateAdd(day, -4, dateAdd(minute, 60, c.startTime))
 
-							or dateAdd(second, runningSeconds, a.ymd) between dateAdd(day, -1, dateAdd(minute, -60, getDate())) and dateAdd(day, -1, dateAdd(minute, 60, getDate()))
-							or dateAdd(second, runningSeconds, a.ymd) between dateAdd(day, -2, dateAdd(minute, -60, getDate())) and dateAdd(day, -2, dateAdd(minute, 60, getDate()))
-							or dateAdd(second, runningSeconds, a.ymd) between dateAdd(day, -3, dateAdd(minute, -60, getDate())) and dateAdd(day, -3, dateAdd(minute, 60, getDate()))
-							or dateAdd(second, runningSeconds, a.ymd) between dateAdd(day, -4, dateAdd(minute, -60, getDate())) and dateAdd(day, -4, dateAdd(minute, 60, getDate()))
-							)
-						-- added 2014/11/12 DJB
-						and a.isSuccess = 1
-					group by b.job_id
-				) b on a.job_id = b.job_id
-			where isnull(a.expectedRunningSeconds, 0) = 0
+		--					or dateAdd(second, runningSeconds, a.ymd) between dateAdd(day, -1, dateAdd(minute, -60, getDate())) and dateAdd(day, -1, dateAdd(minute, 60, getDate()))
+		--					or dateAdd(second, runningSeconds, a.ymd) between dateAdd(day, -2, dateAdd(minute, -60, getDate())) and dateAdd(day, -2, dateAdd(minute, 60, getDate()))
+		--					or dateAdd(second, runningSeconds, a.ymd) between dateAdd(day, -3, dateAdd(minute, -60, getDate())) and dateAdd(day, -3, dateAdd(minute, 60, getDate()))
+		--					or dateAdd(second, runningSeconds, a.ymd) between dateAdd(day, -4, dateAdd(minute, -60, getDate())) and dateAdd(day, -4, dateAdd(minute, 60, getDate()))
+		--					)
+		--				-- added 2014/11/12 DJB
+		--				and a.isSuccess = 1
+		--			group by b.job_id
+		--		) b on a.job_id = b.job_id
+		--	where isnull(a.expectedRunningSeconds, 0) = 0
 
-		-- and if there's nothing else, look at the last little while
-		update #runningJobs
-			set expectedRunningSeconds = b.expectedRunningSeconds,
-				maxRunningSeconds = b.maxRunningSeconds
-			from #runningJobs a
-			join (
-				select b.job_id,
-					avg(runningSeconds) as expectedRunningSeconds,
-					max(runningSeconds) as maxRunningSeconds
-					from jobHistory a (nolock)
-					join dm_serverJobs b (nolock) on a.ukey_job = b.ukey
-						and b.ukey_server = @nUkeyServer
-					join #runningJobs c on b.job_id = c.job_id
-					where a.ukey_server = @nUkeyServer
-						and a.ymd >= dateAdd(hour, -2, c.startTime)
-					group by b.job_id
-				) b on a.job_id = b.job_id
-			where isnull(a.expectedRunningSeconds, 0) = 0
+		---- and if there's nothing else, look at the last little while
+		--update #runningJobs
+		--	set expectedRunningSeconds = b.expectedRunningSeconds,
+		--		maxRunningSeconds = b.maxRunningSeconds
+		--	from #runningJobs a
+		--	join (
+		--		select b.job_id,
+		--			avg(runningSeconds) as expectedRunningSeconds,
+		--			max(runningSeconds) as maxRunningSeconds
+		--			from jobHistory a (nolock)
+		--			join dm_serverJobs b (nolock) on a.ukey_job = b.ukey
+		--				and b.ukey_server = @nUkeyServer
+		--			join #runningJobs c on b.job_id = c.job_id
+		--			where a.ukey_server = @nUkeyServer
+		--				and a.ymd >= dateAdd(hour, -2, c.startTime)
+		--			group by b.job_id
+		--		) b on a.job_id = b.job_id
+		--	where isnull(a.expectedRunningSeconds, 0) = 0
 
 		-- last resort - any history at all
 		update #runningJobs
@@ -1917,6 +1917,7 @@ begin
 					join dm_serverJobs b (nolock) on a.ukey_job = b.ukey
 						and b.ukey_server = @nUkeyServer
 					where a.ukey_server = @nUkeyServer
+						and a.ymd >= dateadd(day, -70, getDate())
 					group by b.job_id
 				) b on a.job_id = b.job_id
 			where isnull(a.expectedRunningSeconds, 0) = 0

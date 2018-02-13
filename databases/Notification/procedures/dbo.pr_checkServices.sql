@@ -1,10 +1,11 @@
-USE [notification]
+USE [Notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_checkServices]    Script Date: 12/20/2011 11:12:59 ******/
+/****** Object:  StoredProcedure [dbo].[pr_checkServices]    Script Date: 2/13/2018 8:12:26 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 
 ALTER      procedure [dbo].[pr_checkServices] (@nUkeyGroup int)
 as
@@ -29,6 +30,7 @@ begin
 	declare @nOffHoursPriority int
 	declare @nReturnStatus int
 	declare @cThisServerName varchar(100)
+	declare @cServerVersion varchar(2000)
 
 	set @cThisServerName = (select settingValue from dm_settings where settingName = 'Current machine name')
 
@@ -60,7 +62,8 @@ begin
 			@cFriendlyName = isnull(friendlyName, serverName),
 			@cUsername = userName,
 			@cPassword = [password],
-			@nOffHoursPriority = isnull(offHoursPriority, 1)
+			@nOffHoursPriority = isnull(offHoursPriority, 1),
+			@cServerVersion = serverVersion
 			from dm_servers (nolock)
 			where serverName > @cServerName
 				and serverName is not null
@@ -181,6 +184,7 @@ begin
 					update dm_servers with (rowlock) set isSQLServiceRunning = 1 where serverName = @cServerName
 
 				if (select count(*) from #runningServices where serviceName = 'SQLSERVERAGENT' or serviceName = 'SQL Server Agent (MSSQLSERVER)') = 0
+					and not isnull(@cServerVersion, '') like '%express%'
 				begin
 					insert into #messages (subject, message, severity) values ('SQLSERVERAGENT service is offline on ' + @cFriendlyName + '.', 'SQLSERVERAGENT service is offline on ' + @cFriendlyName + ' (' + @cServerName + ')', 1)
 					update dm_servers with (rowlock) set isSQLAgentServiceRunning = 0 where serverName = @cServerName
@@ -199,6 +203,7 @@ begin
 					update dm_servers with (rowlock) set isSQLServiceRunning = 1 where serverName = @cServerName
 
 				if (select count(*) from #runningServices where serviceName = 'SQLAgent$' + substring(@cServerName, charindex('\', @cServerName) + 1, 99)) = 0
+					and not isnull(@cServerVersion, '') like '%express%'
 				begin
 					insert into #messages (subject, message, severity) values ('SQLSERVERAGENT service is offline on ' + @cFriendlyName + '.', 'SQLSERVER service is offline on ' + @cFriendlyName + ' (' + @cServerName + ')', 1)
 					update dm_servers with (rowlock) set isSQLAgentServiceRunning = 0 where serverName = @cServerName

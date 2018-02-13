@@ -1,19 +1,15 @@
+USE [Notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_monitorIISLogs]    Script Date: 2/13/2018 8:07:27 AM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 -- delete from notificationLog where subject like '%malicious user%'
 --select top 500 * from notificationLog where subject like '%malicious user%' order by ymd desc
--- select * from messageRules where username = 'Critical' or ukey_useremail = 1
--- select top 100 * from messagesSent where subject like '%malicious user%' order by ymd desc
--- update messageRules set allMessages = 1, ukey_group = null where ukey = 3
--- select * from dm_servers where ukey_group = 1
--- select ukey_group, * from dm_servers
+--select * from messageRules where doNotSendMessage = 1
 
---insert into messageRules (userName, ukey_userEmail, ukey_group, sendMessage, doNotSendMessage, severity) values ('Critical', 1, 9, 1, 0, 1)
---insert into messageRules (userName, ukey_userEmail, ukey_group, sendMessage, doNotSendMessage, severity) values ('Critical', 1, 5, 1, 0, 1)
---insert into messageRules (userName, ukey_userEmail, ukey_group, sendMessage, doNotSendMessage, severity) values ('Critical', 1, 3, 1, 0, 1)
---insert into messageRules (userName, ukey_userEmail, ukey_group, sendMessage, doNotSendMessage, severity) values ('Critical', 1, 8, 1, 0, 1)
---update messageRules set businessHours = 1, offHours = 1 where ukey in (175,176,177,178)
---9, 5, 3, 8
-
-alter procedure pr_monitorIISLogs
+ALTER procedure [dbo].[pr_monitorIISLogs]
 as
 begin
 	insert into notificationLog_stage (ymd, severity, servername, subject, message)
@@ -54,9 +50,15 @@ begin
 							and timewritten >= dateadd(hour, -12, getDate())
 					) a
 			) a
-		where charindex('%', requestURL) > 0
-			or charindex('char(', requestURL) > 0
-			or charindex('union', requestURL) > 0
-			or charindex('declare', requestURL) > 0
-			or charindex('exec', requestURL) > 0
+		where
+			(
+				charindex('%', requestURL) > 0
+				or charindex('char(', requestURL) > 0
+				or charindex('union', requestURL) > 0
+				or charindex('declare', requestURL) > 0
+				or charindex('exec', requestURL) > 0
+				)
+			and not (
+				charindex('js/%url%', requestURL) > 0
+				)
 end

@@ -1,19 +1,9 @@
-USE [Weblogs]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_mart_page]    Script Date: 8/19/2015 1:07:07 PM ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
-
-
-
 --set statistics io on
 --exec pr_mart_page '2014-07-13', '2014-07-13'
 
 -- alter table mart_page_byday add friendlyPageName varchar(100)
 
-ALTER procedure [dbo].[pr_mart_page] (@dStartDate dateTime, @dEndDate dateTime)
+CREATE procedure [dbo].[pr_mart_page] (@dStartDate dateTime, @dEndDate dateTime)
 as
 begin
 
@@ -73,6 +63,7 @@ begin
 	select
 		b.ukey, b.uriStem, convert(varchar(8000),
 		case
+			when b.uriStem in ('/cart.aspx', '/browseAccessories.aspx', '/showAssembly.aspx', '/productDetails.aspx', '/landingPage.aspx', '/findDealer.aspx') then b.uriStem
 			when b.uriStem in ('/checkout_step1.aspx', '/checkout_step2.aspx', '/checkout_thanks.aspx') then b.uriStem
 			when b.uriStem like '/products/%' or b.uriStem like '/p/%' then '/productDetails.aspx'
 			when b.uriStem like '/cars/%html' or b.uriStem like '/s/%' then '/refineCar.aspx'
@@ -89,7 +80,6 @@ begin
 			when b.uriStem = '/default.aspx' then '/'
 			when uristem like '/%.html' and charindex('_', uriStem) > 0 then '/'
 			when b.uriStem like '%.css' then 'CSS'
---			when b.uriStem like '%.php' then 'Hack Attempt'
 			else 'Other'
 			end) as friendlyPageName
 		into #pagesUsed
