@@ -1,13 +1,14 @@
-use configuration
-go
+USE [Configuration]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_monitorConfigurationFiles]    Script Date: 3/23/2018 8:29:59 AM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 
---create clustered index ix_configFileLog_ukey on configFileLog  (ukey) with fillfactor = 80
---go
---create index ix_configFileLog_servername_filename_ymd_inc_ukey on configFileLog (servername, filename, ymd) include (ukey) with fillfactor = 80
---go
 
 
-alter procedure pr_monitorConfigurationFiles
+ALTER procedure [dbo].[pr_monitorConfigurationFiles]
 as
 begin
 
@@ -180,6 +181,10 @@ begin
 		where charindex('name="', fileString) > 0
 
 	update #configFiles
+		set tagName = substring(fileString, charindex('path="', fileString) + 6, 500)
+		where charindex('path="', fileString) > 0
+
+	update #configFiles
 		set tagName = left(tagName, charindex('"', tagName) - 1)
 		where charindex('"', tagName) > 0
 
@@ -322,7 +327,7 @@ begin
 			and a.ymd = b.ymd
 		group by a.servername, a.fileName
 
---	insert into notification.dbo.notificationLog_stage (serverName, ymd, subject, message, severity)
+	insert into notification.dbo.notificationLog_stage (serverName, ymd, subject, message, severity)
 	select distinct
 		a.servername,
 		getDate(),
@@ -357,14 +362,15 @@ begin
 	--****************************************************************************************************************************************
 	-- Check for differences between servers which should match
 
---	insert into notification.dbo.notificationLog_stage (serverName, ymd, subject, message, severity)
+	insert into notification.dbo.notificationLog_stage (serverName, ymd, subject, message, severity)
 	select
 		'web02', getDate(),
-		'Tag ' + case when isnull(a.tagKey, '') <> '' then '"' + a.tagKey + case when isnull(a.tagname, '') <> '' and len(a.tagname) < 50 then ' : ' + a.tagName else '' end + '"' else '' end + ' present on Web01 and missing on Web02 at ' + convert(varchar(20), getDate(), 120),
+		'Tag ' + case when isnull(a.tagKey, '') <> '' then '"' + a.tagKey + case when isnull(a.tagname, '') <> '' and len(a.tagname) < 50 then ' : ' + a.tagName else '' end + '"' else case when isnull(a.tagname, '') <> '' and len(a.tagname) < 50 then a.tagName else '' end end + ' present on Web01 and missing on Web02 at ' + convert(varchar(20), getDate(), 120),
 		'Tag :' + a.tagPath + '<br>' +
 		'Tag Value: ' + replace(replace(a.fileString, '<', '&lt;'), '>', '&gt;') + '<br>' +
 		'Present on Web01 and missing on Web02',
 		1
+--		, a.*
 		-- select a.*
 		from #configFiles a
 		left outer join #configFiles b on replace(a.filename, 'web01', 'web02') = b.fileName
@@ -375,10 +381,16 @@ begin
 		where a.filename like '%web01%'
 			and b.ukey is null
 
---	insert into notification.dbo.notificationLog_stage (serverName, ymd, subject, message, severity)
+			and not (
+				a.fileString like '%applicationinsights%'
+				or a.fileString = '<!--'
+				or a.fileString = '-->'
+				)
+
+	insert into notification.dbo.notificationLog_stage (serverName, ymd, subject, message, severity)
 	select
 		'web01', getDate(),
-		'Tag ' + case when isnull(a.tagKey, '') <> '' then '"' + a.tagKey + '"' else '' end + ' present on Web02 and missing on Web01 at ' + convert(varchar(20), getDate(), 120),
+		'Tag ' + case when isnull(a.tagKey, '') <> '' then '"' + a.tagKey + case when isnull(a.tagname, '') <> '' and len(a.tagname) < 50 then ' : ' + a.tagName else '' end + '"' else case when isnull(a.tagname, '') <> '' and len(a.tagname) < 50 then a.tagName else '' end end + ' present on Web01 and missing on Web02 at ' + convert(varchar(20), getDate(), 120),
 		'Tag :' + a.tagPath + '<br>' +
 		'Tag Value: ' + replace(replace(a.fileString, '<', '&lt;'), '>', '&gt;') + '<br>' +
 		'Present on Web02 and missing on Web01',
@@ -392,6 +404,12 @@ begin
 
 		where a.filename like '%web02%'
 			and b.ukey is null
+
+			and not (
+				a.fileString like '%applicationinsights%'
+				or a.fileString = '<!--'
+				or a.fileString = '-->'
+				)
 
 	drop table #directories
 	drop table #configFiles
