@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[pr_partitionTableDaily]    Script Date: 6/12/2017 8:42:00 AM ******/
+/****** Object:  StoredProcedure [dbo].[pr_partitionTableDaily]    Script Date: 4/3/2018 9:06:38 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -628,29 +628,29 @@ create table [' + @cArchiveTableName + '_' + @cToday + '] (' + @cTableStructure 
 
 				insert into hist_partitionTableDaily (stepName) values ('Rows inserted for this week')
 
-				-- if that's all we needed in this database, shrink it
-				if (select count(*) from #weeks where databaseName = @cDatabaseName and ukey > @nThisUkey) = 0
-				begin
-					insert into hist_partitionTableDaily (stepName) values ('Shrinking ' + @cDatabaseName)
+--				-- if that's all we needed in this database, shrink it
+--				if (select count(*) from #weeks where databaseName = @cDatabaseName and ukey > @nThisUkey) = 0
+--				begin
+--					insert into hist_partitionTableDaily (stepName) values ('Shrinking ' + @cDatabaseName)
 
-					set @cSQLString = '
-use [' + @cDatabaseName + ']
-exec sp_spaceUsed @updateusage = ''TRUE''
-dbcc shrinkfile(2,1)'
+--					set @cSQLString = '
+--use [' + @cDatabaseName + ']
+--exec sp_spaceUsed @updateusage = ''TRUE''
+--dbcc shrinkfile(2,1)'
 
-					exec sp_executeSQL @cSQLString
-					insert into hist_partitionTableDaily (stepName) values (@cDatabaseName + ' shrunk')
-				end
+--					exec sp_executeSQL @cSQLString
+--					insert into hist_partitionTableDaily (stepName) values (@cDatabaseName + ' shrunk')
+--				end
 
 			end
 
 			drop table #weeks
 
-			set @cSQLString = 'use tempdb
-dbcc shrinkfile(2,1)'
-			exec sp_executeSQL @cSQLString
+--			set @cSQLString = 'use tempdb
+--dbcc shrinkfile(2,1)'
+--			exec sp_executeSQL @cSQLString
 
-			insert into hist_partitionTableDaily (stepName) values ('TEMPDB shrunk')
+--			insert into hist_partitionTableDaily (stepName) values ('TEMPDB shrunk')
 
 		end
 
