@@ -1,6 +1,6 @@
 USE [Notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_readWindowsEvents]    Script Date: 12/20/2016 5:54:44 PM ******/
+/****** Object:  StoredProcedure [dbo].[pr_readWindowsEvents]    Script Date: 5/24/2018 10:36:22 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
