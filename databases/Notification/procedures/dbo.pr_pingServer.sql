@@ -1,13 +1,14 @@
-USE [notification]
+USE [Notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_pingServer]    Script Date: 12/05/2011 11:11:00 ******/
+/****** Object:  StoredProcedure [dbo].[pr_pingServer]    Script Date: 6/12/2018 8:37:51 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
 
 
--- select top 100 * from pingLog order by ymd desc
+
+-- select top 100 * from pingResults order by ymd desc
 -- exec pr_pingServer 'appweb01'
 -- update pingResults set sqlPingResults = pingResults where sqlPingResults is null
 -- alter table pingResults drop column pingResults
@@ -143,6 +144,7 @@ begin
 		truncate table #sqlPing
 
 		declare @cSQLPingLocation varchar(200)
+		-- delete from dm_settings where settingName = 'SQLPing Location'
 		set @cSQLPingLocation = (select settingValue from dm_settings (nolock) where settingName = 'SQLPing Location')
 
 		if isnull(@cSQLPingLocation, '') <> ''

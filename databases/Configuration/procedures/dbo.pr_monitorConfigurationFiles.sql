@@ -1,6 +1,6 @@
 USE [Configuration]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_monitorConfigurationFiles]    Script Date: 3/23/2018 8:29:59 AM ******/
+/****** Object:  StoredProcedure [dbo].[pr_monitorConfigurationFiles]    Script Date: 6/12/2018 4:16:03 PM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -36,7 +36,7 @@ begin
 	create clustered index ix_configfiles_ukey on #configFiles (ukey) with fillfactor = 80
 
 	declare @servers table (servername varchar(100))
-	insert into @servers (servername) values ('web01')
+--	insert into @servers (servername) values ('web01')
 	insert into @servers (servername) values ('web02')
 
 	set @cServerName = ''
@@ -361,6 +361,8 @@ begin
 	--****************************************************************************************************************************************
 	--****************************************************************************************************************************************
 	-- Check for differences between servers which should match
+--4/13/2018 - susending these error by truncating  #tables
+truncate table #configFiles
 
 	insert into notification.dbo.notificationLog_stage (serverName, ymd, subject, message, severity)
 	select
