@@ -1,6 +1,6 @@
 USE [Weblogs]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_importWeblogs]    Script Date: 6/12/2017 10:21:01 AM ******/
+/****** Object:  StoredProcedure [dbo].[pr_importWeblogs]    Script Date: 6/13/2018 12:05:41 PM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -9,7 +9,7 @@ GO
 -- select top 100 * from dm_sourceFiles order by ukey desc
 -- select top 100 * from fact_weblogs_stage_hist
 --
--- exec pr_importWeblogs 40
+-- exec pr_importWeblogs 61
 -- select * from fact_weblogs_stage_hist order by ukey
 
 ALTER  procedure [dbo].[pr_importWeblogs] (@nUkeySource int)
@@ -295,14 +295,14 @@ begin
 			select 2, '19'
 			union
 			select 99 as ukey, --b.colID + 2,
-				'' + 															-- source field number here
-				char(9) + 'SQLCHAR' +											-- source data type
-				char(9) + '0' +													-- source prefix length
-				char(9) + convert(varchar(20), b.length) +						-- source data length
-				char(9) + '" "' +												-- source terminator
-				char(9) + convert(varchar(20), b.colID) +						-- server column number
-				char(9) + b.[name] +											-- server field name
-				char(9) + isnull(b.collation, 'SQL_Latin1_General_CP1_CI_AS')
+					'' + 															-- source field number here
+					char(9) + 'SQLCHAR' +											-- source data type
+					char(9) + '0' +													-- source prefix length
+					char(9) + convert(varchar(20), b.length) +						-- source data length
+					char(9) + '" "' +												-- source terminator
+					char(9) + convert(varchar(20), b.colID) +						-- server column number
+					char(9) + b.[name] collate SQL_Latin1_General_CP1_CI_AS +		-- server field name
+					char(9) + isnull(b.collation, 'SQL_Latin1_General_CP1_CI_AS') collate SQL_Latin1_General_CP1_CI_AS
 				from sysobjects a
 				join syscolumns b on a.id = b.id
 				where a.[name] = 'fact_weblogs_stage'

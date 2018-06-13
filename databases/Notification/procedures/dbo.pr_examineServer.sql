@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 2/13/2018 8:14:10 AM ******/
+/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 6/13/2018 1:55:40 PM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -7,7 +7,7 @@ GO
 -- exec pr_examineServer 'sqlcluster01', 600
 -- select architecture, * from dm_servers
 -- update dm_servers set password = 'REDACTED', wmiPassword = 'REDACTED'
--- exec pr_examineServer 'web16-remote', 30
+-- exec pr_examineServer 'web04', 600
 ALTER procedure [dbo].[pr_examineServer] (@cServerName varchar(100), @nMinutesBackToLook int)
 as
 begin
@@ -2294,28 +2294,33 @@ begin
 	-- Drive space
 	--*********************************************************************************************************************
 
-	set @cSQLString = '
-		create procedure ' + @cProcedureName + '
-		as
-		begin
-			INSERT #drives (driveLetter, freeSpace)
-			select *
-				from openQuery([' + @cServerName + '], ''SET FMTONLY OFF EXEC master.dbo.xp_fixeddrives '')
+	begin try
+		set @cSQLString = '
+			create procedure ' + @cProcedureName + '
+			as
+			begin
+				INSERT #drives (driveLetter, freeSpace)
+				select *
+					from openQuery([' + @cServerName + '], ''SET FMTONLY OFF EXEC master.dbo.xp_fixeddrives with result sets ((drive varchar(100), [mb free] int))'')
 
-		end'
+			end'
 
-	if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
-		execute('drop procedure ' + @cProcedureName)
+		if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
+			execute('drop procedure ' + @cProcedureName)
 
-	insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Drive space', @cSQLString, @nUkeyGroup)
-	exec sp_executeSQL @cSQLString
+		insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Drive space', @cSQLString, @nUkeyGroup)
+		exec sp_executeSQL @cSQLString
 
-	if @bTesting = 1
-		print @cSQLString
-	EXECUTE(@cProcedureName)
+		if @bTesting = 1
+			print @cSQLString
+		EXECUTE(@cProcedureName)
 
-	update #drives
-		set freeSpace = (freeSpace / 10) * 10
+		update #drives
+			set freeSpace = (freeSpace / 10) * 10
+	end try
+	begin catch
+		insert into notification..notificationLog_stage (serverName, subject, message, severity) values (@cServerName, 'pr_examineServer - xp_fixedDrives - error', error_message(), 2)
+	end catch
 
 	insert into drivespaceLog (serverName, driveLetter, driveSpace)
 	select @cServerName, driveLetter, freeSpace

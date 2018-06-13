@@ -1,11 +1,12 @@
-USE [audit]
+USE [Audit]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_checkObjects]    Script Date: 01/19/2012 08:49:59 ******/
+/****** Object:  StoredProcedure [dbo].[pr_checkObjects]    Script Date: 6/13/2018 1:48:09 PM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
 
+-- update notification..dm_servers set lastObjectCheck = null where servername = 'web16-remote'
 ALTER procedure [dbo].[pr_checkObjects]
 as
 begin
@@ -93,8 +94,7 @@ begin
 create procedure ' + @cProcedureName + '
 as
 begin
-	declare @cDatabaseName varchar(200)
-	declare @cSQLString nvarchar(4000)
+	declare @cDatabaseName varchar(200), @cSQLString nvarchar(4000)
 
 	SET @cSQLString = ''''
 	SET @cDatabaseName = ''''
@@ -109,6 +109,7 @@ begin
 				and (status & 128) <> 128 -- recovery
 				and (status & 512) <> 512 -- offline
 				and (status & 4096) <> 4096 -- single user
+				and (status & 1073741824) <> 1073741824 -- cleanly shutdown
 				AND name > @cDatabaseName
 
 		IF @cDatabaseName IS NULL BREAK
@@ -139,6 +140,16 @@ begin
 				where a.xtype <> ''''s''''
 					and left(a.name, 3) <> ''''dt_''''
 					and e.name <> space(0)
+					and a.name not like ''''df__sys%''''
+					and a.name not like ''''df__MS%''''
+					and a.name not like ''''syncobj%''''
+					and a.name not like ''''sys%''''
+					and a.name not like ''''msreplication%''''
+					and a.name not like ''''mspeer%''''
+					and a.name not like ''''mspub%''''
+					and a.name not like ''''mssnapshot%''''
+					and a.name not like ''''mssubscription%''''
+					and a.name not like ''''sp_ms%''''
 				order by a.name, e.name''
 
 		insert into #tableStructure (databaseName, tableName, tableID, xtype, columnName, columnLength, columnPrecision, columnType, columnXType, columnIsNullable)
@@ -154,6 +165,14 @@ begin
 				join [' + @cServerName + '].['' + @cDatabaseName + ''].dbo.syscolumns e on a.id = e.id
 					and (d.colid = e.colid or d.id is null)
 				where a.name not like ''''sys%''''
+					and a.name not like ''''df__sys%''''
+					and a.name not like ''''df__MS%''''
+					and a.name not like ''''syncobj%''''
+					and a.name not like ''''msreplication%''''
+					and a.name not like ''''mspeer%''''
+					and a.name not like ''''mspub%''''
+					and a.name not like ''''mssnapshot%''''
+					and a.name not like ''''mssubscription%''''
 					and c.name not like ''''%_dta_%''''
 				order by a.name, c.name, d.keyno, e.[name]''
 
@@ -176,31 +195,16 @@ begin
 		if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
 			execute('drop procedure ' + @cProcedureName)
 
-		exec sp_executeSQL @cSQLString
+		begin try
+			exec sp_executeSQL @cSQLString
+			EXECUTE(@cProcedureName)
+		end try
+		begin catch
+			print error_message()
+			print @cSQLString
 
-		EXECUTE(@cProcedureName)
-
-		delete from #objectText
-			where objectName  like 'df__sys%'
-				or objectName  like 'df__MS%'
-				or objectName  like 'syncobj%'
-				or objectName  like 'sys%'
-				or objectName  like 'msreplication%'
-				or objectName  like 'mspeer%'
-				or objectName  like 'mspub%'
-				or objectName  like 'mssnapshot%'
-				or objectName  like 'mssubscription%'
-				or objectName  like 'sp_ms%'
-
-		delete from #tableStructure
-			where tableName like 'df__sys%'
-				or tableName like 'df__MS%'
-				or tableName like 'syncobj%'
-				or tableName like 'msreplication%'
-				or tableName like 'mspeer%'
-				or tableName like 'mspub%'
-				or tableName like 'mssnapshot%'
-				or tableName like 'mssubscription%'
+			insert into notification..notificationLog_stage (serverName, subject, message, severity) values (@cServerName, 'pr_checkObjects error', error_message(), 2)
+		end catch
 
 		--***************************************************************************************************************************
 		--***************************************************************************************************************************

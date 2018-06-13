@@ -1,6 +1,6 @@
 USE [Audit]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_monitorFiles]    Script Date: 3/23/2018 8:24:45 AM ******/
+/****** Object:  StoredProcedure [dbo].[pr_monitorFiles]    Script Date: 6/13/2018 8:06:13 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -62,6 +62,7 @@ begin
 	print convert(varchar(20), @@rowcount) + ' new/changed objects'
 
 	delete from #filesToImport where filePath like '%\avenue\%'
+	delete from #filesToImport where filePath like '%\error%xml'
 	delete from #filesToImport where filePath like '%well-known'
 	delete from #filesToImport where filePath like '%acme-challenge'
 	delete from #filesToImport where filePath like '%wkhtmltopdf%'
