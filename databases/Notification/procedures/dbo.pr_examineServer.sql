@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 6/13/2018 1:55:40 PM ******/
+/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 6/14/2018 3:48:23 PM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -1656,6 +1656,7 @@ begin
 		-- Running jobs
 		--*********************************************************************************************************************
 
+		-- exec master.dbo.xp_sqlagent_enum_jobs 1, ''
 		set @cSQLString = '
 			create procedure ' + @cProcedureName + '
 			as
@@ -1663,7 +1664,21 @@ begin
 				insert into #runningJobs (job_id, last_run_date, last_run_time, next_run_date, next_run_time, next_run_schedule_id, requested_to_run,
 					request_source, request_source_id, running, current_step, current_retry_attempt, state)
 				select *
-					from openquery([' + @cServerName + '],''set fmtonly off; exec master.dbo.xp_sqlagent_enum_jobs 1, '''''''''') a
+					from openquery([' + @cServerName + '],''set fmtonly off; exec master.dbo.xp_sqlagent_enum_jobs 1, ''''''''  with result sets ((
+						[job id] uniqueidentifier,
+						[last run date] int,
+						[last run time] varchar(6),
+						[next run date] int,
+						[next run time] varchar(6),
+						[next run schedule id] int,
+						[requested to run] int,
+						[request source] int,
+						[request source id] varchar(100),
+						[running] int,
+						[current step] int,
+						[current retry attempt] int,
+						[state] int
+						))'') a
 
 				create index ix_tmp_runningJobs on #runningJobs (job_id) with fillfactor = 80
 
