@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 6/14/2018 3:48:23 PM ******/
+/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 6/15/2018 11:41:33 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -2586,8 +2586,8 @@ begin
 						from #fileSizes
 						group by dbName
 					) a
-				where logSize > (dataSize * 0.5)
-					and logSize > 5000
+				where logSize > dataSize * 1.5
+					and logSize > 15000
 		end
 
 		-- for MSDE, watch the 2gb file size limit
@@ -2710,7 +2710,10 @@ begin
 	-- CPU and Disk queues
 	--*********************************************************************************************************************
 
-	if replace(@cVersion, space(1), space(0)) like '%sqlserver2005%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2008%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2012%' or replace(@cVersion, space(1), space(0)) like '%sqlserver2014%'
+	if replace(@cVersion, space(1), space(0)) like '%sqlserver2005%'
+		or replace(@cVersion, space(1), space(0)) like '%sqlserver2008%'
+		or replace(@cVersion, space(1), space(0)) like '%sqlserver2012%'
+		or replace(@cVersion, space(1), space(0)) like '%sqlserver2014%'
 	begin
 		create table #cpuTasks (cpuNumber varchar(20), currentTasks int, waitingTasks int)
 
@@ -2765,7 +2768,7 @@ begin
 			'Time: ' + convert(varchar(20), getDate(), 120) + ' <br>' +
 				'CPU ' + convert(varchar(20), cpuNumber) + ' has ' + convert(varchar(20), currentTasks) + ' tasks running and ' + convert(varchar(20), waitingTasks) + ' tasks waiting.'
 			from #cpuTasks
-			where waitingTasks > 1
+			where waitingTasks > (select top 1 cpuQueueThreshold from dm_servers where ukey = @nUkeyServer)
 
 		drop table #cpuTasks
 
@@ -2852,7 +2855,7 @@ begin
 						and ymd >= dateAdd(hour, -24, getDate())
 				) b on a.databaseName = b.databaseName
 					and a.fileID = b.fileID
-			where a.msWaiting >= 1000 -- or a.numRequests >= 2
+			where a.msWaiting >= (select top 1 diskQueueMSThreshold from dm_servers where ukey = @nUkeyServer) -- or a.numRequests >= 2
 				-- sanity check
 				and a.msWaiting < 1000*60*5
 
