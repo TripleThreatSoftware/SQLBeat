@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 6/15/2018 11:41:33 AM ******/
+/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 6/18/2018 8:26:09 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -2627,6 +2627,7 @@ begin
 			databaseName varchar(500)
 			)
 
+
 		create table #serverStartDate (startDate dateTime)
 
 		declare @dServerStartDate dateTime
@@ -2637,10 +2638,10 @@ begin
 			as
 			begin
 				insert into #performanceStats
-				select * from openquery([' + @cServerName + '], ''select *, db_name(database_id) as databaseName from sys.dm_io_virtual_file_stats(null, null)'')
+				select * from openquery([' + @cServerName + '], ''select [database_id], [file_id], [sample_ms], [num_of_reads], [num_of_bytes_read], [io_stall_read_ms], [num_of_writes], [num_of_bytes_written], [io_stall_write_ms], [io_stall], [size_on_disk_bytes], [file_handle], db_name(database_id) as databaseName from sys.dm_io_virtual_file_stats(null, null)'')
 				'
 
-		if @cVersion like '%sql server 2008%' or @cVersion like '%sql server 2012%' or @cVersion like '%sql server 2014%'
+		if @cVersion like '%sql server 2008%' or @cVersion like '%sql server 2012%' or @cVersion like '%sql server 2014%' or @cVersion like '%sql server 2016%'
 		begin
 			set @cSQLString = @cSQLString + '
 				insert into #serverStartDate

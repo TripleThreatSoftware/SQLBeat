@@ -1,6 +1,6 @@
 USE [Audit]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_checkObjects]    Script Date: 6/13/2018 1:48:09 PM ******/
+/****** Object:  StoredProcedure [dbo].[pr_checkObjects]    Script Date: 6/18/2018 8:12:59 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -94,10 +94,7 @@ begin
 create procedure ' + @cProcedureName + '
 as
 begin
-	declare @cDatabaseName varchar(200), @cSQLString nvarchar(4000)
-
-	SET @cSQLString = ''''
-	SET @cDatabaseName = ''''
+	declare @cDatabaseName varchar(200) = '''', @cSQLString nvarchar(4000) = ''''
 
 	WHILE @cDatabaseName IS NOT NULL
 	BEGIN

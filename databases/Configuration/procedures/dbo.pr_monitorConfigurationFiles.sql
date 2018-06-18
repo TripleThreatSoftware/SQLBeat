@@ -1,6 +1,6 @@
 USE [Configuration]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_monitorConfigurationFiles]    Script Date: 6/12/2018 4:16:03 PM ******/
+/****** Object:  StoredProcedure [dbo].[pr_monitorConfigurationFiles]    Script Date: 6/18/2018 9:15:37 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -303,6 +303,8 @@ begin
 	--****************************************************************************************************************************************
 	--****************************************************************************************************************************************
 	-- Check for changes in config files since last check
+
+	-- delete from configFileLog where fileString like '%locked out%'
 
 	select
 		servername, fileName,
