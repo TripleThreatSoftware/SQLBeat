@@ -1,3 +1,6 @@
+USE [Configuration]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_alert_processorLoadAverage]    Script Date: 8/30/2018 4:52:25 PM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -9,16 +12,7 @@ begin
 	declare @dToday dateTime
 	set @dToday = convert(varchar(10), isnull(@dToday, dateAdd(day, -1, getDate())), 120)
 
-	declare @nUkeyRunMin int
-	declare @nUkeyRunMax int
-	declare @nProcessorCounter int
-
-	select @nUkeyRunMin = min(ukey),
-		@nUkeyRunMax = max(ukey)
-		from runs (nolock)
-		where ymd >= dateAdd(month, -1, @dToday)
-
-	set @nProcessorCounter = (select top 1 ukey from dm_counters where counterName = 'Win32_Processor')
+--	set @dToday = '2018-08-24'
 
 	create table #readings (ymd dateTime, ukey_server int, instance varchar(100), processor varchar(200), processorLoad int)
 
@@ -48,7 +42,7 @@ begin
 			'indicated an average CPU load of ' + convert(varchar(20), convert(decimal(10,2), a.avgValue)) + '%. ' +
 			'This is an increase of ' + convert(varchar(20), convert(decimal(10,2), (a.avgValue - b.processorLoad))) + ' percentage points, ' +
 			'or ' + convert(varchar(20), convert(decimal(10,2), ((a.avgValue - b.processorLoad) / b.processorLoad) * 100)) + '% net.' as message,
-		2 as severity
+		case when abs(a.avgValue - b.processorLoad) > 20 then 1 else 2 end as severity
 		from (
 			-- yesterday
 			select
@@ -68,7 +62,7 @@ begin
 		join notification.dbo.dm_servers c on a.ukey_server = c.ukey
 		join notification.dbo.dm_serverGroups d on c.ukey_group = d.ukey
 			and d.isProduction = 1
-		where convert(decimal(10,2), (a.avgValue - b.processorLoad)) >= 5
+		where convert(decimal(10,2), (a.avgValue - b.processorLoad)) >= 10
 		order by c.serverName, a.ymd --, a.processor, a.instance
 
 	drop table #readings

@@ -1,3 +1,6 @@
+USE [Configuration]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_alert_processorLoad]    Script Date: 8/30/2018 4:51:14 PM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -57,7 +60,9 @@ begin
 			from #loadSummary
 			where serverName > @cThisServer
 				 and serverName in (
-					select serverName from #loadReadings group by serverName having max(processorLoad) > 80 and avg(processorLoad) > 60
+					-- edited 20160318 DJB
+					--select serverName from #loadReadings group by serverName having max(processorLoad) > 80 and avg(processorLoad) > 60
+					select serverName from #loadReadings group by serverName having max(processorLoad) > 75 and avg(processorLoad) > 50
 					)
 		)
 	begin
@@ -69,7 +74,9 @@ begin
 			from #loadSummary
 			where serverName > @cThisServer
 				 and serverName in (
-					select serverName from #loadReadings group by serverName having max(processorLoad) > 80 and avg(processorLoad) > 60
+					-- edited 20160318 DJB
+					--select serverName from #loadReadings group by serverName having max(processorLoad) > 80 and avg(processorLoad) > 60
+					select serverName from #loadReadings group by serverName having max(processorLoad) > 75 and avg(processorLoad) > 50
 					)
 			order by serverName
 
@@ -106,11 +113,14 @@ begin
 		-- number of CPU alerts in the last hour
 		set @nNumAlerts = (select count(*) from notification..notificationLog (nolock) where serverName = @cThisServer and subject like '%cpu load%' and ymd >= dateAdd(hour, -1, getDate()))
 
-		set @nSeverity = case
-			when @nNumAlerts = 0 or DATEPART(hour, getDate()) between 0 and 7 then 2
-			when @nNumAlerts >= 1 then 1
-			else 1 end
+		--set @nSeverity = case
+		--	when @nNumAlerts = 0 or DATEPART(hour, getDate()) between 0 and 7 then 2
+		--	when @nNumAlerts >= 1 then 1
+		--	else 1 end
 
+		-- edited to only set severity 2 for web04.  20140210 DJB.
+		if @cThisServer = 'web04'
+			set @nSeverity = 2
 
 --		print @cThisSubject
 --		print @cThisMessage
