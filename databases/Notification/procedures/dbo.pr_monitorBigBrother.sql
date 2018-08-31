@@ -1,6 +1,6 @@
 USE [Notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_monitorBigBrother]    Script Date: 5/17/2017 9:02:38 AM ******/
+/****** Object:  StoredProcedure [dbo].[pr_monitorBigBrother]    Script Date: 8/31/2018 3:51:24 PM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -2116,6 +2116,9 @@ begin
 		isJobFailure, isLogShippingJobFailure, isLongRunningJob, isBlocking, isLongRunningProcess,
 		isDriveSpace, isLogSize, isEventLog, isnull(serverName, @@serverName), ymd
 		from #results
+
+	if suser_sname() = 'CORP\admin'
+		select * from #results
 
 	drop table #results
 	drop table #runningJobs
