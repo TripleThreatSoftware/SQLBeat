@@ -1,22 +1,23 @@
 USE [Audit]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_checkObjects]    Script Date: 6/18/2018 8:12:59 AM ******/
+/****** Object:  StoredProcedure [dbo].[pr_checkObjects]    Script Date: 10/8/2018 3:13:13 PM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
 
--- update notification..dm_servers set lastObjectCheck = null where servername = 'web16-remote'
+-- update notification..dm_servers set lastObjectCheck = null where servername = 'web04'
 ALTER procedure [dbo].[pr_checkObjects]
 as
 begin
 	set nocount on
 
-	declare @cSQLString nvarchar(4000)
+	declare @cSQLString nvarchar(max)
 	declare @cServerName varchar(200)
 	declare @cProcedureName varchar(500)
 	declare @nUkeyAuditRun bigint
 	declare @nUkeyServer int
+	declare @dStartTime dateTime
 
 	declare @bRunDuringMaintenanceWindow bit
 
@@ -107,6 +108,7 @@ begin
 				and (status & 512) <> 512 -- offline
 				and (status & 4096) <> 4096 -- single user
 				and (status & 1073741824) <> 1073741824 -- cleanly shutdown
+				and (status & 2163712) <> 2163712 -- logshipping/standby
 				AND name > @cDatabaseName
 
 		IF @cDatabaseName IS NULL BREAK
@@ -192,6 +194,8 @@ begin
 		if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
 			execute('drop procedure ' + @cProcedureName)
 
+		set @dStartTime = getDate()
+
 		begin try
 			exec sp_executeSQL @cSQLString
 			EXECUTE(@cProcedureName)
@@ -200,8 +204,25 @@ begin
 			print error_message()
 			print @cSQLString
 
-			insert into notification..notificationLog_stage (serverName, subject, message, severity) values (@cServerName, 'pr_checkObjects error', error_message(), 2)
+			insert into notification..notificationLog_stage (serverName, subject, message, severity) values (@cServerName, 'pr_checkObjects - error reading from ' + @cServerName, 'Runtime: ' + convert(varchar(100), dateDiff(ms, @dStartTime, getDate())) + 's<br>' + error_message(), 2)
 		end catch
+
+		-- if we got no results, try again
+		if (select count(*) from #objectText) = 0
+		begin
+
+			if exists (select * from dbo.sysobjects where [name] = @cProcedurename)
+				execute('drop procedure ' + @cProcedureName)
+
+			begin try
+				exec sp_executeSQL @cSQLString
+				EXECUTE(@cProcedureName)
+			end try
+			begin catch
+				-- skip this server
+				continue
+			end catch
+		end
 
 		--***************************************************************************************************************************
 		--***************************************************************************************************************************
