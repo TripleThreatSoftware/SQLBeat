@@ -1,6 +1,6 @@
 USE [Notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_pingServer]    Script Date: 6/12/2018 8:37:51 AM ******/
+/****** Object:  StoredProcedure [dbo].[pr_pingServer]    Script Date: 10/9/2018 1:03:02 PM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -8,8 +8,8 @@ GO
 
 
 
--- select top 100 * from pingResults order by ymd desc
--- exec pr_pingServer 'appweb01'
+-- select top 100 * from pingLog order by ymd desc
+-- exec pr_pingServer 'web04'
 -- update pingResults set sqlPingResults = pingResults where sqlPingResults is null
 -- alter table pingResults drop column pingResults
 ALTER           procedure [dbo].[pr_pingServer] (@cServerName varchar(100))
@@ -36,6 +36,8 @@ begin
 	declare @bIsServerPingable bit
 	declare @bIsSQLPingable bit
 	declare @bIsEnabled bit
+
+	declare @cTraceMessage varchar(8000)
 
 	declare @bServiceCheck bit
 
@@ -129,6 +131,24 @@ begin
 			set @bIsServerPingable = 0
 		else
 			set @bIsServerPingable = 1
+
+		-- if it's MIA, then trace to it
+		if @bIsServerPingable = 0
+		begin
+
+			truncate table #sqlPing
+
+			set @cCommandline = 'tracert ' + @cServerNamePart
+
+			insert into #sqlPing
+			exec master..xp_cmdshell @cCommandline
+
+			set @cTraceMessage = ''
+
+			select @cTraceMessage = @cTraceMessage + isnull(results, '') + char(13) --+ case when results like '%reply from%' then char(13) else '' end
+				from #sqlPing
+
+		end
 	end
 	else
 	begin
@@ -136,53 +156,52 @@ begin
 		set @bIsSQLPingable = 0
 	end
 
-	--*********************************************************************************************************
-	-- And boy howdy, if that worked, hit the SQL service
-	--*********************************************************************************************************
-	if @bIsServerPingable = 1 and @bServiceCheck = 1
-	begin
-		truncate table #sqlPing
+	----*********************************************************************************************************
+	---- And boy howdy, if that worked, hit the SQL service
+	----*********************************************************************************************************
+	--if @bIsServerPingable = 1 and @bServiceCheck = 1
+	--begin
+	--	truncate table #sqlPing
 
-		declare @cSQLPingLocation varchar(200)
-		-- delete from dm_settings where settingName = 'SQLPing Location'
-		set @cSQLPingLocation = (select settingValue from dm_settings (nolock) where settingName = 'SQLPing Location')
+	--	declare @cSQLPingLocation varchar(200)
+	--	set @cSQLPingLocation = (select settingValue from dm_settings (nolock) where settingName = 'SQLPing Location')
 
-		if isnull(@cSQLPingLocation, '') <> ''
-		begin
+	--	if isnull(@cSQLPingLocation, '') <> ''
+	--	begin
 
-			set @cCommandline = @cSQLPingLocation + '\sqlping ' + @cServerNamePart
+	--		set @cCommandline = @cSQLPingLocation + '\sqlping ' + @cServerNamePart
 
-			insert into #sqlPing
-			exec master..xp_cmdshell @cCommandline
+	--		insert into #sqlPing
+	--		exec master..xp_cmdshell @cCommandline
 
-			if (select count(*) from #sqlPing where results = 'ServerName:' + @cServerNamePart or results like 'ServerName:' + @cFriendlyName + '%') > 0
-			begin
-				set @bIsSQLPingable = 1
-				if (@cInstanceNamePart <> ''
-					and (select count(*) from #sqlPing where results = 'InstanceName:' + @cInstanceNamePart) = 0)
-					set @bIsSQLPingable = 0
-			end
-			else
-			begin
-				-- try a second time
-				truncate table #sqlPing
+	--		if (select count(*) from #sqlPing where results = 'ServerName:' + @cServerNamePart or results like 'ServerName:' + @cFriendlyName + '%') > 0
+	--		begin
+	--			set @bIsSQLPingable = 1
+	--			if (@cInstanceNamePart <> ''
+	--				and (select count(*) from #sqlPing where results = 'InstanceName:' + @cInstanceNamePart) = 0)
+	--				set @bIsSQLPingable = 0
+	--		end
+	--		else
+	--		begin
+	--			-- try a second time
+	--			truncate table #sqlPing
 
-				insert into #sqlPing
-				exec master..xp_cmdshell @cCommandline
+	--			insert into #sqlPing
+	--			exec master..xp_cmdshell @cCommandline
 
-				if (select count(*) from #sqlPing where results = 'ServerName:' + @cServerNamePart or results like 'ServerName:' + @cFriendlyName + '%') > 0
-				begin
-					set @bIsSQLPingable = 1
-					if (@cInstanceNamePart <> ''
-						and (select count(*) from #sqlPing where results = 'InstanceName:' + @cInstanceNamePart) = 0)
-						set @bIsSQLPingable = 0
-				end
-			end
+	--			if (select count(*) from #sqlPing where results = 'ServerName:' + @cServerNamePart or results like 'ServerName:' + @cFriendlyName + '%') > 0
+	--			begin
+	--				set @bIsSQLPingable = 1
+	--				if (@cInstanceNamePart <> ''
+	--					and (select count(*) from #sqlPing where results = 'InstanceName:' + @cInstanceNamePart) = 0)
+	--					set @bIsSQLPingable = 0
+	--			end
+	--		end
 
-			select @cSQLMessage = @cSQLMessage + isnull(results, '') + char(13)
-				from #sqlPing
-		end
-	end
+	--		select @cSQLMessage = @cSQLMessage + isnull(results, '') + char(13)
+	--			from #sqlPing
+	--	end
+	--end
 
 	update dm_servers with (rowlock)
 		set isServerPingable = @bIsServerPingable,
@@ -228,7 +247,7 @@ begin
 		set @cThisMessage = @cThisMessage + char(13) +
 --			'Router Results : ' + char(13) + @cRouterMessage + char(13) + char(13) +
 			'Server Results : ' + char(13) + @cServerMessage + char(13) + char(13) +
-			'SQLPing Results : ' + char(13) + @cSQLMessage
+			'TRACERT Results : ' + char(13) + @cTraceMessage
 
 		-- if it's business hours, or this is the third one we've seen in the last 90 minutes then raise the alert
 		insert into notificationLog_stage (message, severity, subject, serverName, isConnectivity) values (
