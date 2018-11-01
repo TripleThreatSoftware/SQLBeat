@@ -1,6 +1,6 @@
 USE [Notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_processEventLogMessages]    Script Date: 6/14/2017 2:08:32 PM ******/
+/****** Object:  StoredProcedure [dbo].[pr_processEventLogMessages]    Script Date: 11/1/2018 9:45:27 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -281,6 +281,10 @@ begin
 
 	update #eventLog
 		set severity = 1
+		where message like '%a parser error%' --or message like '%has not been pre-compiled%'
+
+	update #eventLog
+		set severity = 1
 		where sourceName in ('SuperMicro Health Assistant')
 
 	select computerName, logType, message, sourceName, count(*) as numAlerts, min(timeWritten) as minYMD, max(timeWritten) as maxYMD
@@ -318,7 +322,7 @@ begin
 
 	insert into notificationLog_stage (message, severity, subject, serverName, isEventLog, ymd)
 	select distinct
-		left('Type: ' + isnull(logtype, '') + char(13) + emailMessage, 2000) as message,
+		left('Type: ' + isnull(logtype, '') + char(13) + emailMessage, 8000) as message,
 		severity,
 		left(emailSubject, 300) as subject,
 		computerName,
