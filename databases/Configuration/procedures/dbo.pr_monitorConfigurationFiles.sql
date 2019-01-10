@@ -1,18 +1,18 @@
 USE [Configuration]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_monitorConfigurationFiles]    Script Date: 6/18/2018 9:15:37 AM ******/
+/****** Object:  StoredProcedure [dbo].[pr_monitorConfigurationFiles]    Script Date: 1/10/2019 1:44:13 PM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
 
 
-
+-- select top 100 * from configFileLog
 ALTER procedure [dbo].[pr_monitorConfigurationFiles]
 as
 begin
 
-	delete from configFileLog where ymd < dateadd(day, -60, getDate())
+	delete from configFileLog where ymd < dateadd(day, -180, getDate())
 
 	declare @cDirectory varchar(2000)
 	declare @cSQLString nvarchar(4000)
@@ -36,7 +36,7 @@ begin
 	create clustered index ix_configfiles_ukey on #configFiles (ukey) with fillfactor = 80
 
 	declare @servers table (servername varchar(100))
---	insert into @servers (servername) values ('web01')
+	insert into @servers (servername) values ('web01')
 	insert into @servers (servername) values ('web02')
 
 	set @cServerName = ''
