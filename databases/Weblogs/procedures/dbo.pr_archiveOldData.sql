@@ -1,6 +1,5 @@
 USE [Weblogs]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_archiveOldData]    Script Date: 3/15/2016 9:45:04 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -14,6 +13,28 @@ GO
 ALTER procedure [dbo].[pr_archiveOldData]
 as
 begin
+	if not exists (select top 1 name from weblogs_archive.dbo.sysfiles where name = 'mart_page_byday_archive')
+	begin
+		select top 0 convert(bigint, ukey) as ukey, ukey_site, ukey_uristem, requestStatus, ymd, numRequests, numRequests_human, uniques, uniques_human, pageLoadTime, pagePostTime, getTime, postTime
+			into weblogs_archive.dbo.mart_page_byday_archive
+			from mart_page_byday (nolock)
+	end
+
+	if not exists (select top 1 name from weblogs_archive.dbo.sysfiles where name = 'mart_page_byhour_archive')
+	begin
+		select top 0 convert(bigint, ukey) as ukey, ukey_site, ukey_uriStem, requestStatus, ymd, hour, numRequests, numRequests_human, uniques, uniques_human, pageLoadTime, pagePostTime, getTime, postTime
+			into weblogs_archive.dbo.mart_page_byhour_archive
+			from mart_page_byhour (nolock)
+	end
+
+	if not exists (select top 1 name from weblogs_archive.dbo.sysfiles where name = 'dm_uriStem_archive')
+	begin
+		select top 0 convert(bigint, ukey) as ukey, uriStem, dateAdded, isPage
+			into weblogs_archive.dbo.dm_uriStem_archive
+			from dm_uriStem (nolock)
+	end
+
+	--************************************************************************************************************************************************************************************************
 
 	insert into weblogs_archive.dbo.mart_page_byday_archive (ukey, ukey_site, ukey_uristem, requestStatus, ymd, numRequests, numRequests_human, uniques, uniques_human, pageLoadTime, pagePostTime, getTime, postTime)
 	select ukey, ukey_site, ukey_uristem, requestStatus, ymd, numRequests, numRequests_human, uniques, uniques_human, pageLoadTime, pagePostTime, getTime, postTime
