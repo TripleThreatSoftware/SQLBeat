@@ -1,6 +1,5 @@
 USE [Notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_monitorBigBrother]    Script Date: 8/31/2018 3:51:24 PM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -1906,7 +1905,7 @@ begin
 
 		where a.serverName is not null
 			and isnull(a.notes, '') not like '%Examination Completed%'
-			and dateDiff(minute, a.ymd, getDate()) > 10
+			and dateDiff(minute, a.ymd, getDate()) > 20
 			and e.jobName is not null
 
 --	insert into #results (subject, message, severity, serverName)

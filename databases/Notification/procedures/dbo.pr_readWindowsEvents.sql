@@ -1,6 +1,5 @@
 USE [Notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_readWindowsEvents]    Script Date: 5/24/2018 10:36:22 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -101,7 +100,7 @@ begin
 			@cServerName = serverName,
 			@cUserName = wmiUserName,
 			@cPassword = wmiPassword,
-			@dLastEventLogCheck = isnull(dateAdd(hour, -2, lastEventLogCheck), dateAdd(hour, -24, getDate()))
+			@dLastEventLogCheck = isnull(dateAdd(minute, -15, lastEventLogCheck), dateAdd(hour, -24, getDate()))
 			from dm_servers (nolock)
 			where serverName > @cServerName
 				and isServerPingable = 1
@@ -125,6 +124,9 @@ begin
 		end
 
 --		set @dLastEventLogCheck = '2010-05-26'
+
+		if datediff(hour, @dLastEventLogCheck, getDate()) > 6
+			set @dLastEventLogCheck = dateadd(hour, -6, getDate())
 
 		insert into eventLog_history (notes, serverName, ukey_group) values ('Reading events since ' + convert(varchar(20), @dLastEventLogCheck, 120), @cServerName, @nUkeyGroup)
 
