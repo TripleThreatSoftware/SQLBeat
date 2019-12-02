@@ -13,21 +13,21 @@ GO
 ALTER procedure [dbo].[pr_archiveOldData]
 as
 begin
-	if not exists (select top 1 name from weblogs_archive.dbo.sysfiles where name = 'mart_page_byday_archive')
+	if not exists (select top 1 name from weblogs_archive.dbo.sysobjects where name = 'mart_page_byday_archive')
 	begin
 		select top 0 convert(bigint, ukey) as ukey, ukey_site, ukey_uristem, requestStatus, ymd, numRequests, numRequests_human, uniques, uniques_human, pageLoadTime, pagePostTime, getTime, postTime
 			into weblogs_archive.dbo.mart_page_byday_archive
 			from mart_page_byday (nolock)
 	end
 
-	if not exists (select top 1 name from weblogs_archive.dbo.sysfiles where name = 'mart_page_byhour_archive')
+	if not exists (select top 1 name from weblogs_archive.dbo.sysobjects where name = 'mart_page_byhour_archive')
 	begin
 		select top 0 convert(bigint, ukey) as ukey, ukey_site, ukey_uriStem, requestStatus, ymd, hour, numRequests, numRequests_human, uniques, uniques_human, pageLoadTime, pagePostTime, getTime, postTime
 			into weblogs_archive.dbo.mart_page_byhour_archive
 			from mart_page_byhour (nolock)
 	end
 
-	if not exists (select top 1 name from weblogs_archive.dbo.sysfiles where name = 'dm_uriStem_archive')
+	if not exists (select top 1 name from weblogs_archive.dbo.sysobjects where name = 'dm_uriStem_archive')
 	begin
 		select top 0 convert(bigint, ukey) as ukey, uriStem, dateAdded, isPage
 			into weblogs_archive.dbo.dm_uriStem_archive
