@@ -1,6 +1,5 @@
 USE [Audit]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_alert_objectChanges]    Script Date: 2/13/2017 11:21:50 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -73,11 +72,6 @@ begin
 	--	from #droppedDatabases a
 	--	where databasename in ('AppDb_a', 'AppDb_b', 'AppDb_sourcedata_a', 'AppDb_sourcedata_b')
 
-	--if suser_sname() = 'admin'
-	--begin
-	--	select * from #currentDatabases where servername = 'web06' order by servername, databasename
-	--	select * from #droppedDatabases where servername = 'web06' order by servername, databasename
-	--end
 
 	-- dropped objects
 	-- drop table #droppedObjects
@@ -473,8 +467,14 @@ begin
 	delete
 --		select *
 		from #messages
-		where databaseName in ('AppDb_SourceData_A', 'AppDb_SourceData_B', 'AppDb_A', 'AppDb_B', 'SiteFeeds', 'AppDb_Inventory')
+		where databaseName in ('AppDb_SourceData_A', 'AppDb_SourceData_B', 'AppDb_A', 'AppDb_B', 'SiteFeeds', 'AppDb_Inventory', 'AppDb_SourceData')
 			and objectname like 'v_%'
+
+	delete
+--		select *
+		from #messages
+		where databaseName in ('AppDb_SourceData')
+			and objectname like 'trg_%'
 
 	delete
 --		select *
@@ -482,6 +482,7 @@ begin
 		where right(objectName, 1) = '2'
 			or objectName like '%old'
 			or objectName like '%archive'
+			or objectName like '%redacted'
 
 	delete
 		from #messages
