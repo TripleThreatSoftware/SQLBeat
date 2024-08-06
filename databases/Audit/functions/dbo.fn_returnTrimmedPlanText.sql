@@ -1,9 +1,8 @@
+/****** Object:  UserDefinedFunction [dbo].[fn_returnTrimmedPlanText]    Script Date: 8/6/2024 11:41:33 AM ******/
 SET ANSI_NULLS ON
 GO
-
 SET QUOTED_IDENTIFIER ON
 GO
-
 --= select dbo.fn_returnTrimmedPlanText('(@nUkeyProduct int,@cSessionID nvarchar(24),@cMachineID nvarchar(24),@nUkeyWebsite int)exec pr_returnProductImages @cSessionID, @cMachineID, @nUkeyProduct, 0')
 
 create function [dbo].[fn_returnTrimmedPlanText] (@cSQLString varchar(8000))

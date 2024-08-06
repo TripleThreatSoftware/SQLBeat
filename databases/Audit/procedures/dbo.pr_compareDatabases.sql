@@ -1,11 +1,15 @@
+/****** Object:  StoredProcedure [dbo].[pr_compareDatabases]    Script Date: 8/6/2024 11:41:33 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
-
-
-ALTER procedure [dbo].[pr_compareDatabases] (@cSourceServer varchar(500), @cSourceDatabase varchar(500),
+-- exec pr_compareDatabases 'web04', 'AppDb_lite', 'web15', 'AppDb_lite', 0, 0
+-- exec pr_compareDatabases 'web04', 'AppDb_lite', 'web17', 'AppDb_lite', 0, 0
+-- exec pr_compareDatabases 'web04', 'AppDb_master', 'web15', 'AppDb_master', 0, 0
+-- exec pr_compareDatabases 'web04', 'AppDb_master', 'web17', 'AppDb_master', 0, 0
+-- exec pr_compareDatabases 'web04', 'AppDb', 'web15', 'AppDb', 0, 0
+-- exec pr_compareDatabases 'web04', 'AppDb', 'web17', 'AppDb', 0, 0
+CREATE procedure [dbo].[pr_compareDatabases] (@cSourceServer varchar(500), @cSourceDatabase varchar(500),
 	@cTargetServer varchar(500), @cTargetDatabase varchar(500),
 	@bEmailResults bit = 0, @bTargetIsSubscriber bit = 0)
 as
@@ -152,6 +156,11 @@ begin
 			and a.databaseName = @cSourceDatabase
 			and a.isCurrent = 1
 			and b.ukey is null
+			and not a.objectName like '%tmp%'
+			and not a.objectName like '%temp%'
+			and not a.objectName like '%old%'
+			and not a.objectName like '%test%'
+			and not a.objectName like '%2'
 			and (
 				@bTargetIsSubscriber = 0
 				or (@bTargetIsSubscriber = 1 and a.xtype <> 'TR')
@@ -170,6 +179,11 @@ begin
 			and a.databaseName = @cTargetDatabase
 			and a.isCurrent = 1
 			and b.ukey is null
+			and not a.objectName like '%tmp%'
+			and not a.objectName like '%temp%'
+			and not a.objectName like '%old%'
+			and not a.objectName like '%test%'
+			and not a.objectName like '%2'
 
 	--***************************************************************************************
 	--***************************************************************************************
@@ -201,6 +215,16 @@ begin
 			and a.isCurrent = 1
 			and c.objectName is null
 			and b.objectName is null
+			and not a.objectName like '%tmp%'
+			and not a.objectName like '%temp%'
+			and not a.objectName like '%old%'
+			and not a.objectName like '%test%'
+			and not a.objectName like '%2'
+			and not (
+				@cTargetServer in ('sqldb29', 'sqldb30', 'sqldm02')
+				and @cTargetDatabase in ('AppDb', 'AppDb_Lite', 'AppDb_Mart')
+				and a.xtype = 'V'
+				)
 
 	--***************************************************************************************
 	--***************************************************************************************
@@ -263,6 +287,7 @@ begin
 			and a.isCurrent = 1
 			and b.ukey is null
 			and a.indexName not like '%mssaved%'
+			and not a.tableName like '%filetable%'
 			and c.tableName is null
 
 	insert into #results (categoryName, messageText)
@@ -280,6 +305,7 @@ begin
 			and a.isCurrent = 1
 			and b.ukey is null
 			and a.indexName not like '%mssaved%'
+			and not a.tableName like '%filetable%'
 
 	--***************************************************************************************
 	--***************************************************************************************
@@ -372,6 +398,11 @@ begin
 			and b.ukey is null
 			and a.tableName not like '%mssaved%'
 			and a.xtype = 'U'
+			and not a.tableName like '%tmp%'
+			and not a.tableName like '%temp%'
+			and not a.tableName like '%old%'
+			and not a.tableName like '%test%'
+			and not a.tableName like '%2'
 
 	insert into #results (categoryName, messageText)
 	select distinct 'Unexpected tables at Target', a.tableName
@@ -388,6 +419,11 @@ begin
 			and b.ukey is null
 			and a.tableName not like '%mssaved%'
 			and a.xtype = 'U'
+			and not a.tableName like '%tmp%'
+			and not a.tableName like '%temp%'
+			and not a.tableName like '%old%'
+			and not a.tableName like '%test%'
+			and not a.tableName like '%2'
 
 	--***************************************************************************************
 	--***************************************************************************************
@@ -397,11 +433,11 @@ begin
 		from auditData_tableStructure a (nolock)
 		left outer join auditData_tableStructure b (nolock) on a.tableName = b.tableName
 			and a.columnName = b.columnName
-			and a.columnLength = b.columnLength
-			and a.columnPrecision = b.columnPrecision
-			and a.columnType = b.columnType
-			and a.columnXType = b.columnXType
-			and a.columnIsNullable = b.columnIsNullable
+			--and a.columnLength = b.columnLength
+			--and a.columnPrecision = b.columnPrecision
+			--and a.columnType = b.columnType
+			--and a.columnXType = b.columnXType
+			--and a.columnIsNullable = b.columnIsNullable
 			and b.serverName = @cTargetServer
 			and b.databaseName = @cTargetDatabase
 			and b.isCurrent = 1
@@ -430,17 +466,22 @@ begin
 			and a.tableName not like '%mssaved%'
 			and a.xtype = 'U'
 			and c.tableName is null
+			and not a.tableName like '%tmp%'
+			and not a.tableName like '%temp%'
+			and not a.tableName like '%old%'
+			and not a.tableName like '%test%'
+			and not a.tableName like '%2'
 
 	insert into #results (categoryName, messageText)
 	select distinct 'Unexpected fields at Target', a.tableName + '.' + a.columnName
 		from auditData_tableStructure a (nolock)
 		left outer join auditData_tableStructure b (nolock) on a.tableName = b.tableName
 			and a.columnName = b.columnName
-			and a.columnLength = b.columnLength
-			and a.columnPrecision = b.columnPrecision
-			and a.columnType = b.columnType
-			and a.columnXType = b.columnXType
-			and a.columnIsNullable = b.columnIsNullable
+			--and a.columnLength = b.columnLength
+			--and a.columnPrecision = b.columnPrecision
+			--and a.columnType = b.columnType
+			--and a.columnXType = b.columnXType
+			--and a.columnIsNullable = b.columnIsNullable
 			and b.serverName = @cSourceServer
 			and b.databaseName = @cSourceDatabase
 			and b.isCurrent = 1
@@ -469,8 +510,50 @@ begin
 			and a.tableName not like '%mssaved%'
 			and a.xtype = 'U'
 			and c.tableName is null
+			and not a.tableName like '%tmp%'
+			and not a.tableName like '%temp%'
+			and not a.tableName like '%old%'
+			and not a.tableName like '%test%'
+			and not a.tableName like '%2'
 
-	if (select count(*) from #results where isAlert = 1) > 0
+	insert into #results (categoryName, messageText)
+	select distinct 'Mismatched fields at Target', a.tableName + '.' + a.columnName
+		from auditData_tableStructure a (nolock)
+		join auditData_tableStructure b (nolock) on a.tableName = b.tableName
+			and a.columnName = b.columnName
+			and b.serverName = @cSourceServer
+			and b.databaseName = @cSourceDatabase
+			and b.isCurrent = 1
+			and b.tableName not like '%mssaved%'
+			and b.xtype = 'U'
+		where a.serverName = @cTargetServer
+			and a.databaseName = @cTargetDatabase
+			and a.isCurrent = 1
+			and b.ukey is null
+			and a.tableName not like '%mssaved%'
+			and a.xtype = 'U'
+			and not a.tableName like '%tmp%'
+			and not a.tableName like '%temp%'
+			and not a.tableName like '%old%'
+			and not a.tableName like '%test%'
+			and not a.tableName like '%2'
+			and not (
+				a.columnLength = b.columnLength
+				and a.columnPrecision = b.columnPrecision
+				and a.columnType = b.columnType
+				and a.columnXType = b.columnXType
+				and a.columnIsNullable = b.columnIsNullable
+				)
+
+	delete from #results where messageText like '%pr_client%'
+	delete from #results where messageText like '%websites_static%'
+	delete from #results where messageText like '%scrapeImport%'
+	delete from #results where messageText like '%lk_website%'
+	delete from #results where charindex('DF__', messageText) > 0
+	delete from #results where charindex('PK__', messageText) > 0
+	delete from #results where charindex('UQ__', messageText) > 0
+
+	if (select count(*) from #results where isAlert = 1 and categoryName <> 'Summary') > 0
 	begin
 		if @bEmailResults = 1
 		begin
@@ -512,8 +595,9 @@ begin
 			end
 		end
 		else
-			select * from #results
+			select @cTargetServer, @cTargetDatabase, * from #results
 	end
 
 	drop table #results
 end
+GO

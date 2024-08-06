@@ -1,14 +1,12 @@
-USE [Audit]
-GO
+/****** Object:  StoredProcedure [dbo].[pr_alert_objectChanges]    Script Date: 8/6/2024 11:41:33 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
 -- select * from notification..notificationLog_stage
 -- select top 100 * from notification..notificationLog order by ukey desc
 -- exec pr_alert_objectChanges '2009-09-15 00:00:00.000', '2008-09-16 10:00:00.000'
-ALTER procedure [dbo].[pr_alert_objectChanges] (@dStartDate dateTime = null, @dEndDate dateTime = null)
+CREATE procedure [dbo].[pr_alert_objectChanges] (@dStartDate dateTime = null, @dEndDate dateTime = null)
 as
 begin
 	set nocount on
@@ -20,6 +18,23 @@ begin
 
 	set @dStartdate = isnull(@dStartDate, dateAdd(day, -7, getDate()))
 	set @dEndDate = isnull(@dEndDate, getDate())
+
+
+	if object_id('tempdb..#currentDatabases') is not null
+		drop table #currentDatabases
+
+	if object_id('tempdb..#addedDatabases') is not null
+		drop table #addedDatabases
+
+	if object_id('tempdb..#droppedDatabases') is not null
+		drop table #droppedDatabases
+
+	if object_id('tempdb..#droppedObjects') is not null
+		drop table #droppedObjects
+
+	if object_id('tempdb..#addedObjects') is not null
+		drop table #addedObjects
+
 
 	select distinct serverName, databaseName
 		into #currentDatabases
@@ -72,7 +87,6 @@ begin
 	--	from #droppedDatabases a
 	--	where databasename in ('AppDb_a', 'AppDb_b', 'AppDb_sourcedata_a', 'AppDb_sourcedata_b')
 
-
 	-- dropped objects
 	-- drop table #droppedObjects
 	select *, convert(int, null) as id_newObject
@@ -82,6 +96,8 @@ begin
 			and ymd_lastSeen >= @dStartDate
 			and ymd_lastSeen <= @dEndDate
 			and objectName not like 'df%'
+
+	alter table #droppedObjects alter column servername varchar(8000)
 
 	update #droppedObjects
 		set id_newObject = b.id
@@ -101,27 +117,30 @@ begin
 			and ymd_firstSeen <= @dEndDate
 			and objectName not like 'df%'
 
+	alter table #addedObjects alter column servername varchar(8000)
+
 	-- select top 100 * from #addedObjects
 	set identity_insert #addedObjects on
-	insert into #addedObjects (ukey, servername, databasename, objectname, id, xtype, objecttext, textchecksum, ymd_firstseen, ymd_lastseen, iscurrent, colid)
-	select a.ukey, a.servername, a.databasename, a.objectname, a.id, a.xtype, a.objecttext, a.textchecksum, a.ymd_firstseen, a.ymd_lastseen, a.iscurrent, a.colid
-		from auditData_objectText a (nolock)
-		join (
-			select distinct a.servername, a.databasename, a.objectname, a.xtype, a.id_newobject, a.colid
-				from #droppedObjects a
-				left outer join #addedObjects b on a.servername = b.servername
-					and a.databasename = b.databasename
-					and a.objectname = b.objectname
-					and a.xtype = b.xtype
-				where id_newobject is not null
-					and b.id is null
-			) b on a.servername = b.servername
-			and a.databasename = b.databasename
-			and a.objectname = b.objectname
-			and a.xtype = b.xtype
-			and a.colid = b.colid
-			and a.id = b.id_newObject
-		where a.isCurrent = 1
+
+		insert into #addedObjects (ukey, servername, databasename, objectname, id, xtype, objecttext, textchecksum, ymd_firstseen, ymd_lastseen, iscurrent, colid)
+		select a.ukey, a.servername, a.databasename, a.objectname, a.id, a.xtype, a.objecttext, a.textchecksum, a.ymd_firstseen, a.ymd_lastseen, a.iscurrent, a.colid
+			from auditData_objectText a (nolock)
+			join (
+				select distinct a.servername, a.databasename, a.objectname, a.xtype, a.id_newobject, a.colid
+					from #droppedObjects a
+					left outer join #addedObjects b on a.servername = b.servername
+						and a.databasename = b.databasename
+						and a.objectname = b.objectname
+						and a.xtype = b.xtype
+					where id_newobject is not null
+						and b.id is null
+				) b on a.servername = b.servername
+				and a.databasename = b.databasename
+				and a.objectname = b.objectname
+				and a.xtype = b.xtype
+				and a.colid = b.colid
+				and a.id = b.id_newObject
+			where a.isCurrent = 1
 
 	set identity_insert #addedObjects off
 
@@ -139,6 +158,59 @@ begin
 		from #addedObjects a
 		join #addedDatabases b on a.serverName = b.serverName
 			and a.databaseName = b.databaseName
+
+	if object_id('tempdb..#catalogovernight') is not null
+		drop table #catalogovernight
+
+	-- these changed due to overnight view migration
+	select distinct servername, databasename, objectName
+		into #catalogovernight
+		from (
+			select distinct a.servername, a.databasename, a.objectName
+				from #addedObjects a
+				join #droppedObjects b on a.serverName = b.serverName
+					and a.databaseName = b.databaseName
+					and a.objectName = b.objectName
+					and a.colID = b.colID
+					and replace(replace(a.objectText, 'AppDb_sourcedata_a', ''), 'AppDb_sourcedata_b', '') = replace(replace(a.objectText, 'AppDb_sourcedata_a', ''), 'AppDb_sourcedata_b', '')
+				where a.objectText like '%AppDb_sourcedata%'
+					and b.objectText like '%AppDb_sourcedata%'
+			union
+			select distinct a.servername, a.databasename, a.objectName
+				from #addedObjects a
+				join #droppedObjects b on a.serverName = b.serverName
+					and a.databaseName = b.databaseName
+					and a.objectName = b.objectName
+					and a.colID = b.colID
+					and replace(replace(a.objectText, 'AppDb_a', ''), 'AppDb_b', '') = replace(replace(a.objectText, 'AppDb_a', ''), 'AppDb_b', '')
+				where (a.objectText like '%AppDb_a%' or a.objectText like '%AppDb_b%')
+					and (b.objectText like '%AppDb_a%' or b.objectText like '%AppDb_b%')
+			) a
+
+	delete #addedObjects
+		from #addedObjects a
+		join #catalogovernight b on a.servername = b.servername
+			and a.databasename = b.databasename
+			and a.objectname = b.objectname
+
+	delete #droppedObjects
+		from #droppedObjects a
+		join #catalogovernight b on a.servername = b.servername
+			and a.databasename = b.databasename
+			and a.objectname = b.objectname
+
+	delete from #addedObjects where databaseName in ('AppDb_Master_Redacted')
+	delete from #droppedObjects where databaseName in ('AppDb_Master_Redacted')
+
+	delete from #addedObjects where objectName in ('v_importWebsiteData_websiteLog', 'v_blockMaliciousUserAgentExpected') or (objectName like 'v_import%' and xtype = 'V') or right(objectName, 1) in ('2', '3', '4')
+	delete from #droppedObjects where objectName in ('v_importWebsiteData_websiteLog', 'v_blockMaliciousUserAgentExpected') or (objectName like 'v_import%' and xtype = 'V') or right(objectName, 1) in ('2', '3', '4')
+
+	delete from #addedObjects where databaseName in ('AppDb_SourceData_a', 'AppDb_SourceData_b', 'AppDb_sourcedata') and objectName like 'v_import%' and xtype = 'V'
+	delete from #droppedObjects where databaseName in ('AppDb_SourceData_a', 'AppDb_SourceData_b', 'AppDb_sourcedata') and objectName like 'v_import%' and xtype = 'V'
+
+
+	if object_id('tempdb..#messages') is not null
+		drop table #messages
 
 	create table #messages (ukey int identity, serverName varchar(200), subject varchar(500), message varchar(max), ymd dateTime default getDate(), databaseName varchar(200), objectName varchar(200), objectType varchar(200))
 
@@ -167,7 +239,11 @@ begin
 		min(ymd_lastSeen), databaseName
 		from #droppedDatabases
 		where not databasename in ('AppDb_a', 'AppDb_b', 'AppDb_sourcedata_a', 'AppDb_sourcedata_b')
+			and not (databasename = 'AppDb_inventory' and servername in ('sqldb31', 'web04'))
 		group by serverName, databaseName
+
+
+
 
 
 	--select * from #addedObjects  where id = 64794688 and servername = 'etl01.office' order by serverName, databaseName, objectName
@@ -175,7 +251,45 @@ begin
 
 	--select * from auditData_objectText where id = 64794688 and servername = 'etl01.office'
 
-	declare @cServerName varchar(200)
+	-- ****************************************************************************************************************************************************
+	-- ****************************************************************************************************************************************************
+
+	if object_id('tempdb..#changedManyPlaces') is not null
+		drop table #changedManyPlaces
+
+	-- select * from #changedManyPlaces
+	select databaseName, objectName, count(distinct servername) as numServers, identity(int) as ukey
+		into #changedManyPlaces
+		from #addedObjects
+		group by databaseName, objectName
+		having count(distinct servername) >= 3
+		order by databaseName, objectName
+
+	if object_id('tempdb..#droppedManyPlaces') is not null
+		drop table #droppedManyPlaces
+
+	-- select * from #changedManyPlaces
+	select databaseName, objectName, count(distinct servername) as numServers, identity(int) as ukey
+		into #droppedManyPlaces
+		from #droppedObjects
+		group by databaseName, objectName
+		having count(distinct servername) >= 3
+		order by databaseName, objectName
+
+	-- ****************************************************************************************************************************************************
+	-- ****************************************************************************************************************************************************
+
+	if object_id('tempdb..#then') is not null
+		drop table #then
+
+	if object_id('tempdb..#now') is not null
+		drop table #now
+
+	create table #then (codeLine varchar(8000), ukey int identity, isChanged bit default 0)
+	create table #now (codeLine varchar(8000), ukey int identity, isChanged bit default 0)
+
+
+	declare @cServerName varchar(8000)
 	declare @cDatabaseName varchar(500)
 	declare @cObjectName varchar(500)
 	declare @nUkeyLine bigint
@@ -191,9 +305,67 @@ begin
 	declare @nThisLineNumber int
 	declare @nLastLineNumber int
 	declare @cCarryOver varchar(8000)
+	declare @nNumServers int
+	declare @bIsUniversalChange bit
+	declare @cServerList varchar(8000)
 
-	create table #then (codeLine varchar(8000), ukey int identity, isChanged bit default 0)
-	create table #now (codeLine varchar(8000), ukey int identity, isChanged bit default 0)
+
+	set @nThisUkey = 0
+
+	while exists (select top 1 ukey from #changedManyPlaces where ukey > @nThisUkey)
+	begin
+		select top 1
+			@nThisUkey = ukey,
+			@cDatabaseName = databaseName,
+			@cObjectName = objectName,
+			@nNumServers = numServers
+			from #changedManyPlaces
+			where ukey > @nThisUkey
+			order by ukey
+
+		print 'Processing ' + @cDatabaseName + '.' + @cObjectName
+
+		set @bIsUniversalChange = 0
+
+		-- if every line of code we have now matches
+		if not exists (select top 1 colID, textChecksum from #addedObjects where databaseName = @cDatabaseName and objectName = @cObjectName group by colID, textChecksum having count(distinct serverName) <> @nNumServers)
+		begin
+			set @bIsUniversalChange = 1
+
+			---- if every line of code we had before matches
+			--if not exists (select top 1 colID from #droppedObjects where databaseName = @cDatabaseName and objectName = @cObjectName group by colID having count(distinct serverName) <> @nNumServers)
+			--begin
+			--	-- this is a universal change to all nodes
+			--	set @bIsUniversalChange = 1
+			--end
+		end
+
+
+		if @bIsUniversalChange = 1
+		begin
+			print '     This change was universal'
+
+			-- randomly pick one server name
+			set @cServerName = (select top 1 servername from #addedObjects where databaseName = @cDatabaseName and objectName = @cObjectName)
+
+			set @cServerList = ''
+
+			select @cServerList = @cServerList + servername + ', '
+				from (select distinct servername from #addedObjects where databaseName = @cDatabaseName and objectName = @cObjectName) a
+
+			if right(@cServerList, 2) = ', '
+				set @cServerList = left(@cServerList, len(@cServerList) - 1)
+
+			-- use the randomly picked servername, and get rid of the rest
+			delete from #addedObjects where databaseName = @cDatabaseName and objectName = @cObjectName and serverName <> @cServerName
+			delete from #droppedObjects where databaseName = @cDatabaseName and objectName = @cObjectName and serverName <> @cServerName
+
+			update #addedObjects set servername = @cServerList where databaseName = @cDatabaseName and objectName = @cObjectName
+			update #droppedObjects set servername = @cServerList where databaseName = @cDatabaseName and objectName = @cObjectName
+		end
+	end
+
+	--select * from #addedObjects
 
 	set @nThisUkey = 0
 
@@ -419,7 +591,10 @@ begin
 			end
 
 			if @cMessage <> ''
+				and @dChange >= dateadd(week, -1, getDate())
+			begin
 				insert into #messages (serverName, [subject], [message], ymd, databaseName, objectName, objectType) values (@cServerName, @cSubject, @cMessage, @dChange, @cDatabaseName, @cObjectName, @cObjectType)
+			end
 		end
 
 
@@ -464,11 +639,11 @@ begin
 		where databaseName in ('AppDb_Mart')
 			and objectType in ('C', 'V')
 
-	delete
---		select *
-		from #messages
-		where databaseName in ('AppDb_SourceData_A', 'AppDb_SourceData_B', 'AppDb_A', 'AppDb_B', 'SiteFeeds', 'AppDb_Inventory', 'AppDb_SourceData')
-			and objectname like 'v_%'
+--	delete
+----		select *
+--		from #messages
+--		where databaseName in ('AppDb_SourceData_A', 'AppDb_SourceData_B', 'AppDb_A', 'AppDb_B', 'SiteFeeds', 'AppDb_Inventory', 'AppDb_SourceData')
+--			and objectname like 'v_%'
 
 	delete
 --		select *
@@ -536,3 +711,4 @@ begin
 	drop table #now
 	drop table #messages
 end
+GO

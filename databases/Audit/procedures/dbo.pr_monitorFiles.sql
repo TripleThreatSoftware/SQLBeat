@@ -1,6 +1,4 @@
-USE [Audit]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_monitorFiles]    Script Date: 6/13/2018 8:06:13 AM ******/
+/****** Object:  StoredProcedure [dbo].[pr_monitorFiles]    Script Date: 8/6/2024 11:41:33 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -8,15 +6,20 @@ GO
 -- use audit
 -- exec pr_monitorFiles '\\web01\inetpub\sites'
 -- select * from auditData_files where filePath = '\\web01\inetpub\sites\AppSecure\manage\home.aspx'
-ALTER procedure [dbo].[pr_monitorFiles] (@cPath varchar(500))
+CREATE procedure [dbo].[pr_monitorFiles] (@cPath varchar(500))
 as
 begin
+
+	create table #filesToImport (ukey int identity, dirString varchar(500), fileName varchar(500), directory varchar(500), filePath varchar(500), fileDate dateTime, fileSize bigint, dirGUID uniqueIdentifier)
+	create clustered index ix_tmp_filesToImport on #filesToImport (ukey) with fillfactor = 60
+	create index ix_filesToImport_dirGUID_ukey_dirString_filePath_inc_fileName_directory on #filesToImport (dirGUID, ukey, dirString, filePath) include (fileName, directory) with fillfactor = 60
+
 
 	-- create table auditData_files (ukey int identity, directory varchar(2000), filePath varchar(2000), fileDate dateTime, fileSize int, fileName varchar(500), scanDate dateTime)
 	-- truncate table auditData_files
 
-	create table #filesToImport (ukey int identity, dirString varchar(500), fileName varchar(500), directory varchar(500), filePath varchar(500), fileDate dateTime, fileSize bigint, dirGUID uniqueIdentifier)
-	create clustered index ix_tmp_filesToImport_ukey on #filesToImport (ukey) with fillfactor = 60
+	--create table #filesToImport (ukey int identity, dirString varchar(500), fileName varchar(500), directory varchar(500), filePath varchar(500), fileDate dateTime, fileSize bigint, dirGUID uniqueIdentifier)
+	--create clustered index ix_tmp_filesToImport_ukey on #filesToImport (ukey) with fillfactor = 60
 	declare @dScanDate dateTime
 	set @dScanDate = getDate()
 
@@ -49,6 +52,15 @@ begin
 			and c.scanDate = a.lastScan
 		where a.lastScan is not null
 
+	update auditData_files
+		set scanDate = @dScanDate
+		from auditData_files a
+		join #filesToImport b on isnull(a.directory, '') = isnull(b.directory, '')
+			and isnull(a.filePath, '') = isnull(b.filePath, '')
+			and isnull(a.fileName, '') = isnull(b.fileName, '')
+
+	print convert(varchar(20), @@rowcount) + ' unchanged objects'
+
 	-- add new/changed files
 	insert into auditData_files (directory, filePath, fileName, fileDate, fileSize, scanDate)
 	select distinct a.directory, a.filePath, a.fileName, a.fileDate, a.fileSize, @dScanDate
@@ -66,6 +78,7 @@ begin
 	delete from #filesToImport where filePath like '%well-known'
 	delete from #filesToImport where filePath like '%acme-challenge'
 	delete from #filesToImport where filePath like '%wkhtmltopdf%'
+	delete from #filesToImport where filePath like '%acme-challenge%'
 	delete from #filesToImport where isnull(lastSize, 0) = 0 and isnull(fileSize, 0) = 0 -- directories
 
 	declare @cTo varchar(100)
@@ -78,8 +91,7 @@ begin
 	--declare @dScanDate dateTime
 	--set @dScanDate = getDate()
 
-	set @cTo = 'alerts@triplethreatsoftware.com'
-	--set @cTo = 'alerts@example.com'
+	set @cTo = 'alerts@example.com'
 	set @cFrom = 'alerts@example.com'
 
 	select *
@@ -97,7 +109,9 @@ begin
 	if @nRowCount = 0
 		print 'No files changed'
 
-	if @nRowCount > 25
+	-- Disabling alert emails for now
+
+	if @nRowCount > 10
 	begin
 		set @cSubject = convert(Varchar(20), @nRowCount) + ' files changed in ' + isnull(@cPath, 'N/A')
 		set @cBody = ''
@@ -140,3 +154,4 @@ begin
 	--select * from auditData_files where scanDate = @dScanDate
 	--select top 100 * from auditData_Files order by fileDate desc
 end
+GO

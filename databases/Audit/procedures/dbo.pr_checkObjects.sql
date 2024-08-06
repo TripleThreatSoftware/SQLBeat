@@ -1,13 +1,10 @@
-USE [Audit]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_checkObjects]    Script Date: 10/8/2018 3:13:13 PM ******/
+/****** Object:  StoredProcedure [dbo].[pr_checkObjects]    Script Date: 8/6/2024 11:41:33 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
--- update notification..dm_servers set lastObjectCheck = null where servername = 'web04'
-ALTER procedure [dbo].[pr_checkObjects]
+-- update notification..dm_servers set lastObjectCheck = null where servername = 'web16-remote'
+CREATE procedure [dbo].[pr_checkObjects]
 as
 begin
 	set nocount on
@@ -36,6 +33,8 @@ begin
 		indexID bigint, indexName varchar(200), indexXType varchar(2), columnName varchar(200),
 		keyNumber int, isChanged bit default 0, ukey int identity)
 	create table #foreignKeys (databaseName varchar(500), id bigint, keyName varchar(200), isChanged bit default 0, ukey int identity)
+
+	create table #dbnotready (dbname varchar(500))
 
 	create index ix_tmp_tableStructure on #tableStructure (databaseName, tableName) with fillfactor = 100
 	create index ix_tmp_objectText on #objectText (databaseName, objectName, id) with fillfactor = 100
@@ -67,6 +66,7 @@ begin
 		truncate table #tableStructure
 		truncate table #indexes
 		truncate table #foreignKeys
+		truncate table #dbnotready
 
 		select top 1
 			@cServerName = serverName,
@@ -87,6 +87,17 @@ begin
 						)
 					)
 			order by servername
+
+
+
+		set @cSQLString = 'select name from [' + @cServerName + '].master.sys.databases where not state_desc = ''online'''
+
+		insert into #dbnotready
+		exec master..sp_executeSQL @cSQLString
+
+		-- if this server is restoring something, now is not a good time
+		if @@ROWCOUNT > 0
+			continue
 
 		print 'Processing ' + @cServerName
 		set @cProcedureName = 'pr_auditTemp_' + replace(replace(replace(@cServerName, '\', ''), '.', ''), '-', '')
@@ -460,3 +471,4 @@ begin
 	drop table #indexes
 	drop table #foreignKeys
 end
+GO

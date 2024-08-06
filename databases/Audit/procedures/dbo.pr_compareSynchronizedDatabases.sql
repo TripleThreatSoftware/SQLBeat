@@ -1,11 +1,13 @@
+/****** Object:  StoredProcedure [dbo].[pr_compareSynchronizedDatabases]    Script Date: 8/6/2024 11:41:33 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
-ALTER procedure [dbo].[pr_compareSynchronizedDatabases]
+CREATE procedure [dbo].[pr_compareSynchronizedDatabases]
 as
 begin
+
+
 	declare @cSourceServer varchar(500)
 	declare @cTargetServer varchar(500)
 
@@ -33,3 +35,4 @@ begin
 		update synchronizedDatabases set lastCheck = getDate() where ukey = @nUkey
 	end
 end
+GO

@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[pr_monitorPermissions]    Script Date: 05/07/2009 10:30:18 ******/
+/****** Object:  StoredProcedure [dbo].[pr_monitorPermissions]    Script Date: 8/6/2024 11:41:33 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -12,7 +12,7 @@ as
 begin
 	declare @cServerName varchar(200)
 	declare @cDatabaseName varchar(200)
-	declare @cSQLString nvarchar(4000)
+	declare @cSQLString nvarchar(max)
 	declare @cMessage varchar(8000)
 	declare @cGroupName varchar(100)
 	declare @nUkeyServer int
@@ -80,7 +80,20 @@ begin
 		CREATE TABLE [auditData_sysprotects] (ukey int identity, ukey_server int, databaseName varchar(200), ukey_auditRun int,
 			[id] [int], [uid] [smallint], [action] [tinyint], [protecttype] [tinyint], [columns] [varbinary] (4000), [grantor] [smallint])
 	end
-
+		if not exists (select top 1 [name] from sysobjects where xtype = 'U' and [name] = 'auditData_DBUsersAndRoles')
+	begin
+		  CREATE TABLE [dbo].[auditData_DBUsersAndRoles](ukey int identity, ukey_server int, databaseName varchar(200), ukey_auditRun int,
+			 [DBUser] [varchar](255) NULL,[DBUserType] [varchar](255) NULL,[DBUserRole] [varchar](255) NULL,[DBUserRoleType] [varchar](255) NULL)
+	end
+	if not exists (select top 1 [name] from sysobjects where xtype = 'U' and [name] = 'auditData_sysLogins')
+	begin
+		  CREATE TABLE [dbo].[auditData_sysLogins](ukey int identity, ukey_server int, databaseName varchar(200), ukey_auditRun int,
+			  [sid] [varbinary](85) NULL,	[status] [smallint] NULL,	[createdate] [datetime] NULL,	[updatedate] [datetime] NULL,		[accdate] [datetime] NULL,
+			  [totcpu] [int] NULL,	[totio] [int] NULL,	[spacelimit] [int] NULL,	[timelimit] [int] NULL,	[resultlimit] [int] NULL,	[name] [sysname] NOT NULL,
+			  [dbname] [sysname] NULL,	[password] [nvarchar](128) NULL,	[language] [sysname] NULL,	[denylogin] [int] NULL,	[hasaccess] [int] NULL,	[isntname] [int] NULL,
+			  [isntgroup] [int] NULL,	[isntuser] [int] NULL,	[sysadmin] [int] NULL,	[securityadmin] [int] NULL,	[serveradmin] [int] NULL,	[setupadmin] [int] NULL,
+			  [processadmin] [int] NULL,	[diskadmin] [int] NULL,	[dbcreator] [int] NULL,	[bulkadmin] [int] NULL,	[loginname] [nvarchar](128) NULL)
+	end
 	--********************************************************************************************************************************************
 	-- parse each server, if we're not just comparing past runs
 	--********************************************************************************************************************************************
@@ -128,11 +141,13 @@ begin
 								and (status & 128) <> 128 -- recovery
 								and (status & 512) <> 512 -- offline
 								and (status & 4096) <> 4096 -- single user
+								and ([name] like ''''AppDb%'''')
+								or [name] in (''''synchronize'''',''''Sitefeeds'''')
 					'')
 
 
 			declare @cThisDatabase varchar(200)
-			declare @cSQLString nvarchar(4000)
+			declare @cSQLString nvarchar(max)
 			declare @cServerName varchar(100)
 			set @cThisDatabase = ''''
 			set @cServerName = ''' + @cServerName + '''
@@ -208,8 +223,48 @@ begin
 				exec pr_securityauditData_temp2
 				drop procedure [dbo].[pr_securityauditData_temp2]
 
+				set @cSQLString = ''
+					create procedure pr_securityauditData_temp2
+					as
+					begin
+						insert into auditData_DBUsersAndRoles (ukey_server, databaseName, ukey_auditRun,  DBUser, DBUserType, DBUserRole, DBUserRoleType)
+						select ' + convert(varchar(20), @nUkeyServer) + ' as ukey_server, '' + char(39) + @cThisDatabase + char(39) + '' as databaseName,
+							' + convert(varchar(20), @nUkeyAuditRun) + ' as ukey_auditRun,
+							 m.name as DBuser,m.type_desc as DBUsertype,
+							 r.name as DBuserRole,m.type_desc as DBUserRoletype
+							 FROM [' + @cServerName + '].['' + @cThisDatabase + ''].sys.database_role_members mr
+							 JOIN [' + @cServerName + '].['' + @cThisDatabase + ''].sys.database_principals M on m.principal_id=mr.member_principal_id
+							 JOIN [' + @cServerName + '].['' + @cThisDatabase + ''].sys.database_principals r on r.principal_id=mr.role_principal_id
+
+					end''
+				--print @cSQLString
+				exec sp_executeSQL @cSQLString
+				exec pr_securityauditData_temp2
+				drop procedure [dbo].[pr_securityauditData_temp2]
+
+				set @cSQLString = ''
+					create procedure pr_securityauditData_temp2
+					as
+					begin
+						insert into [dbo].[auditData_sysLogins] ( ukey_server, databaseName, ukey_auditRun, sid, status, createdate,
+						updatedate, accdate, totcpu, totio, spacelimit, timelimit, resultlimit, name, dbname, password, language,
+						denylogin, hasaccess, isntname, isntgroup, isntuser, sysadmin, securityadmin, serveradmin, setupadmin,
+						processadmin, diskadmin, dbcreator, bulkadmin, loginname)
+						select ' + convert(varchar(20), @nUkeyServer) + ' as ukey_server, '' + char(39) + @cThisDatabase + char(39) + '' as databaseName,
+							' + convert(varchar(20), @nUkeyAuditRun) + ' as ukey_auditRun, sid, status, createdate,
+						updatedate, accdate, totcpu, totio, spacelimit, timelimit, resultlimit, name, dbname, password, language,
+						denylogin, hasaccess, isntname, isntgroup, isntuser, sysadmin, securityadmin, serveradmin, setupadmin,
+						processadmin, diskadmin, dbcreator, bulkadmin, loginname
+							 FROM [' + @cServerName + '].['' + @cThisDatabase + ''].sys.syslogins
+
+					end''
+
+				exec sp_executeSQL @cSQLString
+				exec pr_securityauditData_temp2
+				drop procedure [dbo].[pr_securityauditData_temp2]
 			end
 		end'
+		print @cSQLString
 			exec sp_executeSQL @cSQLString
 
 			exec pr_securityauditData_temp
@@ -246,7 +301,7 @@ begin
 		--	print @cCommand
 
 			insert into #results (outputString)
-			exec master..xp_cmdshell @cCommand
+			exec master.dbo.xp_cmdshell @cCommand
 
 			delete from #results where ukey <= 8
 			delete from #results where ukey >= (select max(ukey) - 2 from #results)
@@ -365,12 +420,7 @@ begin
 
 		if @cMessage <> ''
 		begin
---			print @cThisSubject
---			print @cMessage
-
---			exec notification.dbo.pr_sendMessage '', 'cole@sqlbeat.com', @cThisSubject, @cMessage
-
-			insert into notification..notificationLog_stage (serverName, severity, subject, message) values (@cServerName, 2, @cThisSubject, @cMessage)
+			insert into notification.dbo.notificationLog_stage (serverName, severity, subject, message) values (@cServerName, 3, @cThisSubject, @cMessage)
 
 		end
 
@@ -450,9 +500,9 @@ begin
 
 --			print convert(varchar(20), @@rowcount) + ' records for ' + @cServerName + ', run ' + convert(varchar(20), @nUkeyAuditRun)
 
-			insert into notification..notificationLog_stage (serverName, severity, subject, message)
+			insert into notification.dbo.notificationLog_stage (serverName, severity, subject, message)
 			select
-				@cServerName, 2,
+				@cServerName, 3,
 				'Rights have changed for ' +
 					case when isnull(a.username, '') <> '' then a.userName
 						when isnull(a.groupName, '') <> '' then a.groupName
@@ -515,9 +565,9 @@ begin
 				set @bChangesFound = 1
 
 			-- rights taken away
-			insert into notification..notificationLog_stage (serverName, severity, subject, message)
+			insert into notification.dbo.notificationLog_stage (serverName, severity, subject, message)
 			select
-				@cServerName, 2,
+				@cServerName, 3,
 				'Rights have changed for ' +
 					case when isnull(a.username, '') <> '' then a.userName
 						when isnull(a.groupName, '') <> '' then a.groupName
@@ -527,8 +577,8 @@ begin
 					'Server: ' + a.serverName + char(13) +
 					'Database: ' + a.databaseName + char(13) +
 					'Role: ' + case when a.isRole = 'X' then 'Yes' else 'No' end + char(13) +
-					'NT Group: ' + case when a.isNTGroup = 'X' then 'Yes' else 'No' end + char(13) +
-					'NT User: ' + case when a.isNTUser = 'X' then 'Yes' else 'No' end + char(13) +
+					'NT Group: ' + case when a.isNTGroup = 1 then 'Yes' else 'No' end + char(13) +
+					'NT User: ' + case when a.isNTUser = 1 then 'Yes' else 'No' end + char(13) +
 					'Select: ' + case when isnull(b.canSelect, '') = 'X' then 'Yes' else 'No' end + '/' + case when isnull(a.canSelect, '') = 'X' then 'Yes' else 'No' end + char(13) +
 					'Insert: ' + case when isnull(b.canInsert, '') = 'X' then 'Yes' else 'No' end + '/' + case when isnull(a.canInsert, '') = 'X' then 'Yes' else 'No' end + char(13) +
 					'Delete: ' + case when isnull(b.canDelete, '') = 'X' then 'Yes' else 'No' end + '/' + case when isnull(a.canDelete, '') = 'X' then 'Yes' else 'No' end + char(13) +

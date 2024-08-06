@@ -1,9 +1,7 @@
-/****** Object:  Table [dbo].[auditData_foreignKeys]    Script Date: 05/07/2009 10:30:13 ******/
+/****** Object:  Table [dbo].[auditData_foreignKeys]    Script Date: 8/6/2024 11:41:33 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
-GO
-SET ANSI_PADDING ON
 GO
 CREATE TABLE [dbo].[auditData_foreignKeys](
 	[ukey] [int] IDENTITY(1,1) NOT NULL,
@@ -16,22 +14,20 @@ CREATE TABLE [dbo].[auditData_foreignKeys](
 	[isCurrent] [bit] NULL
 ) ON [PRIMARY]
 GO
-SET ANSI_PADDING OFF
+SET ANSI_PADDING ON
 GO
+/****** Object:  Index [ix_foreignKeys_servername_databasename_keyname]    Script Date: 8/6/2024 11:41:33 AM ******/
 CREATE CLUSTERED INDEX [ix_foreignKeys_servername_databasename_keyname] ON [dbo].[auditData_foreignKeys]
 (
 	[serverName] ASC,
 	[databaseName] ASC,
 	[keyName] ASC,
 	[ukey] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 70) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, FILLFACTOR = 70, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
 GO
-/****** Object:  Default [DF__auditData__ymd_f__335592AB]    Script Date: 05/07/2009 10:30:13 ******/
 ALTER TABLE [dbo].[auditData_foreignKeys] ADD  DEFAULT (getdate()) FOR [ymd_firstSeen]
 GO
-/****** Object:  Default [DF__auditData__ymd_l__3449B6E4]    Script Date: 05/07/2009 10:30:13 ******/
 ALTER TABLE [dbo].[auditData_foreignKeys] ADD  DEFAULT (getdate()) FOR [ymd_lastSeen]
 GO
-/****** Object:  Default [DF__auditData__isCur__353DDB1D]    Script Date: 05/07/2009 10:30:13 ******/
 ALTER TABLE [dbo].[auditData_foreignKeys] ADD  DEFAULT ((1)) FOR [isCurrent]
 GO

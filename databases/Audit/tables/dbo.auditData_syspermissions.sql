@@ -1,9 +1,7 @@
-/****** Object:  Table [dbo].[auditData_syspermissions]    Script Date: 05/07/2009 10:30:13 ******/
+/****** Object:  Table [dbo].[auditData_syspermissions]    Script Date: 8/6/2024 11:41:33 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
-GO
-SET ANSI_PADDING ON
 GO
 CREATE TABLE [dbo].[auditData_syspermissions](
 	[ukey] [int] IDENTITY(1,1) NOT NULL,
@@ -23,13 +21,14 @@ CREATE TABLE [dbo].[auditData_syspermissions](
 	[refmod] [varbinary](4000) NULL
 ) ON [PRIMARY]
 GO
-SET ANSI_PADDING OFF
+SET ANSI_PADDING ON
 GO
+/****** Object:  Index [ix_auditData_sysPermissions_auditRun_server_databaseName_id]    Script Date: 8/6/2024 11:41:33 AM ******/
 CREATE CLUSTERED INDEX [ix_auditData_sysPermissions_auditRun_server_databaseName_id] ON [dbo].[auditData_syspermissions]
 (
 	[ukey_auditRun] ASC,
 	[ukey_server] ASC,
 	[databaseName] ASC,
 	[id] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 80) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, FILLFACTOR = 80, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
 GO

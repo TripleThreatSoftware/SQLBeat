@@ -1,12 +1,10 @@
-USE [Audit]
-GO
+/****** Object:  StoredProcedure [dbo].[pr_activeDirectory_scanUsers]    Script Date: 8/6/2024 11:41:33 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
 -- select top 100 * from auditData_activeDirectory order by ukey desc
-ALTER procedure [dbo].[pr_activeDirectory_scanUsers]
+CREATE procedure [dbo].[pr_activeDirectory_scanUsers]
 as
 
 begin
@@ -22,10 +20,25 @@ begin
 	create clustered index ix_tmp_results_ukey on #results (ukey) with fillfactor = 80
 
 	declare @cSQLString nvarchar(4000)
-	set @cSQLString = 'powershell -file c:\shared\ad_users_last60.ps1 -cServerName 10.1.10.199 -cUserName "CORP\MonitoringService" -cPassword "REDACTED"'
+
+	-- ************************************************************************************************************************************************************************
+	-- ************************************************************************************************************************************************************************
+
+	-- insert results for USERS
+	set @cSQLString = 'powershell -file c:\shared\ad_users_last60.ps1 -cServerName 10.10.10.201 -cUserName "CORP\MonitoringService" -cPassword "REDACTED"'
 
 	insert into #results (wideString)
 	exec master..xp_cmdshell @cSQLString
+
+	-- insert results for COMPUTERS
+	set @cSQLString = 'powershell -file c:\shared\ad_computers_last60.ps1 -cServerName 10.10.10.201 -cUserName "CORP\MonitoringService" -cPassword "REDACTED"'
+
+	insert into #results (wideString)
+	exec master..xp_cmdshell @cSQLString
+
+	-- ************************************************************************************************************************************************************************
+	-- ************************************************************************************************************************************************************************
+	-- normal processing
 
 	update #results
 		set keyName = left(wideString, charindex(' ', wideString))
@@ -122,14 +135,24 @@ begin
 		where a.objectName  is null
 
 --	select * from #results where objectName like '%getzler%' order by ukey
+--	select * from #results where objectName like '%mcswain%' order by ukey
+--	select * from #results where objectName like '%sqldb35%' order by ukey
+
+	-- ************************************************************************************************************************************************************************
+	-- ************************************************************************************************************************************************************************
+	-- ************************************************************************************************************************************************************************
+	-- ************************************************************************************************************************************************************************
+
+	-- Update the AUDIT tables with the results of our scans
 
 	update auditData_activeDirectory
 		set isCurrent = 0
+		-- select *
 		from auditData_activeDirectory a
 		left outer join #results b on a.keyName = b.keyName
 			and a.keyValue = b.keyValue
 			and a.objectName = b.objectName
-		where a.servername = '10.1.10.199'
+		where a.servername = '10.10.10.201'
 			and a.isCurrent = 1
 			and b.ukey is null
 
@@ -139,36 +162,56 @@ begin
 		join #results b on a.keyName = b.keyName
 			and a.keyValue = b.keyValue
 			and a.objectName = b.objectName
-		where a.servername = '10.1.10.199'
+		where a.servername = '10.10.10.201'
 			and a.isCurrent = 1
 
---select * from auditData_activeDirectory where objectName = 'corp.example.com/Users/Cayla Howard' and isCurrent = 1
---select * from #results where objectName = 'corp.example.com/Users/Cayla Howard'
+	-- get rid of any doubles in the existing data
+	delete auditData_activeDirectory
+		-- select *
+		from auditData_activeDirectory a
+		join (select serverName, objectname, keyname, max(ukey) as maxUkey from auditData_activeDirectory where isCurrent = 1 group by objectname, keyname, servername having count(*) > 1) b on a.objectName = b.objectName
+			and a.keyName = b.keyName
+			and a.serverName = b.serverName
+		where a.ukey <> b.maxUkey
+			and a.isCurrent = 1
 
-	insert into notification..notificationLog_stage (ymd, subject, message, severity, serverName)
-	select getDate(),
-		'AD Change: ' + a.objectName + ' : ' + a.keyName + ' : ' + a.keyValue,
-		'AD Change: ' + a.objectName + ' : ' + a.keyName + ' : ' + a.keyValue + '<br>' +
-			isnull(b.keyName, 'N/A') + ' : ' + isnull(b.keyValue, 'N/A'),
-		2,
-		'10.1.10.199'
+	delete #results
 		-- select *
 		from #results a
-		left outer join auditData_activeDirectory b on b.serverName = '10.1.10.199'
+		join (select objectname, keyname, max(ukey) as maxUkey from #results group by objectname, keyname having count(*) > 1) b on a.objectName = b.objectName
 			and a.keyName = b.keyName
-			and a.objectName = b.objectName
-			and b.isCurrent = 1
+		where a.ukey <> b.maxUkey
 
-		where (b.ukey is null or a.keyValue <> b.keyValue)
-			and a.keyName is not null
-			and a.keyValue is not null
-			and a.objectName is not null
-			and a.keyName in ('AccountLockoutTime', 'isDeleted', 'LockedOut', 'MemberOf', 'PasswordExpired', 'PasswordLastSet', 'Enabled', 'CanonicalName')
+--delete from auditData_activeDirectory where ukey = 49785
+--select * from auditData_activeDirectory where objectName = 'corp.example.com/DisabledUsers/Example User' and isCurrent = 1 order by keyname
+--select * from #results where objectName like '%corp.example.com/DisabledUsers/Example User%' order by ukey
+--select * from #results where widestring like '%mcswain%'
+
+	--insert into notification..notificationLog_stage (ymd, subject, message, severity, serverName)
+	--select getDate(),
+	--	left('AD Change: ' + a.objectName + ' : ' + a.keyName + ' : ' + a.keyValue, 300),
+	--	left('AD Change: ' + a.objectName + ' : ' + a.keyName + ' : ' + a.keyValue + '<br>' +
+	--		isnull(b.keyName, 'N/A') + ' : ' + isnull(b.keyValue, 'N/A'), 8000),
+	--	2,
+	--	'10.10.10.201'
+	--	-- select *
+	--	from #results a
+	--	left outer join auditData_activeDirectory b on b.serverName = '10.10.10.201'
+	--		and a.keyName = b.keyName
+	--		and a.objectName = b.objectName
+	--		and b.isCurrent = 1
+
+	--	where (b.ukey is null or a.keyValue <> b.keyValue)
+	--		and a.keyName is not null
+	--		and a.keyValue is not null
+	--		and a.objectName is not null
+	--		and a.keyName in ('AccountLockoutTime', 'LockedOut', 'PasswordExpired',
+	--			'DistinguishedName', 'OperatingSystem', 'OperatingSystemServicePack', 'OperatingSystemHotfix', 'OperatingSystemVersion', 'ObjectCategory', 'PrimaryGroup') -- 'PasswordLastSet', 'Enabled', 'CanonicalName', 'isDeleted', 'MemberOf', 'IPv4Address',
 
 	insert into auditData_activeDirectory (serverName, keyName, keyValue, objectName, isCurrent, ymd_lastSeen)
-	select '10.1.10.199', a.keyName, a.keyValue, a.objectName, 1, getDate()
+	select '10.10.10.201', a.keyName, a.keyValue, a.objectName, 1, getDate()
 		from #results a
-		left outer join auditData_activeDirectory b on b.serverName = '10.1.10.199'
+		left outer join auditData_activeDirectory b on b.serverName = '10.10.10.201'
 			and a.keyName = b.keyName
 			and a.keyValue = b.keyValue
 			and a.objectName = b.objectName
@@ -182,4 +225,7 @@ begin
 	--		and a.keyName not in ('lastLogon', 'logonCount', 'badPasswordTime', 'LastBadPasswordAttempt', 'LastLogonDate', 'lastLogonTimestamp', 'Modified', 'whenChanged', 'modifyTimeStamp', 'uSNChanged', 'pwdLastSet', 'BadLogonCount', 'badPwdCount', 'userAccountControl')
 		order by objectName, keyName, keyValue
 
+	drop table #results
+
 end
+GO

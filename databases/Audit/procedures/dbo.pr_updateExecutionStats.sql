@@ -1,4 +1,9 @@
-ALTER procedure [dbo].[pr_updateExecutionStats]
+/****** Object:  StoredProcedure [dbo].[pr_updateExecutionStats]    Script Date: 8/6/2024 11:41:33 AM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE procedure [dbo].[pr_updateExecutionStats]
 as
 begin
 	declare @cSQLString nvarchar(4000)
@@ -121,7 +126,7 @@ end'
 		into executionStats
 		from #executionStats
 		where databaseName not in ('master', 'model', 'msdb', 'tempdb')
-			and objectID is not null
+--			and objectID is not null
 		group by serverName, databaseName, objectName
 
 	drop table #executionStats
@@ -129,3 +134,4 @@ end
 
 -- select top 100 * from sys.dm_exec_query_stats
 --select top 100 * from auditData_objectText
+GO

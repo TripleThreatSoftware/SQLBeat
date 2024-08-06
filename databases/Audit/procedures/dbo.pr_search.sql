@@ -1,9 +1,10 @@
+/****** Object:  StoredProcedure [dbo].[pr_search]    Script Date: 8/6/2024 11:41:33 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
--- exec pr_search 'web03', 'AppDb', 'test'
-ALTER procedure [dbo].[pr_search] (@cServerName varchar(100) = '', @cDatabaseName varchar(100) = '', @cSearchString varchar(100))
+-- exec pr_search 'web03', '', 'test'
+CREATE procedure [dbo].[pr_search] (@cServerName varchar(100) = '', @cDatabaseName varchar(100) = '', @cSearchString varchar(100))
 as
 begin
 	create table #results (ukey int identity, serverName varchar(100), databaseName varchar(200), objectName varchar(200), objectType varchar(100),
@@ -75,3 +76,4 @@ begin
 
 	drop table #results
 end
+GO

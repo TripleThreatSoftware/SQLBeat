@@ -1,5 +1,4 @@
-USE [Audit]
-GO
+/****** Object:  StoredProcedure [dbo].[pr_monitorIISConfiguration]    Script Date: 8/6/2024 11:41:33 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -7,8 +6,8 @@ GO
 -- select top 100 * from auditData_config where fileString like '%the network path%' order by ymd desc
 -- exec master..xp_cmdshell 'dir \\appweb34\inetpub'
 -- exec master..xp_cmdshell 'type \\appweb34\inetpub\sites\App_Nodes\App_Brand_Region\Web.config'
--- exec pr_monitorIISConfiguration 'web02'
-ALTER procedure [dbo].[pr_monitorIISConfiguration] (@cServerName varchar(100))
+-- exec pr_monitorIISConfiguration 'appweb37'
+CREATE procedure [dbo].[pr_monitorIISConfiguration] (@cServerName varchar(100))
 as
 begin
 
@@ -25,7 +24,7 @@ begin
 	declare @cBody varchar(4000)
 	declare @nChangedFiles int
 
-	set @cTo = 'alerts@triplethreatsoftware.com'
+	set @cTo = 'alerts@example.com'
 	set @cFrom = 'alerts@example.com'
 
 	set nocount on
@@ -37,7 +36,7 @@ begin
 
 	-- select top 100 * From auditData_files where filepath like '%web02%' and scanDate >= dateadd(week, -1, getDate()) and fileName = 'web.config'
 
-	select distinct filePath into #files from auditData_files where directory like '\\' + @cServerName + '\inetpub%' and fileName = 'web.config' and scanDate >= dateadd(week, -1, getDate())
+	select distinct filePath into #files from auditData_files with (nolock) where directory like '\\' + @cServerName + '\inetpub%' and fileName = 'web.config' and scanDate >= dateadd(week, -1, getDate())
 	insert into #files (filePath) values ('\\' + @cServerName + '\c$\Windows\microsoft.net\framework\v4.0.30319\config\web.config')
 	insert into #files (filePath) values ('\\' + @cServerName + '\c$\Windows\microsoft.net\framework\v4.0.30319\config\machine.config')
 	insert into #files (filePath) values ('\\' + @cServerName + '\c$\Windows\microsoft.net\framework\v4.0.30319\aspnet.config')
@@ -140,7 +139,7 @@ begin
 	-- drop table #changedFilesdroppedLines
 	select a.filePath, a.lineNumber
 		into #changedFilesdroppedLines
-		from auditdata_config a
+		from auditdata_config a with (nolock)
 		left outer join #configFile b on a.filePath = b.filePath
 			and isnull(b.wideString, '') = isnull(a.fileString, '')
 		where b.ukey is null
@@ -217,7 +216,7 @@ begin
 							replace(a.wideString, char(9), '') as wideString,
 							replace(b.fileString, char(9), '') as fileString
 							from #configFile a
-							left outer join auditdata_config b on a.filePath = b.filePath
+							left outer join auditdata_config b with (nolock) on a.filePath = b.filePath
 								and a.lineNumber = b.lineNumber
 								and b.isCurrent = 1
 							where not (isnull(a.wideString, '') = isnull(b.fileString, ''))
@@ -232,7 +231,7 @@ begin
 
 					from (
 						select top 20 a.lineNumber, replace(b.wideString, char(9), '') as wideString, replace(a.fileString, char(9), '') as fileString
-							from auditdata_config a
+							from auditdata_config a with (nolock)
 							left outer join #configFile b on a.filePath = b.filePath
 								and a.lineNumber = b.lineNumber
 							where a.isCurrent = 1
@@ -272,7 +271,7 @@ begin
 
 					from (
 						select top 20 a.lineNumber, replace(a.fileString, char(9), '') as fileString
-							from auditdata_config a
+							from auditdata_config a with (nolock)
 							join #changedFilesDroppedLines b on a.lineNumber = b.linenumber
 								and b.filePath = a.filePath
 							where a.isCurrent = 1
@@ -298,10 +297,10 @@ begin
 		end
 	end
 
-	update auditData_config
+	update a
 		set isCurrent = 0
 		-- select *
-		from auditData_config a
+		from auditData_config as a with (nolock)
 		join #changedFiles b on a.filePath = b.filePath
 		where a.isCurrent = 1
 
@@ -328,3 +327,4 @@ end
 --exec master..xp_cmdshell 'dir \\' + @cServerName + '\c$\Windows\microsoft.net\framework\v4.0.30319\config'
 
 --exec master..xp_cmdshell 'dir /s \\' + @cServerName + '\inetpub\*.config'
+GO
