@@ -1,10 +1,13 @@
-/****** Object:  StoredProcedure [dbo].[pr_checkObjects]    Script Date: 8/6/2024 11:41:33 AM ******/
+USE [Audit]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_checkObjects]    Script Date: 8/11/2024 9:19:44 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 -- update notification..dm_servers set lastObjectCheck = null where servername = 'web16-remote'
-CREATE procedure [dbo].[pr_checkObjects]
+ALTER procedure [dbo].[pr_checkObjects]
 as
 begin
 	set nocount on
@@ -16,10 +19,10 @@ begin
 	declare @nUkeyServer int
 	declare @dStartTime dateTime
 
-	declare @bRunDuringMaintenanceWindow bit
+	-- note that if you want to constrain object change checking to the maintenance window defined in dm_servers, then set this to 1
+	declare @bRunDuringMaintenanceWindow bit = isnull((select top 1 settingValue from dm_settings where settingName = 'Respect Maintenance Window Setting'), 1)
 
 	set @cServerName = ''
-	set @bRunDuringMaintenanceWindow = 1
 
 	if exists (select top 1 ukey from [notification]..dm_settings where settingName = 'Run object audit outside of maintenance window' and settingValue = '1')
 		set @bRunDuringMaintenanceWindow = 0
@@ -471,4 +474,3 @@ begin
 	drop table #indexes
 	drop table #foreignKeys
 end
-GO

@@ -1,7 +1,11 @@
+USE [Notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_checkIndexes]    Script Date: 8/11/2024 9:27:33 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 
 ALTER procedure [dbo].[pr_checkIndexes]
 as
@@ -19,6 +23,10 @@ begin
 	declare @nUkeyServer int
 	declare @cSharedFolder varchar(500)
 
+	-- note that if you want to constrain object change checking to the maintenance window defined in dm_servers, then set this to 1
+	declare @bRunDuringMaintenanceWindow bit = isnull((select top 1 settingValue from dm_settings where settingName = 'Respect Maintenance Window Setting'), 1)
+
+
 	set @cSharedFolder = (select top 1 settingValue from notification.dbo.dm_settings where settingName = 'Shared Folder')
 	set @cThisServerName = (select settingValue from dm_settings where settingName = 'Current machine name')
 
@@ -34,8 +42,13 @@ begin
 				and indexCheck = 1
 				and isSQLBox = 1
 				and (lastIndexCheck is null or dateDiff(minute, lastIndexCheck, getDate()) > isnull(indexCheckMinuteInterval, 5))
-				and right(convert(varchar(20), getDate(), 120), 8) >= right(convert(varchar(20), maintenanceWindowStart, 120), 8)
-				and right(convert(varchar(20), getDate(), 120), 8) <= right(convert(varchar(20), maintenanceWindowStop, 120), 8)
+				and (
+					@bRunDuringMaintenanceWindow = 0
+					or (
+						right(convert(varchar(20), getDate(), 120), 8) >= right(convert(varchar(20), maintenanceWindowStart, 120), 8)
+						and right(convert(varchar(20), getDate(), 120), 8) <= right(convert(varchar(20), maintenanceWindowStop, 120), 8)
+						)
+					)
 		)
 	begin
 		truncate table #performance
@@ -52,8 +65,13 @@ begin
 				and indexCheck = 1
 				and isSQLBox = 1
 				and (lastIndexCheck is null or dateDiff(minute, lastIndexCheck, getDate()) > isnull(indexCheckMinuteInterval, 5))
-				and right(convert(varchar(20), getDate(), 120), 8) >= right(convert(varchar(20), maintenanceWindowStart, 120), 8)
-				and right(convert(varchar(20), getDate(), 120), 8) <= right(convert(varchar(20), maintenanceWindowStop, 120), 8)
+				and (
+					@bRunDuringMaintenanceWindow = 0
+					or (
+						right(convert(varchar(20), getDate(), 120), 8) >= right(convert(varchar(20), maintenanceWindowStart, 120), 8)
+						and right(convert(varchar(20), getDate(), 120), 8) <= right(convert(varchar(20), maintenanceWindowStop, 120), 8)
+						)
+					)
 			order by serverName
 
 		print @cFriendlyName
@@ -71,12 +89,12 @@ begin
 		if isnull(@cUserName, '') <> ''
 		begin
 			-- with password
-			set @cSQLString = @cSharedFolder + '\osql -S' + @cServerName + ' -U' + @cUserName + ' -P' + isnull(@cPassword, '') + ' -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\analyze_indexes.SQL"'
+			set @cSQLString = 'osql -S' + @cServerName + ' -U"' + @cUserName + '" -P"' + isnull(@cPassword, '') + '" -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\analyze_indexes.SQL"'
 		end
 		else
 		begin
 			-- without password under windows authentication
-			set @cSQLString = @cSharedFolder + '\osql -S' + @cServerName + ' -E -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\analyze_indexes.SQL"'
+			set @cSQLString = 'osql -S' + @cServerName + ' -E -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\analyze_indexes.SQL"'
 		end
 
 		insert into #performance (nastyLine)

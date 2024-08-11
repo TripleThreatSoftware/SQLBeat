@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 6/18/2018 8:26:09 AM ******/
+/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 8/11/2024 9:01:11 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -68,6 +68,7 @@ begin
 	declare @bIsOffHours bit
 	declare @bCheckOrphanedUsers bit
 	declare @bIsMaintenancePeriod bit
+	declare @bIsProduction bit
 
 	declare @dLastCheck dateTime
 	declare @dLastSuccess dateTime
@@ -89,30 +90,32 @@ begin
 		set @bIsOffHours = 1
 
 	select top 1
-		@cFriendlyName = isnull(friendlyName, @cServerName),
-		@cUserName = username,
-		@cPassword = [password],
-		@nOffHoursPriority = isnull(offHoursPriority, 1),
-		@nUkeyGroup = ukey_group,
-		@nLowSpaceThreshold = lowSpaceThreshold,
-		@nDiskThreshold = diskUtilizationThreshold,
-		@nCPUThreshold = cpuUtilizationThreshold,
-		@nRunningMinutesThreshold = runningMinutesThreshold,
-		@nMultipleBlockAlert = multipleBlocksThreshold,
-		@nBlockingSecondsThreshold = blockingSecondsThreshold,
-		@nUkeyServer = ukey,
-		@bCheckOrphanedUsers = checkOrphanedUsers,
-		@nArchitecture = architecture,
+		@cFriendlyName = isnull(a.friendlyName, @cServerName),
+		@cUserName = a.username,
+		@cPassword = a.[password],
+		@nOffHoursPriority = isnull(a.offHoursPriority, 1),
+		@nUkeyGroup = a.ukey_group,
+		@nLowSpaceThreshold = a.lowSpaceThreshold,
+		@nDiskThreshold = a.diskUtilizationThreshold,
+		@nCPUThreshold = a.cpuUtilizationThreshold,
+		@nRunningMinutesThreshold = a.runningMinutesThreshold,
+		@nMultipleBlockAlert = a.multipleBlocksThreshold,
+		@nBlockingSecondsThreshold = a.blockingSecondsThreshold,
+		@nUkeyServer = a.ukey,
+		@bCheckOrphanedUsers = a.checkOrphanedUsers,
+		@nArchitecture = a.architecture,
 		@bIsMaintenancePeriod = case
-			when maintenanceWindowStart is null or maintenanceWindowStop is null
+			when a.maintenanceWindowStart is null or a.maintenanceWindowStop is null
 				then 0
-			when right(convert(varchar(20), getDate(), 120), 8) >= right(convert(varchar(20), maintenanceWindowStart, 120), 8)
-				and right(convert(varchar(20), getDate(), 120), 8) <= right(convert(varchar(20), maintenanceWindowStop, 120), 8)
+			when right(convert(varchar(20), getDate(), 120), 8) >= right(convert(varchar(20), a.maintenanceWindowStart, 120), 8)
+				and right(convert(varchar(20), getDate(), 120), 8) <= right(convert(varchar(20), a.maintenanceWindowStop, 120), 8)
 				then 1
 			else 0
-			end
-		from dm_servers (nolock)
-		where serverName = @cServerName
+			end,
+		@bIsProduction = isnull(b.isProduction, 0)
+		from dm_servers a (nolock)
+		join dm_serverGroups b (nolock) on a.ukey_group = b.ukey
+		where a.serverName = @cServerName
 
 	update dm_servers with (rowlock) set skipNextRun = 0 where serverName = @cServerName
 
@@ -173,8 +176,7 @@ begin
 	--*********************************************************************************************************************
 
 	create table #jobHistory (ukey int identity, job_id uniqueIdentifier, jobName varchar(800), jobOutcome varchar(8000), runningSeconds int, ymd dateTime, isSuccess bit, isEnabled bit)
-	create table #jobStepHistory (ukey int identity, job_id uniqueIdentifier, jobName varchar(800), stepName varchar(1000), stepOutcome varchar(8000), runningSeconds int, ymd dateTime, isSuccess bit, ymd_jobRun dateTime, stepCommand varchar(8000), stepNumber
- int)
+	create table #jobStepHistory (ukey int identity, job_id uniqueIdentifier, jobName varchar(800), stepName varchar(1000), stepOutcome varchar(8000), runningSeconds int, ymd dateTime, isSuccess bit, ymd_jobRun dateTime, stepCommand varchar(8000), stepNumber int)
 
 	create table #orphanedUsers (dbName varchar(200), userName varchar(200))
 
@@ -254,13 +256,18 @@ begin
 	end try
 	begin catch
 		set @cSQLString = error_message()
+
+		-- if we've already had an alert of this type in the last 15 minutes, then log an error.
+		if exists (select top 1 ukey from notificationLog_history (nolock) where servername = @cServerName and stepName = 'Failed to determine SQL Version' and ymd >= dateadd(minute, -15, getDate()))
+		begin
+			set @cThisSubject = 'Server not responding at ' + convert(varchar(20), getDate(), 120)
+			set @cThisMessage = 'Server not responding at ' + convert(varchar(20), getDate(), 120) + '. <br>' + @cSQLString
+
+			insert into notificationLog_stage (ymd, severity, subject, message, isJobFailure, isLogShippingJobFailure, isLongRunningJob, isBlocking, isLongRunningProcess, isDriveSpace, isLogSize, isEventLog, serverName) values
+				(getDate(), 1, @cThisSubject, @cThisMessage, 0, 0, 0, 0, 0, 0, 0, 0, @cServerName)
+		end
+
 		insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Failed to determine SQL Version', @cSQLString, @nUkeyGroup)
-
-		set @cThisSubject = 'Server not responding at ' + convert(varchar(20), getDate(), 120)
-		set @cThisMessage = 'Server not responding at ' + convert(varchar(20), getDate(), 120) + '. <br>' + @cSQLString
-
-		insert into notificationLog_stage (ymd, severity, subject, message, isJobFailure, isLogShippingJobFailure, isLongRunningJob, isBlocking, isLongRunningProcess, isDriveSpace, isLogSize, isEventLog, serverName) values
-			(getDate(), 1, @cThisSubject, @cThisMessage, 0, 0, 0, 0, 0, 0, 0, 0, @cServerName)
 
 		return
 
@@ -463,10 +470,7 @@ begin
 	--*********************************************************************************************************************
 	-- SQL Error Log
 	--*********************************************************************************************************************
-	if replace(@cVersion, space(1), space(0)) like '%sqlserver2005%'
-		or replace(@cVersion, space(1), space(0)) like '%sqlserver2008%'
-		or replace(@cVersion, space(1), space(0)) like '%sqlserver2012%'
-		or replace(@cVersion, space(1), space(0)) like '%sqlserver2014%'
+	if not replace(@cVersion, space(1), space(0)) like '%sqlserver2000%'
 	begin
 		create table #sqlErrors (ymd dateTime, processInfo varchar(100), logMessage varchar(8000), nastyLine varchar(max), ukey int identity)
 
@@ -684,7 +688,7 @@ begin
 		update #processes
 			set ignoreSPID = 1
 			where rtrim(command) in ('LOG WRITER', 'CHECKPOINT SLEEP', 'TASK MANAGER',
-					'AWAITING COMMAND', 'GHOST CLEANUP', 'DBCC', 'BACKUP', 'SIGNAL HANDLER', 'LOCK MONITOR')
+					'AWAITING COMMAND', 'GHOST CLEANUP', 'DBCC', 'BACKUP', 'SIGNAL HANDLER', 'LOCK MONITOR', 'DbccFilesCompact')
 				or rtrim(ltrim(hostName)) = '.'
 				or rtrim(ltrim(hostname)) = @@servername
 				or rtrim(ltrim(hostname)) = (select settingValue from dm_settings where settingName = 'Current machine name' and settingValue is not null)
@@ -773,12 +777,12 @@ begin
 		if @cUserName is not null
 		begin
 			-- with password, for stores
-			set @cSQLString = @cSharedFolder + '\osql -S' + @cServerName + ' -U' + @cUserName + ' -P"' + @cPassword + '" -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\all_user_activity.SQL"'
+			set @cSQLString = 'osql -S' + @cServerName + ' -U' + @cUserName + ' -P"' + @cPassword + '" -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\all_user_activity.SQL"'
 		end
 		else
 		begin
 			-- without password, for local boxes that'll accept sqladmin under windows authentication
-			set @cSQLString = @cSharedFolder + '\osql -S' + @cServerName + ' -E -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\all_user_activity.SQL"'
+			set @cSQLString = 'osql -S' + @cServerName + ' -E -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\all_user_activity.SQL"'
 		end
 
 		insert into #userActivity (nastyLine)
@@ -1134,15 +1138,17 @@ begin
 			-- here, we have many SPIDs being blocked
 			insert into #results (message, severity, subject, isBlocking)
 			select
-				convert(varchar(20), count(distinct spid)) + ' SPIDs involved in blocking. Max time ' + convert(varchar(20), max(waitTime)) + 'ms. '+ char(13) +
+				convert(varchar(20), count(distinct spid)) + ' SPIDs involved in blocking. Max blocking/running time ' + convert(varchar(20), max(waitTime)) + 'ms. '+ char(13) +
+					'Snapshot time: ' + convert(varchar(20), ymd, 120) + char(13) +
 					'In the last 15 minutes, ' + convert(varchar(20), @nNumRecentAlerts) + ' other instances of extreme blocking observed.',
-				case when @nNumRecentAlerts >= 1 then 1 else 2 end as severity,
+				case when @nNumRecentAlerts >= 3 then 1 else 2 end as severity,
 				convert(varchar(20), count(distinct spid)) + ' SPIDs involved in blocking at ' + right(convert(varchar(20), max(ymd), 120), 8) + '. ' as subject,
 				1 as isBlocking
 				from #processes a
 				where (a.isBlocked = 1 or isBlocker = 1)
 					and a.blockedBy <> ''
 					and a.ignoreSPID = 0
+					and not (a.isBlocked = 1 and a.command = 'DbccFilesCompact') -- we don't care if DB maintenance tasks are being blocked by user tasks
 				group by ymd
 				having count(distinct spid) >= 10
 					and max(waitTime) > 15000
@@ -1188,6 +1194,10 @@ begin
 						and ISNULL(b.ignoreSPID, 0) = 0
 						and (a.waitTime/1000) > @nBlockingSecondsThreshold
 						--and abs(dateDiff(second, b.lastBatchTime, a.lastBatchTime)) >= @nBlockingSecondsThreshold
+
+				-- if blocking is minor, then do not alert Critical
+				if @@ROWCOUNT <= 2
+					update #results set severity = 2 where isBlocking = 1 and severity = 1
 			end
 --		end
 
@@ -1273,7 +1283,7 @@ begin
 					'(' + convert(varchar(20), isnull(SPID, 0)) + ') ' +
 					'started a wild process ' +
 					'in ' + isnull(dbName, '') + ' ' +
-					'at ' + right(convert(varchar(20), isnull(lastBatchTime, ''), 120), 8) + '.'
+					'at ' + right(convert(varchar(20), isnull(lastBatchTime, ''), 120), 8) + ' (' + convert(varchar(20), dateDiff(minute, lastBatchTime, ymd)) + 'm).'
 					 as subject,
 				1 as isLongRunningProcess
 				from #processes
@@ -1290,6 +1300,7 @@ begin
 					ymd
 				having sum(convert(bigint, isnull(cpuTime, 0))) - sum(convert(bigint, isnull(lastCPU, 0))) > 0
 					or sum(convert(bigint, isnull(diskio, 0))) - sum(convert(bigint, isnull(lastDisk, 0))) > 0
+					or dateDiff(minute, lastBatchTime, ymd) >= 20
 		end try
 		begin catch
 			insert into #results (message, severity, subject, isLongRunningProcess) values ('Very long running processes.', 1, 'Very long running process', 1)
@@ -1584,7 +1595,16 @@ begin
 			left outer join #jobHistory b on a.jobName = b.jobName
 				and a.job_id = b.job_id
 			where a.ukey_server = @nUkeyServer
-				and isCurrent = 1
+				and a.isCurrent = 1
+				and b.job_id is null
+
+		update dm_serverJobs with (rowlock)
+			set isCurrent = 1
+			from dm_serverJobs a
+			join #jobHistory b on a.jobName = b.jobName
+				and a.job_id = b.job_id
+			where a.ukey_server = @nUkeyServer
+				and a.isCurrent = 0
 
 		insert into dm_serverJobSteps (ukey_server, ukey_job, stepName, stepCommand, stepNumber)
 		select distinct @nUkeyServer, a.ukey, b.stepName, b.stepCommand, b.stepNumber
@@ -2104,7 +2124,7 @@ begin
 					and a.ymd >= dateAdd(minute, -30, getDate())
 
 			-- if this job has failed more than once in the last 30 minutes, change alert style
-			if (@nNumSuccess = 0 and @nNumFailure > 1)
+			if (isnull(@nNumSuccess, 0) = 0 and isnull(@nNumFailure, 0) > 1)
 			begin
 
 				set @dLastSuccess = (
@@ -2126,6 +2146,7 @@ begin
 					)
 
 				if @dLastFailure > @dLastSuccess
+					or @dLastSuccess is null
 				begin
 					-- it has been failing repeatedly, and continues to fail
 
@@ -2147,11 +2168,22 @@ begin
 							and b.ukey_server = @nUkeyServer
 							and b.ukey_job = @nUkeyJob
 						where a.ukey_server = @nUkeyServer
-							and a.ukey_jobHistory = @nThisUkey
+							and a.ymd > @dLastSuccess
+							and a.isSuccess = 0
+--							and a.ukey_jobHistory = @nThisUkey
 							and a.ukey_job = @nUkeyJob
 						order by a.ymd
 
-					insert into #results (ymd, subject, message, severity, isJobFailure) values (@dJobFailure, @cThisSubject, @cThisMessage, 2, 1)
+					--if @cThisMessage like '%The transaction log for database % is full%'
+					--begin
+					--	-- the job failed because a drive is full or a database could not grow
+
+					--	set @cThisSubject = 'Drive out of space'
+					--	set @cThisMessage = ''
+
+					--end
+
+					insert into #results (ymd, subject, message, severity, isJobFailure) values (@dJobFailure, @cThisSubject, @cThisMessage, case when isnull(@cJobName, '') = 'AppDb - Synchronize' and not (isnull(@nNumFailure, 0) <= 2 and left(@cServerName, 3) in ('AMS', 'LHR')) then 1 else 2 end, 1)
 
 					delete from #jobStepHistory where job_id in (select job_id from #jobHistory where ukey = @nThisUkey)
 					delete from #jobHistory where job_id in (select job_id from #jobHistory where ukey = @nThisUkey)
@@ -2183,7 +2215,7 @@ begin
 				--		and a.ukey_job = @nUkeyJob
 				--	order by a.ymd
 
-				insert into #results (ymd, subject, message, severity, isJobFailure) values (@dJobFailure, @cThisSubject, @cThisMessage, 2, 1)
+				insert into #results (ymd, subject, message, severity, isJobFailure) values (@dJobFailure, @cThisSubject, @cThisMessage, case when isnull(@cJobName, '') = 'AppDb - Synchronize' then 1 else 2 end, 1)
 			end
 		end
 
@@ -2340,6 +2372,39 @@ begin
 	insert into drivespaceLog (serverName, driveLetter, driveSpace)
 	select @cServerName, driveLetter, freeSpace
 		from #drives
+
+	-- for any drive letter not yet included, add a record
+	insert into dm_drivespaceThresholds (ukey_server, driveLetter, lowSpaceThreshold)
+	select @nUkeyServer, a.driveLetter, c.lowSpaceThreshold
+		from #drives a
+		left outer join dm_drivespaceThresholds b (nolock) on b.ukey_server = @nUkeyServer
+			and a.driveLetter = b.driveLetter
+		join dm_servers c (nolock) on c.ukey = @nUkeyServer
+		where b.ukey is null
+
+	select identity(int) as ukey, @cServerName as serverName, a.driveLetter, a.freeSpace as driveSpace, d.lowSpaceThreshold, @nUkeyServer as ukey_server
+		into #drivespaceAlerts
+		from #drives a
+		join dm_drivespaceThresholds d (nolock) on d.ukey_server = @nUkeyServer
+			and a.freeSpace <= d.lowSpaceThreshold
+			and a.driveLetter = d.driveLetter
+
+	insert into #results (severity, subject, message, isDriveSpace)
+	select
+		case when c.isProduction = 1 then 1 else 2 end,
+		'Drive ' + isnull(a.driveLetter, 'N/A') + ' is down to ' + convert(varchar(100), a.driveSpace) + 'mb free.' as subject,
+		'Drive ' + isnull(a.driveLetter, 'N/A') + ' is down to ' + convert(varchar(100), a.driveSpace) + 'mb free at ' + convert(varchar(20), getDate(), 120) + '. Threshold is defined as ' + convert(varchar(100), a.lowSpaceThreshold) + 'mb.' as message,
+		1
+		from #drivespaceAlerts a
+		join dm_servers b (nolock) on a.ukey_server = b.ukey
+		join dm_serverGroups c (nolock) on b.ukey_group = c.ukey
+
+	if @@ROWCOUNT > 0
+	begin
+		update #results set severity = 3 where [message] like '%The transaction log for database % is full%' or [message] like '%there is not enough space on the disk%'
+	end
+
+	drop table #drivespaceAlerts
 
 	--*********************************************************************************************************************
 	-- Replication errors
@@ -2740,24 +2805,29 @@ begin
 
 		set @nNumAlerts = (select count(*) from notificationLog (nolock) where serverName = @cServerName and subject like '%tasks waiting%' and ymd >= dateAdd(minute, -10, getDate()))
 
-		-- if we regularly see alerts at this time, deprioritize these
-		set @nNumOldAlerts = (
-			select count(*)
-				from v_notificationLog_all
-				where serverName = @cServerName
-					and subject like '%tasks waiting%'
-					and (
-						(
-							ymd >= dateAdd(minute, -15, dateAdd(day, -1, getDate()))
-							and ymd <= dateAdd(minute, 15, dateAdd(day, -1, getDate()))
-							)
-						or (
-							ymd >= dateAdd(minute, -15, dateAdd(week, -1, getDate()))
-							and ymd <= dateAdd(minute, 15, dateAdd(week, -1, getDate()))
+		begin try
+			-- if we regularly see alerts at this time, deprioritize these
+			set @nNumOldAlerts = (
+				select count(*)
+					from v_notificationLog_all
+					where serverName = @cServerName
+						and subject like '%tasks waiting%'
+						and (
+							(
+								ymd >= dateAdd(minute, -15, dateAdd(day, -1, getDate()))
+								and ymd <= dateAdd(minute, 15, dateAdd(day, -1, getDate()))
+								)
+							or (
+								ymd >= dateAdd(minute, -15, dateAdd(week, -1, getDate()))
+								and ymd <= dateAdd(minute, 15, dateAdd(week, -1, getDate()))
 
+								)
 							)
-						)
-				)
+					)
+		end try
+		begin catch
+			print error_message()
+		end catch
 
 		insert into #results (severity, subject, message)
 		select
@@ -2815,32 +2885,50 @@ begin
 
 		set @nNumAlerts = (select count(*) from notificationLog (nolock) where serverName = @cServerName and subject like '%requests waiting%' and ymd >= dateAdd(minute, -15, getDate()))
 
-		-- if we regularly see alerts at this time, deprioritize these
-		set @nNumOldAlerts = (
-			select count(*)
-				from v_notificationLog_all
-				where serverName = @cServerName
-					and subject like '%requests waiting%'
-					and (
-						(
-							ymd >= dateAdd(minute, -15, dateAdd(day, -1, getDate()))
-							and ymd <= dateAdd(minute, 15, dateAdd(day, -1, getDate()))
-							)
-						or (
-							ymd >= dateAdd(minute, -15, dateAdd(week, -1, getDate()))
-							and ymd <= dateAdd(minute, 15, dateAdd(week, -1, getDate()))
+		begin try
+			-- if we regularly see alerts at this time, deprioritize these
+			set @nNumOldAlerts = (
+				select count(*)
+					from v_notificationLog_all
+					where serverName = @cServerName
+						and subject like '%requests waiting%'
+						and (
+							(
+								ymd >= dateAdd(minute, -15, dateAdd(day, -1, getDate()))
+								and ymd <= dateAdd(minute, 15, dateAdd(day, -1, getDate()))
+								)
+							or (
+								ymd >= dateAdd(minute, -15, dateAdd(week, -1, getDate()))
+								and ymd <= dateAdd(minute, 15, dateAdd(week, -1, getDate()))
 
+								)
 							)
-						)
-				)
+					)
+		end try
+		begin catch
+			print error_message()
+		end catch
 
 		insert into #results (severity, subject, message)
 		select
 			-- weight based on how long and whether this is the first alert in the last 10 minutes
 			case
-				when @bIsMaintenancePeriod = 1 or @nNumOldAlerts > 0 then 3
-				when msWaiting > 25000 and @nNumAlerts > 2 and @bIsOffHours = 0 then 2
-				else 3 end as severity,
+				-- if this is a period of maintenance (for PRO or otherwise) then we do not care at all
+				when @bIsMaintenancePeriod = 1 then 3
+
+				-- production server with excessive disk queueing (and for a long time) is SEV1
+				when @bIsProduction = 1 and msWaiting > 25000 and @nNumOldAlerts > 0 and @nNumAlerts > 5 then 2
+
+				---- production server otherwise is SEV2
+				--when @bIsProduction = 1 then 2
+
+				---- this will catch non-production servers with excessive disk queueing (and for a long time) and make them SEV2 (but only during business hours)
+				--when msWaiting > 25000 and @nNumOldAlerts > 0 and @nNumAlerts > 5 and @bIsOffHours = 0 then 2
+
+				-- otherwise there is only a little waiting on a non-production server and we don't care
+				else 3
+
+				end as severity,
 			convert(varchar(20), isnull(a.numRequests, 0)) + ' requests ' +
 				'waiting for ' + convert(varchar(20), a.msWaiting) + 'ms on "' + isnull(left(b.filePath, 3), 'N/A') + '"' as subject,
 			'Time: ' + convert(varchar(20), getDate(), 120) + '<br>' +

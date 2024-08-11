@@ -1,10 +1,11 @@
-USE [notification]
+USE [Notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_checkTableSizes]    Script Date: 12/20/2011 11:12:37 ******/
+/****** Object:  StoredProcedure [dbo].[pr_checkTableSizes]    Script Date: 8/11/2024 9:23:45 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 
 --
 --create table tableSizeLog (ymd dateTime default getDate(), serverName varchar(200),
@@ -29,6 +30,8 @@ begin
 	declare @cPassword varchar(100)
 	declare @cThisServerName varchar(200)
 	declare @cSharedFolder varchar(500)
+	-- note that if you want to constrain object change checking to the maintenance window defined in dm_servers, then set this to 1
+	declare @bRunDuringMaintenanceWindow bit = isnull((select top 1 settingValue from dm_settings where settingName = 'Respect Maintenance Window Setting'), 1)
 
 	set @cSharedFolder = (select top 1 settingValue from notification.dbo.dm_settings where settingName = 'Shared Folder')
 	set @cThisServerName = (select settingValue from dm_settings (nolock) where settingName = 'Current machine name')
@@ -45,9 +48,13 @@ begin
 				and tableSizeCheck = 1
 				and (lastTableSizeCheck is null or dateDiff(minute, lastTableSizeCheck, getDate()) > isnull(tableSizeCheckMinuteInterval, 5))
 				and isServerPingable = 1
-
-				and right(convert(varchar(20), getDate(), 120), 8) >= right(convert(varchar(20), maintenanceWindowStart, 120), 8)
-				and right(convert(varchar(20), getDate(), 120), 8) <= right(convert(varchar(20), maintenanceWindowStop, 120), 8)
+				and (
+					@bRunDuringMaintenanceWindow = 0
+					or (
+						right(convert(varchar(20), getDate(), 120), 8) >= right(convert(varchar(20), maintenanceWindowStart, 120), 8)
+						and right(convert(varchar(20), getDate(), 120), 8) <= right(convert(varchar(20), maintenanceWindowStop, 120), 8)
+						)
+					)
 
 		)
 	begin
@@ -63,8 +70,13 @@ begin
 				and tableSizeCheck = 1
 				and (lastTableSizeCheck is null or dateDiff(minute, lastTableSizeCheck, getDate()) > isnull(tableSizeCheckMinuteInterval, 5))
 				and isServerPingable = 1
-				and right(convert(varchar(20), getDate(), 120), 8) >= right(convert(varchar(20), maintenanceWindowStart, 120), 8)
-				and right(convert(varchar(20), getDate(), 120), 8) <= right(convert(varchar(20), maintenanceWindowStop, 120), 8)
+				and (
+					@bRunDuringMaintenanceWindow = 0
+					or (
+						right(convert(varchar(20), getDate(), 120), 8) >= right(convert(varchar(20), maintenanceWindowStart, 120), 8)
+						and right(convert(varchar(20), getDate(), 120), 8) <= right(convert(varchar(20), maintenanceWindowStop, 120), 8)
+						)
+					)
 
 			order by servername
 
@@ -76,12 +88,12 @@ begin
 		if @cUserName is not null
 		begin
 			-- with password
-			set @cSQLString = @cSharedFolder + '\osql -S' + @cServerName + ' -U' + @cUserName + ' -P"' + @cPassword + '" -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\all_table_sizes.SQL"'
+			set @cSQLString = 'osql -S' + @cServerName + ' -U' + @cUserName + ' -P"' + @cPassword + '" -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\all_table_sizes.SQL"'
 		end
 		else
 		begin
 			-- without password, for local boxes that will accept sqladmin under windows authentication
-			set @cSQLString = @cSharedFolder + '\osql -S' + @cServerName + ' -E -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\all_table_sizes.SQL"'
+			set @cSQLString = 'osql -S' + @cServerName + ' -E -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\all_table_sizes.SQL"'
 		end
 
 		insert into #history (nastyLine)
@@ -93,7 +105,7 @@ begin
 
 		update #history
 			set databaseName = left(dbo.fn_returnListItem(nastyLine, 1, '||'), 200),
-				tableName = left(dbo.fn_returnListItem(nastyLine, 2, '||'), 20),
+				tableName = left(dbo.fn_returnListItem(nastyLine, 2, '||'), 50),
 				rows = dbo.fn_returnDigits(dbo.fn_returnListItem(nastyLine, 3, '||'), 1),
 				reserved = dbo.fn_returnDigits(dbo.fn_returnListItem(nastyLine, 4, '||'), 1),
 				data = dbo.fn_returnDigits(dbo.fn_returnListItem(nastyLine, 5, '||'), 1),
