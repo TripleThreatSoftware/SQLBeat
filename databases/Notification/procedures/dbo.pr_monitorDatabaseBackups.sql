@@ -1,7 +1,11 @@
+USE [Notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_monitorDatabaseBackups]    Script Date: 8/20/2024 3:39:05 PM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 
 ALTER procedure [dbo].[pr_monitorDatabaseBackups]
 as
@@ -24,6 +28,7 @@ begin
 			where detailedCheck = 1
 				and isenabled = 1
 				and serverName > @cServerName
+
 		)
 	begin
 		select top 1 @cServerName = serverName, @bCheckBackups = checkDatabaseBackups
@@ -34,6 +39,8 @@ begin
 				and isenabled = 1
 				and serverName > @cServerName
 			order by serverName
+
+		print @cServerName
 
 		set @cSQLString = '
 	declare @dStartDate dateTime
@@ -73,8 +80,9 @@ begin
 			select serverName, max(ymd) as ymd from databaseFileSizeLog (nolock) group by serverName
 			) b on a.serverName = b.serverName
 			and a.ymd = b.ymd
-		where a.dbName not in ('master', 'model', 'msdb', 'tempdb', 'distribution')
+		where a.dbName not in ('master', 'model', 'msdb', 'tempdb', 'distribution', 'aspstate', 'reportServerTempDB')
 
+	-- remove servers that are not configured to be alerted on for backups
 	delete #allDatabases
 		from #allDatabases a
 		left outer join dm_servers b (nolock) on a.serverName = b.serverName
@@ -121,7 +129,9 @@ begin
 
 		set @cMessage = @cMessage + '</table>'
 
-		insert into notificationLog_stage (serverName, severity, subject, message) values (@cServerName, 3, @cSubject, @cMessage)
+		-- if we already sent one today, then do not send another
+		if (select count(*) from notificationLog (nolock) where serverName = @cServerName and subject = @cSubject and ymd >= convert(varchar(10), getDate(), 120)) = 0
+			insert into notificationLog_stage (serverName, severity, subject, message) values (@cServerName, 3, @cSubject, @cMessage)
 	end
 
 	drop table #results

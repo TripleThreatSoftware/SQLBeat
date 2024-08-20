@@ -1,13 +1,19 @@
-/****** Object:  StoredProcedure [dbo].[pr_watchSQLConnections]    Script Date: 05/19/2009 13:59:45 ******/
+USE [Notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_watchSQLConnections]    Script Date: 8/20/2024 3:29:40 PM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
+-- select * from processLog (nolock) where servername = 'etl01' and ymd >= '2021-01-22 13:34:00.000' and login = 'sa' order by ymd
+
+
 -- ALTER  table watchedConnections (ukey int identity, alertEmail varchar(200),
 -- 	login varchar(100), hostname varchar(100), dbName varchar(100), programName varchar(100), serverName varchar(200))
 -- insert into watchedConnections (hostname, login, serverName, alertEmail) values ('webtests', 'atm', 'sqlserver\instance4', 'dba@example.com')
 
-CREATE  procedure [dbo].[pr_watchSQLConnections]
+ALTER  procedure [dbo].[pr_watchSQLConnections]
 as
 begin
 
@@ -37,16 +43,17 @@ begin
 			, 2000) as message,
 		a.serverName,
 		b.alertEmail
-		from processLog a
-		join watchedConnections b on (isnull(b.login, '') = '' or (isnull(b.login, '') <> '' and isnull(a.login, '') = b.login))
+		from processLog a (nolock)
+		join watchedConnections b (nolock) on (isnull(b.login, '') = '' or (isnull(b.login, '') <> '' and isnull(a.login, '') = b.login))
 			and (isnull(b.hostname, '') = '' or (isnull(b.hostname, '') is not null and isnull(a.hostname, '') = b.hostname))
 			and (isnull(b.dbname, '') = '' or (isnull(b.dbname, '') is not null and isnull(a.dbname, '') = b.dbname))
 			and (isnull(b.programName, '') = '' or (isnull(b.programName, '') is not null and isnull(a.programName, '') like '%' + b.programName + '%'))
 		where a.ymd >= dateAdd(hour, -3, getDate())
+--		group by b.serverName, a.login, a.hostname, a.dbname, a.cputime, a.diskio, a.programname, a.net_address, a.login_time, a.lastBatchTime, a.command, a.bufferContents
 
 	delete a
 		from #messages a
-		join notificationLog b on a.subject = b.subject
+		join notificationLog b (nolock) on a.subject = b.subject
 			and a.message = b.message
 			and a.serverName = b.serverName
 			and b.messageSent = 1
@@ -72,5 +79,36 @@ begin
 	end
 
 	drop table #messages
+
+	-- *******************************************************************************************************************************************************************************
+	-- *******************************************************************************************************************************************************************************
+
+
+
+	-- drop table #processes
+	-- select * from #processes
+	select login, hostname, dbname, servername, programname, max(lastBatchTime) as ymd, max(bufferContents) as bufferContents
+		into #processes
+		-- select *
+		from processLog (nolock)
+		where ymd >= dateadd(hour, -2, getDate())
+			and not servername in (@@SERVERNAME)
+			and not (status = 'background' and spid <= 70 and hostname = '' and programname = '')
+			and not command in ('BRKR TASK', 'BRKR EVENT HNDLR', 'USE DATABASE', 'TASK MANAGER')
+			and not login in ('NT Service\SQLTelemetry', 'NT SERVICE\SQLSERVERAGENT')
+			and not spid <= 55
+			and not (dbName = 'SimpleDance' and login = 'simpledance')
+			and not hostname = 'HPDRAGONFLYG4'
+		group by login, hostname, dbname, servername, programname
+
+
+	insert into notificationLog_stage (ymd, subject, message, severity, serverName)
+	select ymd,
+		'Unexpected activity. User: ' + login + ' from ' + hostname + ' (' + isnull(rtrim(programName), 'N/A') + ') at ' + convert(varchar(20), ymd) + '.',
+		'Unexpected activity. User: ' + login + ' from ' + hostname + ' (' + isnull(rtrim(programName), 'N/A') + ') at ' + convert(varchar(20), ymd) + '.'+char(13)+isnull(bufferContents, ''),
+		2,
+		servername
+		from #processes
+
+	drop table #processes
 end
-GO

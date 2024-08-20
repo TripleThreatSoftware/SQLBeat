@@ -1,6 +1,6 @@
 USE [Audit]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_checkObjects]    Script Date: 8/11/2024 9:19:44 AM ******/
+/****** Object:  StoredProcedure [dbo].[pr_checkObjects]    Script Date: 8/20/2024 3:19:40 PM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -20,7 +20,7 @@ begin
 	declare @dStartTime dateTime
 
 	-- note that if you want to constrain object change checking to the maintenance window defined in dm_servers, then set this to 1
-	declare @bRunDuringMaintenanceWindow bit = isnull((select top 1 settingValue from dm_settings where settingName = 'Respect Maintenance Window Setting'), 1)
+	declare @bRunDuringMaintenanceWindow bit = isnull((select top 1 settingValue from notification.dbo.dm_settings where settingName = 'Respect Maintenance Window Setting'), 1)
 
 	set @cServerName = ''
 

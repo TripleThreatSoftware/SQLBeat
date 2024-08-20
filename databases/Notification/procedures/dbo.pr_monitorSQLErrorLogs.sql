@@ -1,3 +1,6 @@
+USE [Notification]
+GO
+/****** Object:  StoredProcedure [dbo].[pr_monitorSQLErrorLogs]    Script Date: 8/20/2024 10:39:21 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -37,6 +40,42 @@ begin
 				)
 			and logMessage not like '%reinitialized%'
 			and logMessage not like '%logging sql server messages%'
+			and logMessage not like 'RBPEX::NotifyFileShutdown: Called for database ID%'
+			and not (logMessage like 'CHECKDB found 0 allocation errors and 0 consistency errors%' and logMessage like '%found 0 errors and repaired 0 errors%')
+			and not (logMessage like '%CHECKDB%found 0 errors and repaired 0 errors%')
+			and not logMessage like '%CHECKDB for database % finished without errors%'
+
+			and not logMessage like '%SQL Server is attempting to register a Service Principal Name (SPN) for the SQL Server service%'
+			and not logMessage like '%Server is listening on%'
+			and not logMessage like '%Software Usage Metrics is enabled%'
+			and not logMessage like '%Common language runtime (CLR) functionality initialized%'
+			and not logMessage like '%clflushopt is selected for pmem flush operation%'
+			and not logMessage like '%Total Log Writer threads%'
+			and not logMessage like '%Database Instant File Initialization%'
+			and not logMessage like '%CLR version%loaded.<br>%'
+			and not logMessage like '%Created Extended Events session%'
+			and not logMessage like '%In-Memory OLTP initialized on standard machine%'
+			and not logMessage like '%Using dynamic lock allocation%'
+			and not logMessage like '%This is an informational message only%'
+			and not logMessage like '%The maximum number of dedicated administrator connections for this instance is%'
+			and not logMessage like '%Query Store settings initialized with enabled%'
+			and not logMessage like '%CPU vectorization level(s) detected%'
+			and not logMessage like '%Buffer pool extension is already disabled%'
+			and not logMessage like '%Default collation:%'
+			and not logMessage like '%Buffer Pool: Allocating%'
+			and not logMessage like '%SQL Server detected %'
+
+			and not logMessage like 'UTC Adjustment%'
+			and not logMessage like 'Microsoft SQL Server %'
+			and not logMessage like 'Parallel redo is shutdown for database%'
+			--and not logMessage like '%%'
+			--and not logMessage like '%%'
+			--and not logMessage like '%%'
+			--and not logMessage like '%%'
+			--and not logMessage like '%%'
+			--and not logMessage like '%%'
+			--and not logMessage like '%%'
+			--and not logMessage like '%%'
 
 	insert into #errorsFound (ymd, serverName, processInfo, logMessage, ukey)
 	select distinct a.ymd, a.serverName, a.processInfo, a.logMessage, a.ukey
@@ -84,6 +123,7 @@ begin
 				where isLoginFailure = 1
 					and charindex('client:', logMessage) > 0
 					and logMessage not like '%sspi%'
+					and not (logMessage like '%network packet payload did not match number of bytes read%' and logMessage like '%10.1.10.50%')
 			) a
 
 	-- only report on failures since the last attempt
