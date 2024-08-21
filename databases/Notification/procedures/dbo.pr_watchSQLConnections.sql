@@ -1,6 +1,6 @@
 USE [Notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_watchSQLConnections]    Script Date: 8/20/2024 3:29:40 PM ******/
+/****** Object:  StoredProcedure [dbo].[pr_watchSQLConnections]    Script Date: 8/21/2024 9:53:36 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -21,6 +21,9 @@ begin
 	declare @cSubject varchar(200)
 	declare @cMessage varchar(2000)
 	declare @cThisEmail varchar(200)
+
+	--if not exists (select top 1 id from sysobjects where name = 'ignoreConnections')
+	--	create table ignoreConnections (ukey int identity, ymd dateTime default getDate(), computerName varchar(500), servername varchar(500), login varchar(500))
 
 	create table #messages (ukey int identity, subject varchar(200), message varchar(2000), serverName varchar(200), alertEmail varchar(200))
 
@@ -98,7 +101,7 @@ begin
 			and not login in ('NT Service\SQLTelemetry', 'NT SERVICE\SQLSERVERAGENT')
 			and not spid <= 55
 			and not (dbName = 'SimpleDance' and login = 'simpledance')
-			and not hostname = 'HPDRAGONFLYG4'
+			and not (hostname in ('HPDRAGONFLYG4', 'MEDIACENTER01') and login = 'sa')
 		group by login, hostname, dbname, servername, programname
 
 
