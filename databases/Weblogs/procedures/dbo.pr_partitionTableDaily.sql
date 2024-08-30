@@ -1,10 +1,10 @@
-/****** Object:  StoredProcedure [dbo].[pr_partitionTableDaily]    Script Date: 12/12/2018 8:40:35 AM ******/
+/****** Object:  StoredProcedure [dbo].[pr_partitionTableDaily]    Script Date: 8/30/2024 12:45:12 PM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
 -- The keyFieldList variable should not contain ymd_id or ymd fields
-ALTER   procedure [dbo].[pr_partitionTableDaily] (@cTableName varchar(100), @cDateField varchar(100), @cKeyfieldList varchar(100), @lMakeUkey bit)
+ALTER   procedure [dbo].[pr_partitionTableDaily] (@cTableName varchar(100), @cDateField varchar(100), @cKeyfieldList varchar(100), @lMakeUkey bit, @cPrimaryIndexType varchar(100) = 'PK')
 as
 begin
 	set noCount on
@@ -28,7 +28,6 @@ begin
 	declare @dEndDate dateTime
 	declare @cTableStructure varchar(5000)
 	declare @cArchiveDBName varchar(50)
-	declare @cMessage varchar(8000)
 
 	declare @lMakeNewTable bit
 	declare @cFieldList varchar(4000)
@@ -41,7 +40,6 @@ begin
 	declare @nFieldPrecision int
 	declare @nStringLength int
 	declare @nIsNullable int
-	declare @nRowCount int
 
 	declare @nLastDayTableWeek int
 	declare @nLastDayTableYear int
@@ -192,9 +190,6 @@ begin
 		exec sp_executeSQL @cSQLString
 	end
 
-if suser_sname() = 'sa'
-	select * from #viewFields
-
 	insert into hist_partitionTableDaily (stepName) values ('Structure of destination table divined')
 
 --	print 'Processing ' + convert(varchar(20), @@rowcount) + ' fields'
@@ -253,9 +248,6 @@ if suser_sname() = 'sa'
 -- 		exec sp_executeSQL @cSQLString
 	end
 
-if suser_sname() = 'sa'
-	print @cTableStructure
-
 	insert into hist_partitionTableDaily (stepName) values ('Common fields and structure CREATE finished')
 
 	set @cArchiveDBName = db_name()
@@ -298,11 +290,6 @@ if suser_sname() = 'sa'
 				insert into dm_settings (settingName, settingValue) values ('Partition Log Path', @cOldestDataPath)
 			end
 
-			if right(@cOldestDataPath, 1) <> '\'
-				set @cOldestDataPath = @cOldestDataPath + '\'
-			if right(@cOldestLogPath, 1) <> '\'
-				set @cOldestLogPath = @cOldestLogPath + '\'
-
 --			print 'Creating new database, storing files in: ' + isnull(@cOldestDatabasePath, 'BAD PATH')
 
 			-- This adds the newest database to the system
@@ -314,7 +301,7 @@ if suser_sname() = 'sa'
 					'LOG ON (NAME = N''' + @cDatabaseName + '_log'', ' +
 						'FILENAME = N''' + @cOldestLogPath + @cDatabaseName + '_log.ldf'' , ' +
 						'SIZE = 25, FILEGROWTH = 25)'
---			print @cSQLString
+			print @cSQLString
 			exec sp_executesql @cSQLString
 
 			set @cSQLString = 'alter database [' + @cDatabaseName + '] set recovery simple'
@@ -422,13 +409,27 @@ create table [' + @cArchiveTableName + '_' + @cToday + '] (' + @cTableStructure 
 					set @cPKString = case when @cPKString = '' then @cDateField else @cPKString + ', ' + @cDateField end
 			end
 
-			set @cSQLString = 'use ' + @cDatabaseName + '
-				ALTER TABLE ' + @cArchiveTableName + '_' + @cToday + '
-					ADD CONSTRAINT [PK_' + @cArchiveTableName + '_' + @cToday + ']
-					PRIMARY KEY CLUSTERED (' + case when @cPKString <> '' then @cPKString + ', ' else '' end + @cKeyfieldList + ')
-					WITH  FILLFACTOR = 80'
---			print @cSQLString
-			exec sp_executesql @cSQLString
+			if isnull(@cPrimaryIndexType, 'PK') = 'PK'
+			begin
+				set @cSQLString = 'use ' + @cDatabaseName + '
+					ALTER TABLE ' + @cArchiveTableName + '_' + @cToday + '
+						ADD CONSTRAINT [PK_' + @cArchiveTableName + '_' + @cToday + ']
+						PRIMARY KEY CLUSTERED (' + case when @cPKString <> '' then @cPKString + ', ' else '' end + @cKeyfieldList + ')
+						WITH  FILLFACTOR = 80'
+	--			print @cSQLString
+				exec sp_executesql @cSQLString
+			end
+
+			if isnull(@cPrimaryIndexType, 'PK') = 'Cluster'
+			begin
+				-- create clustered index ix_fact_weblogs_201703_week13_ymd on [fact_weblogs_201703_week13] (ymd) with fillfactor = 60
+				set @cSQLString = 'use ' + @cDatabaseName + '
+					create clustered index ix_' + @cArchiveTableName + '_' + @cToday + '_' + @cDateField + ' ' +
+						'on [' + @cArchiveTableName + '_' + @cToday + '] ' +
+						'(' + @cDateField + ') with fillfactor = 80'
+	--			print @cSQLString
+				exec sp_executesql @cSQLString
+			end
 		end
 	end
 
@@ -436,7 +437,7 @@ create table [' + @cArchiveTableName + '_' + @cToday + '] (' + @cTableStructure 
 
 --	print 'Archiving old tables'
 
-	exec pr_archiveOldPartitionedTables @cTableName, @cDateField, @cKeyfieldList
+	exec pr_archiveOldPartitionedTables @cTableName, @cDateField, @cKeyfieldList, @cPrimaryIndexType
 
 	insert into hist_partitionTableDaily (stepName) values ('Old tables archived')
 
@@ -608,15 +609,11 @@ create table [' + @cArchiveTableName + '_' + @cToday + '] (' + @cTableStructure 
 					insert into hist_partitionTableDaily (stepName) values ('Failed to delete records. ' + isnull(error_message(), 'N/A'))
 				end catch
 
-				set @nRowCount = @@rowcount
-				set @cMessage = 'Deleted ' + convert(varchar(20), @nRowCount) + ' duplicate rows'
-				insert into hist_partitionTableDaily (stepName) values (@cMessage)
-
 				insert into hist_partitionTableDaily (stepName) values
 					('Inserting ' + convert(varchar(10), @dStartDate, 120) + ' - ' + convert(varchar(10), @dEndDate, 120) + ' into ' + @cDestinationTableName)
 
 				set @cSQLString = 'insert into ' + @cDestinationTableName + ' (' + @cFieldList + ')
-				select ' + @cFieldList + '
+				select distinct ' + @cFieldList + '
 					from ' + @cTableName + ' (nolock)
 					where ' + @cDateField + ' >= ''' + convert(varchar(10), @dStartDate, 120) + '''
 						and ' + @cDateField + ' < ''' + convert(varchar(10), dateAdd(day, 1, @dEndDate), 120) + ''''
@@ -629,36 +626,31 @@ create table [' + @cArchiveTableName + '_' + @cToday + '] (' + @cTableStructure 
 					insert into hist_partitionTableDaily (stepName) values ('Failed to insert records. ' + isnull(error_message(), 'N/A'))
 				end catch
 
-				set @nRowCount = @@rowcount
-				set @cMessage = 'Inserted ' + convert(varchar(20), @nRowCount) + ' rows for this week'
-				insert into hist_partitionTableDaily (stepName) values (@cMessage)
+				insert into hist_partitionTableDaily (stepName) values ('Rows inserted for this week')
 
-				-- if that's all we needed in this database, shrink it
-				if (select count(*) from #weeks where databaseName = @cDatabaseName and ukey > @nThisUkey) = 0
-				begin
-					insert into hist_partitionTableDaily (stepName) values ('Shrinking log for ' + @cDatabaseName)
+--				-- if that's all we needed in this database, shrink it
+--				if (select count(*) from #weeks where databaseName = @cDatabaseName and ukey > @nThisUkey) = 0
+--				begin
+--					insert into hist_partitionTableDaily (stepName) values ('Shrinking ' + @cDatabaseName)
 
---' + case when @@version not like '%server 2008%' then 'backup log [' + @cDatabaseName + '] with truncate_only' else '' end + '
-----exec sp_spaceUsed @updateusage = ''TRUE''
+--					set @cSQLString = '
+--use [' + @cDatabaseName + ']
+--exec sp_spaceUsed @updateusage = ''TRUE''
+--dbcc shrinkfile(2,1)'
 
-
-					set @cSQLString = '
-use [' + @cDatabaseName + ']
-dbcc shrinkfile(2,1)'
-
-					exec sp_executeSQL @cSQLString
-					insert into hist_partitionTableDaily (stepName) values (@cDatabaseName + ' shrunk')
-				end
+--					exec sp_executeSQL @cSQLString
+--					insert into hist_partitionTableDaily (stepName) values (@cDatabaseName + ' shrunk')
+--				end
 
 			end
 
 			drop table #weeks
 
-			set @cSQLString = 'use tempdb
-dbcc shrinkfile(2,1)'
-			exec sp_executeSQL @cSQLString
+--			set @cSQLString = 'use tempdb
+--dbcc shrinkfile(2,1)'
+--			exec sp_executeSQL @cSQLString
 
-			insert into hist_partitionTableDaily (stepName) values ('TEMPDB shrunk')
+--			insert into hist_partitionTableDaily (stepName) values ('TEMPDB shrunk')
 
 		end
 

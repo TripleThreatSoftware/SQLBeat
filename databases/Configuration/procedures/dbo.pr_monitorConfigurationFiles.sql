@@ -1,17 +1,23 @@
 USE [Configuration]
 GO
+/****** Object:  StoredProcedure [dbo].[pr_monitorConfigurationFiles]    Script Date: 8/30/2024 11:50:40 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
 
+-- select top 100 * from configuration.dbo.configFileLog where tagPath like '%sitedirector%'
 
 -- select top 100 * from configFileLog order by ymd desc
+-- truncate table configFileLog
 ALTER procedure [dbo].[pr_monitorConfigurationFiles]
 as
 begin
+	-- now that we have DFS managing this, an alert is not needed
 
-	delete from configFileLog where ymd < dateadd(day, -180, getDate())
+	set nocount on
+
+	delete from configFileLog where ymd < dateadd(day, -7, getDate())
 
 	declare @cDirectory varchar(2000)
 	declare @cSQLString nvarchar(4000)
@@ -35,9 +41,40 @@ begin
 	create clustered index ix_configfiles_ukey on #configFiles (ukey) with fillfactor = 80
 
 	declare @servers table (servername varchar(100))
-	insert into @servers (servername) values ('web01')
 	insert into @servers (servername) values ('web02')
-	insert into @servers (servername) values ('web34')
+	--insert into @servers (servername) values ('appweb03')
+
+
+	--********************************************************************************************************************
+	--********************************************************************************************************************
+	-- apphosts is now stored centrally due to DFS
+	--declare @cSQLString nvarchar(4000)
+	--declare @cServerName varchar(100)
+
+	set @cServerName = 'appweb02'
+
+	set @cSQLString = 'type \\' + @cServerName + '\inetpub\sharedConfiguration\applicationHost.config'
+
+	insert into #configFiles (fileString)
+	exec master..xp_cmdshell @cSQLString
+
+	if exists (select top 1 fileString from #configFiles where fileName is null and fileString in ('Access is denied.', 'The system cannot find the file specified.'))
+	begin
+		print 'Unable to access \\' + @cServerName + '\inetpub\sharedConfiguration\applicationHost.config'
+
+		delete from #configFiles where fileName is null
+	end
+	else
+	begin
+		update #configFiles
+			set fileName = '\\' + @cServerName + '\inetpub\sharedConfiguration\applicationHost.config', servername = @cServerName
+			where fileName is null
+	end
+
+
+	--********************************************************************************************************************
+	--********************************************************************************************************************
+
 
 	set @cServerName = ''
 
@@ -51,7 +88,7 @@ begin
 		insert into #directories (directoryName)
 		exec master..xp_cmdshell @cSQLString
 
-		delete from #directories where directoryName is null or not directoryName like '%AppDb%'
+		delete from #directories where (directoryName is null or not directoryName like '%AppDb%') and not directoryName like '%SiteDirector%'
 
 		update #directories set fullpath = '\\' + @cServerName + '\inetpub\sites\' + directoryName, servername = @cServerName where fullpath is null
 
@@ -64,78 +101,53 @@ begin
 
 		update #directories set fullpath = '\\' + @cServerName + '\inetpub\sites\App_Nodes\' + directoryName, servername = @cServerName where fullpath is null
 
-		--********************************************************************************************************************
-		--********************************************************************************************************************
+		----********************************************************************************************************************
+		----********************************************************************************************************************
 
-		if @cServerName in ('web34')
-			set @cSQLString = 'type \\' + @cServerName + '\inet-config\applicationHost.config'
-		else
-			set @cSQLString = 'type \\' + @cServerName + '\c$\windows\system32\inetsrv\config\applicationHost.config'
+		--if @cServerName in ('web34', 'appweb37', 'appweb38', 'appweb03')
+		--	set @cSQLString = 'type \\' + @cServerName + '\inet-config\administration.config'
+		--else
+		--	set @cSQLString = 'type \\' + @cServerName + '\inet-config\administration.config'
 
-		insert into #configFiles (fileString)
-		exec master..xp_cmdshell @cSQLString
+		--insert into #configFiles (fileString)
+		--exec master..xp_cmdshell @cSQLString
 
-		if exists (select top 1 fileString from #configFiles where fileName is null and fileString in ('Access is denied.', 'The system cannot find the file specified.'))
-		begin
-			print 'Unable to access \\' + @cServerName + '\c$\windows\system32\inetsrv\config\applicationHost.config'
+		--if exists (select top 1 fileString from #configFiles where fileName is null and fileString in ('Access is denied.', 'The system cannot find the file specified.'))
+		--begin
+		--	print 'Unable to access \\' + @cServerName + '\c$\windows\system32\inetsrv\config\administration.config'
 
-			delete from #configFiles where fileName is null
-		end
-		else
-		begin
-			update #configFiles
-				set fileName = '\\' + @cServerName + '\c$\windows\system32\inetsrv\config\applicationHost.config', servername = @cServerName
-				where fileName is null
-		end
+		--	delete from #configFiles where fileName is null
+		--end
+		--else
+		--begin
+		--	update #configFiles
+		--		set fileName = '\\' + @cServerName + '\c$\windows\system32\inetsrv\config\administration.config', servername = @cServerName
+		--		where fileName is null
+		--end
 
+		----********************************************************************************************************************
+		----********************************************************************************************************************
 
-		--********************************************************************************************************************
-		--********************************************************************************************************************
+		--if @cServerName in ('web34', 'appweb37', 'appweb38', 'appweb03')
+		--	set @cSQLString = 'type \\' + @cServerName + '\inet-config\redirection.config'
+		--else
+		--	set @cSQLString = 'type \\' + @cServerName + '\inet-config\redirection.config'
 
-		if @cServerName in ('web34')
-			set @cSQLString = 'type \\' + @cServerName + '\inet-config\administration.config'
-		else
-			set @cSQLString = 'type \\' + @cServerName + '\inet-config\administration.config'
+		--insert into #configFiles (fileString)
+		--exec master..xp_cmdshell @cSQLString
 
-		insert into #configFiles (fileString)
-		exec master..xp_cmdshell @cSQLString
+		--if exists (select top 1 fileString from #configFiles where fileName is null and fileString in ('Access is denied.', 'The system cannot find the file specified.'))
+		--begin
+		--	print 'Unable to access \\' + @cServerName + '\c$\windows\system32\inetsrv\config\redirection.config'
 
-		if exists (select top 1 fileString from #configFiles where fileName is null and fileString in ('Access is denied.', 'The system cannot find the file specified.'))
-		begin
-			print 'Unable to access \\' + @cServerName + '\c$\windows\system32\inetsrv\config\administration.config'
-
-			delete from #configFiles where fileName is null
-		end
-		else
-		begin
-			update #configFiles
-				set fileName = '\\' + @cServerName + '\c$\windows\system32\inetsrv\config\administration.config', servername = @cServerName
-				where fileName is null
-		end
-
-		--********************************************************************************************************************
-		--********************************************************************************************************************
-
-		if @cServerName in ('web34')
-			set @cSQLString = 'type \\' + @cServerName + '\inet-config\redirection.config'
-		else
-			set @cSQLString = 'type \\' + @cServerName + '\inet-config\redirection.config'
-
-		insert into #configFiles (fileString)
-		exec master..xp_cmdshell @cSQLString
-
-		if exists (select top 1 fileString from #configFiles where fileName is null and fileString in ('Access is denied.', 'The system cannot find the file specified.'))
-		begin
-			print 'Unable to access \\' + @cServerName + '\c$\windows\system32\inetsrv\config\redirection.config'
-
-			delete from #configFiles where fileName is null
-		end
-		else
-		begin
-			update #configFiles
-				set fileName = '\\' + @cServerName + '\c$\windows\system32\inetsrv\config\redirection.config', servername = @cServerName
-				where fileName is null
-		end
+		--	delete from #configFiles where fileName is null
+		--end
+		--else
+		--begin
+		--	update #configFiles
+		--		set fileName = '\\' + @cServerName + '\c$\windows\system32\inetsrv\config\redirection.config', servername = @cServerName
+		--		where fileName is null
+		--end
 	end
 
 
@@ -309,245 +321,293 @@ begin
 		end
 	end
 
-	--****************************************************************************************************************************************
-	--****************************************************************************************************************************************
-	-- Check for changes in config files since last check
+--	--****************************************************************************************************************************************
+--	--****************************************************************************************************************************************
+--	-- Check for changes in config files since last check
 
-	-- delete from configFileLog where fileString like '%locked out%'
+--	-- delete from configFileLog where fileString like '%locked out%'
+--	-- drop table #checksum_current
+--	select
+--		servername, fileName,
+--		count(*) as numLines,
+--		sum(notification.dbo.fn_checksum(fileString)) as checksum
+--		into #checksum_current
+--		from #configFiles
+--		group by servername, fileName
 
-	select
-		servername, fileName,
-		count(*) as numLines,
-		sum(notification.dbo.fn_checksum(fileString)) as checksum
-		into #checksum_current
-		from #configFiles
-		group by servername, fileName
+--	-- select * from #checksum_last where fileName = '\\web01\inetpub\sites\App_Nodes\App_Brand_Region\web.config'
+--	-- drop table #checksum_last
+--	select
+--		a.servername, a.fileName,
+--		count(*) as numLines,
+--		sum(notification.dbo.fn_checksum(fileString)) as checksum,
+--		max(b.ymd) as ymd
+--		into #checksum_last
+--		from configFileLog a
+--		join (
+--			select servername, filename, max(ymd) as ymd
+--				from configFileLog (nolock)
+--				where ymd >= dateadd(day, -3, getDate())
+--				group by servername, fileName
+--			) b on a.filename = b.filename
+--			and a.servername = b.servername
+--			and a.ymd = b.ymd
+--		group by a.servername, a.fileName
 
-	-- select * from #checksum_last where fileName = '\\web01\inetpub\sites\App_Nodes\App_Brand_Region\web.config'
-	select
-		a.servername, a.fileName,
-		count(*) as numLines,
-		sum(notification.dbo.fn_checksum(fileString)) as checksum,
-		max(b.ymd) as ymd
-		into #checksum_last
-		from configFileLog a
-		join (
-			select servername, filename, max(ymd) as ymd
-				from configFileLog (nolock)
-				where ymd >= dateadd(day, -3, getDate())
-				group by servername, fileName
-			) b on a.filename = b.filename
-			and a.servername = b.servername
-			and a.ymd = b.ymd
-		group by a.servername, a.fileName
+--	insert into notification.dbo.notificationLog_stage (serverName, ymd, subject, message, severity)
+--	select distinct
+--		a.servername,
+--		getDate(),
+--		'Config file ' + a.fileName + ' changed',
+--		a.filename + char(13) +
+--		'Checksum Now: ' + convert(varchar(20), isnull(checksum_current, 0)) + char(13) +
+--		'Checksum Last: ' + convert(varchar(20), isnull(checksum_last, 0)),
+--		2
+--		from (
+--			select
+--				distinct a.servername, a.filename, a.checksum as checksum_current, b.checksum as checksum_last
+--				from #checksum_current a
+--				left outer join #checksum_last b on a.filename = b.filename
+--					and a.servername = b.servername
+--				where isnull(a.checksum, 0) <> isnull(b.checksum, 0)
+--			union
+--			select
+--				distinct a.servername, a.filename, b.checksum as checksum_current, a.checksum as checksum_last
+--				from #checksum_last a
+--				left outer join #checksum_current b on a.filename = b.filename
+--					and a.servername = b.servername
+--				where isnull(a.checksum, 0) <> isnull(b.checksum, 0)
+--			) a
+--		where not a.servername in ('web01')
+--			and not isnull(checksum_last, 0) = 0
 
-	insert into notification.dbo.notificationLog_stage (serverName, ymd, subject, message, severity)
-	select distinct
-		a.servername,
-		getDate(),
-		'Config file ' + a.fileName + ' changed',
-		a.filename + char(13) +
-		'Checksum Now: ' + convert(varchar(20), isnull(checksum_current, 0)) + char(13) +
-		'Checksum Last: ' + convert(varchar(20), isnull(checksum_last, 0)),
-		1
-		from (
-			select
-				distinct a.servername, a.filename, a.checksum as checksum_current, b.checksum as checksum_last
-				from #checksum_current a
-				left outer join #checksum_last b on a.filename = b.filename
-					and a.servername = b.servername
-				where isnull(a.checksum, 0) <> isnull(b.checksum, 0)
-			union
-			select
-				distinct a.servername, a.filename, b.checksum as checksum_current, a.checksum as checksum_last
-				from #checksum_last a
-				left outer join #checksum_current b on a.filename = b.filename
-					and a.servername = b.servername
-				where isnull(a.checksum, 0) <> isnull(b.checksum, 0)
-			) a
-
-	-- create table configFileLog (ukey int identity, ymd dateTime default getDate(), servername varchar(100), filename varchar(500), fileString varchar(8000), tagPath varchar(2000), tagName varchar(500), tagKey varchar(2000))
+--	-- create table configFileLog (ukey int identity, ymd dateTime default getDate(), servername varchar(100), filename varchar(500), fileString varchar(8000), tagPath varchar(2000), tagName varchar(500), tagKey varchar(2000))
 
 	insert into configFileLog (ymd, servername, filename, filestring, tagpath, tagname, tagKey)
 	select getdate(), servername, filename, filestring, tagpath, tagname, tagKey
 		from #configFiles
 		order by ukey
 
-	--****************************************************************************************************************************************
-	--****************************************************************************************************************************************
-	-- Check for differences between servers which should match
+--	--****************************************************************************************************************************************
+--	--****************************************************************************************************************************************
+--	-- Check for differences between servers which should match
 
-	-- select top 500 * from notification.dbo.notificationLog order by ymd desc
+--	-- select top 500 * from notification.dbo.notificationLog order by ymd desc
 
-	-- bindings
-	insert into notification.dbo.notificationLog_stage (serverName, ymd, subject, message, severity)
-	select
-		a.servername,
-		getDate(),
-		case when b.nodeName <> a.nodeName then 'Mismatched' else 'Missing' end + ' Binding: ' + a.nodeName + ' (' + a.bindingURL + ') at ' + convert(varchar(16), getDate(), 120) as subject,
-		'WEB34 has binding ' + a.bindingURL + ' on node ' + a.nodeName + ', ' + upper(a.servername) + ' does not. ' +
-			case
-				when b.nodeName <> a.nodeName then 'On ' + upper(a.servername) + ' this binding is on a different node: ' + b.nodeName
-				else 'This binding does not exist at all on ' + upper(a.servername) + '.'
-				end,
-		2
-		from (
-			select distinct b.serverName, a.nodeName, a.tagName as bindingURL
-				from (
-					select distinct tagName, replace(replace(tagPath, '?xml.configuration.system.applicationHost.sites.site(', ''), ').bindings.binding', '') as nodeName
-						from #configFiles
-						where tagKey = 'binding'
-							and not tagName like '%basichttpbinding%'
-							and serverName = 'web34'	-- for now, this is the gold copy
-					) a, (
-					select distinct serverName
-						from #configFiles
-					) b
-			) a
-		left outer join (
-			select *, replace(replace(tagPath, '?xml.configuration.system.applicationHost.sites.site(', ''), ').bindings.binding', '') as nodeName
-				from #configFiles
-			)  b on a.servername = b.servername
-			and a.bindingURL = b.tagName
+--	create table #notifications (servername varchar(500), ymd dateTime, subject varchar(8000), message varchar(8000), severity int)
 
-		where (b.servername is null or b.nodeName <> a.nodeName)
-			and not a.serverName in ('web01')
-
-		order by a.serverName, a.nodeName, a.bindingURL
-
-
-	-- connection strings
-	insert into notification.dbo.notificationLog_stage (serverName, ymd, subject, message, severity)
-	select a.servername, getDate(),
-		'Connection String ' + upper(a.nodeName) + '.' + a.tagName + ' is ' + case when b.sqlServer is null then 'MISSING' else upper(b.sqlServer) end + ' (WEB34 is ' + upper(a.sqlServer) + ') at ' + convert(varchar(16), getDate(), 120),
-		'Connection String ' + upper(a.servername) + '.' + upper(a.nodeName) + '.' + a.tagName + ' is ' + case when b.sqlServer is null then 'MISSING' else upper(b.sqlServer) end + ' (WEB34 is ' + upper(a.sqlServer) + ')',
-		2
-		from (
-			select distinct a.nodeName, a.tagName, a.sqlServer, b.serverName
-				from (
-					select *,
-						replace(replace(substring(fileName, charindex('\sites\', fileName), 500), '\sites\', ''), '\web.config', '') as nodeName,
-						replace(replace(replace(replace(
-							left(
-								substring(fileString, charindex('data source', fileString), 500),
-								charindex(';', substring(fileString, charindex('data source', fileString), 500)) - 1
-								), 'data source=', ''), 'tcp:', ''), ',1433', ''), ', 1433', '') as sqlServer
-						from #configFiles
-						where tagpath like '%connectionString%' and tagKey = 'Add'
-							and serverName = 'web34'
-							and not fileName like '%_old%'
-							and not fileName like '%_backup%'
-							and not fileName like '%_save%'
-							and not fileName like '%AppSecure2%'
-					) a, (select distinct servername from #configFiles) b
-			) a
-		left outer join (
-			select *,
-				replace(replace(substring(fileName, charindex('\sites\', fileName), 500), '\sites\', ''), '\web.config', '') as nodeName,
-				replace(replace(replace(replace(
-					left(
-						substring(fileString, charindex('data source', fileString), 500),
-						charindex(';', substring(fileString, charindex('data source', fileString), 500)) - 1
-						), 'data source=', ''), 'tcp:', ''), ',1433', ''), ', 1433', '') as sqlServer
-				from #configFiles
-				where tagpath like '%connectionString%'
-					and tagKey = 'Add'
-			) b on a.servername = b.servername
-				and a.nodeName = b.nodeName
-				and a.tagName = b.tagName
-		where not a.serverName in ('web01')
-			and (
-				b.servername is null
-				or isnull(a.sqlServer, '') <> isnull(b.sqlServer, '')
-				)
-
-
-
-
-
-------4/13/2018 - susending these error by truncating  #tables
---truncate table #configFiles
-
---	insert into notification.dbo.notificationLog_stage (serverName, ymd, subject, message, severity)
+--	-- nodes
+--	insert into #notifications (serverName, ymd, subject, message, severity)
 --	select
---		'web02', getDate(),
---		'Tag ' + case when isnull(a.tagKey, '') <> '' then '"' + a.tagKey + case when isnull(a.tagname, '') <> '' and len(a.tagname) < 50 then ' : ' + a.tagName else '' end + '"' else case when isnull(a.tagname, '') <> '' and len(a.tagname) < 50 then a.tagName else '' end end + ' present on Web34 and missing on Web02 at ' + convert(varchar(20), getDate(), 120),
---		'Tag :' + a.tagPath + '<br>' +
---		'Tag Value: ' + replace(replace(a.fileString, '<', '&lt;'), '>', '&gt;') + '<br>' +
---		'Present on Web34 and missing on Web02',
---		3
-----		, a.*
---		-- select a.*
---		from #configFiles a
---		left outer join #configFiles b on replace(a.filename, 'Web34', 'web02') = b.fileName
---			and replace(replace(a.tagpath, 'Web34', 'ServerName'), 'Web02', 'ServerName') = replace(replace(b.tagPath, 'Web34', 'ServerName'), 'Web02', 'ServerName')
---			and replace(replace(isnull(a.tagname, ''), 'Web34', 'ServerName'), 'Web02', 'ServerName') = replace(replace(isnull(b.tagname, ''), 'Web34', 'ServerName'), 'Web02', 'ServerName')
---			and replace(replace(a.fileString, 'Web34', 'ServerName'), 'Web02', 'ServerName') = replace(replace(b.fileString, 'Web34', 'ServerName'), 'Web02', 'ServerName')
+--		a.servername,
+--		getDate(),
+--		'Node ' + a.nodeName + ' missing.' as subject,
+--		'Node ' + a.nodeName + ' missing on ' + upper(a.servername) + '.',
+--		2
+--		from (
+--			select distinct b.serverName, a.nodeName--, a.tagName as bindingURL
+--				from (
+--					select distinct tagName, replace(replace(tagPath, '?xml.configuration.system.applicationHost.sites.site(', ''), ').bindings.binding', '') as nodeName
+--						from #configFiles
+--						where tagKey = 'binding'
+--							and not tagName like '%basichttpbinding%'
+--							and serverName = 'web34'	-- for now, this is the gold copy
+--					) a, (
+--					select distinct serverName
+--						from #configFiles
+--					) b
+--			) a
+--		left outer join (
+--			select *, replace(replace(tagPath, '?xml.configuration.system.applicationHost.sites.site(', ''), ').bindings.binding', '') as nodeName
+--				from #configFiles
+--			)  b on a.servername = b.servername
+--			and a.nodeName = b.nodeName
+----			and a.bindingURL = b.tagName
 
---		where a.filename like '%Web34%'
---			and b.ukey is null
---			and a.fileName in (select distinct replace(a.filename, 'web02', 'Web34') from #configFiles where fileName like '%web02%')	-- make sure the file exists
+--		where b.servername is null
+--			and not a.serverName in ('web01', 'web05')
+--		order by a.serverName, a.nodeName
 
+--	---- bindings
+--	--insert into #notifications (serverName, ymd, subject, message, severity)
+--	--select
+--	--	a.servername,
+--	--	getDate(),
+--	--	case when b.nodeName <> a.nodeName then 'Mismatched' else 'Missing' end + ' Binding: ' + a.nodeName + ' (' + a.bindingURL + ') at ' + convert(varchar(16), getDate(), 120) as subject,
+--	--	'WEB34 has binding ' + a.bindingURL + ' on node ' + a.nodeName + ', ' + upper(a.servername) + ' does not. ' +
+--	--		case
+--	--			when b.nodeName <> a.nodeName then 'On ' + upper(a.servername) + ' this binding is on a different node: ' + b.nodeName
+--	--			else 'This binding does not exist at all on ' + upper(a.servername) + '.'
+--	--			end,
+--	--	2
+--	--	from (
+--	--		select distinct b.serverName, a.nodeName, a.tagName as bindingURL
+--	--			from (
+--	--				select distinct tagName, replace(replace(tagPath, '?xml.configuration.system.applicationHost.sites.site(', ''), ').bindings.binding', '') as nodeName
+--	--					from #configFiles
+--	--					where tagKey = 'binding'
+--	--						and not tagName like '%basichttpbinding%'
+--	--						and serverName = 'web34'	-- for now, this is the gold copy
+--	--				) a, (
+--	--				select distinct serverName
+--	--					from #configFiles
+--	--				) b
+--	--		) a
+--	--	left outer join (
+--	--		select *, replace(replace(tagPath, '?xml.configuration.system.applicationHost.sites.site(', ''), ').bindings.binding', '') as nodeName
+--	--			from #configFiles
+--	--		)  b on a.servername = b.servername
+--	--		and a.bindingURL = b.tagName
+
+--	--	where (b.servername is null or b.nodeName <> a.nodeName)
+--	--		and not a.serverName in ('web01')
+
+--	--	order by a.serverName, a.nodeName, a.bindingURL
+
+--	--insert into #notifications (serverName, ymd, subject, message, severity)
+--	--select servername, getDate(), 'Many bindings missing (' + convert(varchar(20), count(*)) + ')', convert(varchar(20), count(*)) + ' bindings missing', 2
+--	--	from #notifications
+--	--	where subject like 'missing binding%'
+--	--	group by servername
+--	--	having count(*) > 15
+
+--	--delete from #notifications where servername in (select servername from #notifications where subject like 'many bindings missing%') and subject like 'missing binding%'
+
+--	-- connection strings
+--	insert into #notifications (serverName, ymd, subject, message, severity)
+--	select a.servername, getDate(),
+--		'Connection String ' + upper(a.nodeName) + '.' + a.tagName + ' is ' + case when b.sqlServer is null then 'MISSING' else upper(b.sqlServer) end + ' (WEB34 is ' + upper(a.sqlServer) + ') at ' + convert(varchar(16), getDate(), 120),
+--		'Connection String ' + upper(a.servername) + '.' + upper(a.nodeName) + '.' + a.tagName + ' is ' + case when b.sqlServer is null then 'MISSING' else upper(b.sqlServer) end + ' (WEB34 is ' + upper(a.sqlServer) + ')',
+--		2
+--		from (
+--			select distinct a.nodeName, a.tagName, a.sqlServer, b.serverName
+--				from (
+--					select *,
+--						replace(replace(substring(fileName, charindex('\sites\', fileName), 500), '\sites\', ''), '\web.config', '') as nodeName,
+--						replace(replace(replace(replace(
+--							left(
+--								substring(fileString, charindex('data source', fileString), 500),
+--								charindex(';', substring(fileString, charindex('data source', fileString), 500)) - 1
+--								), 'data source=', ''), 'tcp:', ''), ',1433', ''), ', 1433', '') as sqlServer
+--						from #configFiles
+--						where tagpath like '%connectionString%' and tagKey = 'Add'
+--							and serverName = 'web34'
+--							and not fileName like '%_old%'
+--							and not fileName like '%_backup%'
+--							and not fileName like '%_save%'
+--							and not fileName like '%AppSecure2%'
+--					) a, (select distinct servername from #configFiles) b
+--			) a
+--		left outer join (
+--			select *,
+--				replace(replace(substring(fileName, charindex('\sites\', fileName), 500), '\sites\', ''), '\web.config', '') as nodeName,
+--				replace(replace(replace(replace(
+--					left(
+--						substring(fileString, charindex('data source', fileString), 500),
+--						charindex(';', substring(fileString, charindex('data source', fileString), 500)) - 1
+--						), 'data source=', ''), 'tcp:', ''), ',1433', ''), ', 1433', '') as sqlServer
+--				from #configFiles
+--				where tagpath like '%connectionString%'
+--					and tagKey = 'Add'
+--			) b on a.servername = b.servername
+--				and a.nodeName = b.nodeName
+--				and a.tagName = b.tagName
+--		where not a.serverName in ('web01', 'web02', 'appweb03', 'web05', 'appweb38')
 --			and (
---				a.fileString like '%binding%'
---				or a.fileString like '%connection%'
+--				b.servername is null
+--				or replace(isnull(a.sqlServer, ''), 'sqldm01.pro', 'sqldm01') <> replace(isnull(b.sqlServer, ''), 'sqldm01.pro', 'sqldm01')
 --				)
 
---			and not (
---				a.fileString like '%applicationinsights%'
---				or a.fileString like '%projectguid%'
---				or a.fileString like '%projectguid%'
---				or a.fileString = '<!--'
---				or a.fileString = '-->'
---				)
 
 --	insert into notification.dbo.notificationLog_stage (serverName, ymd, subject, message, severity)
---	select
---		'Web34', getDate(),
---		'Tag ' + case when isnull(a.tagKey, '') <> '' then '"' + a.tagKey + case when isnull(a.tagname, '') <> '' and len(a.tagname) < 50 then ' : ' + a.tagName else '' end + '"' else case when isnull(a.tagname, '') <> '' and len(a.tagname) < 50 then a.tagName else '' end end + ' present on Web34 and missing on Web02 at ' + convert(varchar(20), getDate(), 120),
---		'Tag :' + a.tagPath + '<br>' +
---		'Tag Value: ' + replace(replace(a.fileString, '<', '&lt;'), '>', '&gt;') + '<br>' +
---		'Present on Web02 and missing on Web34',
---		3
---		-- select a.*
---		from #configFiles a
---		left outer join #configFiles b on replace(a.filename, 'web02', 'Web34') = b.fileName
---			and replace(replace(a.tagpath, 'Web34', 'ServerName'), 'Web02', 'ServerName') = replace(replace(b.tagPath, 'Web34', 'ServerName'), 'Web02', 'ServerName')
---			and replace(replace(isnull(a.tagname, ''), 'Web34', 'ServerName'), 'Web02', 'ServerName') = replace(replace(isnull(b.tagname, ''), 'Web34', 'ServerName'), 'Web02', 'ServerName')
---			and replace(replace(a.fileString, 'Web34', 'ServerName'), 'Web02', 'ServerName') = replace(replace(b.fileString, 'Web34', 'ServerName'), 'Web02', 'ServerName')
+--	select * from #notifications
 
---		where a.filename like '%web02%'
---			and b.ukey is null
---			and a.fileName in (select distinct replace(a.filename, 'Web34', 'web02') from #configFiles where fileName like '%Web34%')	-- make sure the file exists
-
---			and not (
---				a.fileString like '%applicationinsights%'
---				or a.fileString like '%projectguid%'
---				or a.fileString = '<!--'
---				or a.fileString = '-->'
---				)
+--	drop table #notifications
 
 
+--------4/13/2018 - susending these error by truncating  #tables
+----truncate table #configFiles
+
+----	insert into notification.dbo.notificationLog_stage (serverName, ymd, subject, message, severity)
+----	select
+----		'web02', getDate(),
+----		'Tag ' + case when isnull(a.tagKey, '') <> '' then '"' + a.tagKey + case when isnull(a.tagname, '') <> '' and len(a.tagname) < 50 then ' : ' + a.tagName else '' end + '"' else case when isnull(a.tagname, '') <> '' and len(a.tagname) < 50 then a.tagName else '' end end + ' present on Web34 and missing on Web02 at ' + convert(varchar(20), getDate(), 120),
+----		'Tag :' + a.tagPath + '<br>' +
+----		'Tag Value: ' + replace(replace(a.fileString, '<', '&lt;'), '>', '&gt;') + '<br>' +
+----		'Present on Web34 and missing on Web02',
+----		3
+------		, a.*
+----		-- select a.*
+----		from #configFiles a
+----		left outer join #configFiles b on replace(a.filename, 'Web34', 'web02') = b.fileName
+----			and replace(replace(a.tagpath, 'Web34', 'ServerName'), 'Web02', 'ServerName') = replace(replace(b.tagPath, 'Web34', 'ServerName'), 'Web02', 'ServerName')
+----			and replace(replace(isnull(a.tagname, ''), 'Web34', 'ServerName'), 'Web02', 'ServerName') = replace(replace(isnull(b.tagname, ''), 'Web34', 'ServerName'), 'Web02', 'ServerName')
+----			and replace(replace(a.fileString, 'Web34', 'ServerName'), 'Web02', 'ServerName') = replace(replace(b.fileString, 'Web34', 'ServerName'), 'Web02', 'ServerName')
+
+----		where a.filename like '%Web34%'
+----			and b.ukey is null
+----			and a.fileName in (select distinct replace(a.filename, 'web02', 'Web34') from #configFiles where fileName like '%web02%')	-- make sure the file exists
+
+----			and (
+----				a.fileString like '%binding%'
+----				or a.fileString like '%connection%'
+----				)
+
+----			and not (
+----				a.fileString like '%applicationinsights%'
+----				or a.fileString like '%projectguid%'
+----				or a.fileString like '%projectguid%'
+----				or a.fileString = '<!--'
+----				or a.fileString = '-->'
+----				)
+
+----	insert into notification.dbo.notificationLog_stage (serverName, ymd, subject, message, severity)
+----	select
+----		'Web34', getDate(),
+----		'Tag ' + case when isnull(a.tagKey, '') <> '' then '"' + a.tagKey + case when isnull(a.tagname, '') <> '' and len(a.tagname) < 50 then ' : ' + a.tagName else '' end + '"' else case when isnull(a.tagname, '') <> '' and len(a.tagname) < 50 then a.tagName else '' end end + ' present on Web34 and missing on Web02 at ' + convert(varchar(20), getDate(), 120),
+----		'Tag :' + a.tagPath + '<br>' +
+----		'Tag Value: ' + replace(replace(a.fileString, '<', '&lt;'), '>', '&gt;') + '<br>' +
+----		'Present on Web02 and missing on Web34',
+----		3
+----		-- select a.*
+----		from #configFiles a
+----		left outer join #configFiles b on replace(a.filename, 'web02', 'Web34') = b.fileName
+----			and replace(replace(a.tagpath, 'Web34', 'ServerName'), 'Web02', 'ServerName') = replace(replace(b.tagPath, 'Web34', 'ServerName'), 'Web02', 'ServerName')
+----			and replace(replace(isnull(a.tagname, ''), 'Web34', 'ServerName'), 'Web02', 'ServerName') = replace(replace(isnull(b.tagname, ''), 'Web34', 'ServerName'), 'Web02', 'ServerName')
+----			and replace(replace(a.fileString, 'Web34', 'ServerName'), 'Web02', 'ServerName') = replace(replace(b.fileString, 'Web34', 'ServerName'), 'Web02', 'ServerName')
+
+----		where a.filename like '%web02%'
+----			and b.ukey is null
+----			and a.fileName in (select distinct replace(a.filename, 'Web34', 'web02') from #configFiles where fileName like '%Web34%')	-- make sure the file exists
+
+----			and not (
+----				a.fileString like '%applicationinsights%'
+----				or a.fileString like '%projectguid%'
+----				or a.fileString = '<!--'
+----				or a.fileString = '-->'
+----				)
 
 
-	-- ***************************************************************************************************************************************************
-	-- ***************************************************************************************************************************************************
 
---select top 100 * from #configFiles
---update #configFiles set fileString = 'Hello World' where ukey = 1516
 
-	declare @nChangedLines int
-	declare @nNewLines int
-	declare @nDroppedLines int
-	declare @cTo varchar(100)
-	declare @cFrom varchar(100)
-	declare @cSubject varchar(500)
-	declare @cBody varchar(max)
+--	-- ***************************************************************************************************************************************************
+--	-- ***************************************************************************************************************************************************
+
+----select top 100 * from #configFiles
+----update #configFiles set fileString = 'Hello World' where ukey = 1516
+
+--	declare @nChangedLines int
+--	declare @nNewLines int
+--	declare @nDroppedLines int
+--	declare @cTo varchar(100)
+--	declare @cFrom varchar(100)
+--	declare @cSubject varchar(500)
+--	declare @cBody varchar(max)
 	declare @nChangedFiles int
 
+----	set @cTo = 'alerts@example.com'
 --	set @cTo = 'alerts@example.com'
-	set @cTo = 'alerts@triplethreatsoftware.com'
-	set @cFrom = 'alerts@example.com'
+--	set @cFrom = 'alerts@example.com'
 
 
 --	alter table #configFiles add lineNumber int
@@ -626,143 +686,144 @@ begin
 
 	set @nChangedFiles = (select count(*) from #changedFiles)
 
-	if isnull(@nChangedFiles, 0) > 20
-	begin
---declare @cBody varchar(8000)
---declare @cServerName varchar(100) = 'web02'
---declare @nChangedFiles int = (select count(*) from #changedFiles)
+--	if isnull(@nChangedFiles, 0) > 20
+--	begin
+----declare @cBody varchar(8000)
+----declare @cServerName varchar(100) = 'web02'
+----declare @nChangedFiles int = (select count(*) from #changedFiles)
+--		-- select * From #changedFiles
 
-		set @cBody = ''
+--		set @cBody = ''
 
-		select @cBody = @cBody + fileName + ' (' + convert(varchar(20), changedLines) + ')<br>'
-			from #changedFiles
+--		select @cBody = @cBody + fileName + ' (' + convert(varchar(20), changedLines) + ')<br>'
+--			from #changedFiles
 
-		insert into notification.dbo.notificationLog_stage (servername, ymd, subject, message, severity, isConfiguration)
-		select @cServerName, getDate(), convert(varchar(20), @nChangedFiles) + ' files changed', @cBody, 2, 1
+--		insert into notification.dbo.notificationLog_stage (servername, ymd, subject, message, severity, isConfiguration)
+--		select @cServerName, getDate(), convert(varchar(20), @nChangedFiles) + ' files changed', left(@cBody, 8000), 2, 1
 
-	end
-	else
-	begin
+--	end
+--	else
+--	begin
 
-		set @cfileName = ''
+--		set @cfileName = ''
 
-		while exists (select top 1 fileName from #changedFiles where fileName > @cfileName)
-		begin
-			select top 1
-				@cfileName = fileName,
-				@nChangedLines = changedLines
-				from #changedFiles
-				where fileName > @cfileName
-				order by fileName
+--		while exists (select top 1 fileName from #changedFiles where fileName > @cfileName)
+--		begin
+--			select top 1
+--				@cfileName = fileName,
+--				@nChangedLines = changedLines
+--				from #changedFiles
+--				where fileName > @cfileName
+--				order by fileName
 
-			select top 1
-				@nNewLines = count(*)
-				from #changedFilesNewLines
-				where fileName = @cfileName
+--			select top 1
+--				@nNewLines = count(*)
+--				from #changedFilesNewLines
+--				where fileName = @cfileName
 
-			select top 1
-				@nDroppedLines = count(*)
-				from #changedFilesDroppedLines
-				where filePath = @cfileName
+--			select top 1
+--				@nDroppedLines = count(*)
+--				from #changedFilesDroppedLines
+--				where filePath = @cfileName
 
-			set @cBody = ''
-			set @nChangedLines = isnull(@nChangedLines, 0)
-			set @nNewLines = isnull(@nNewLines, 0)
-			set @nDroppedLines = isnull(@nDroppedLines, 0)
+--			set @cBody = ''
+--			set @nChangedLines = isnull(@nChangedLines, 0)
+--			set @nNewLines = isnull(@nNewLines, 0)
+--			set @nDroppedLines = isnull(@nDroppedLines, 0)
 
-			if @nChangedLines <= 20
-			begin
+--			if @nChangedLines <= 20
+--			begin
 
-				select @cBody = @cBody +
-	'LINE ' + convert(varchar(20), lineNumber) + '
-		NEW: ' + isnull(fileString_new, '') + '
-		OLD: ' + isnull(fileString_old, '') + char(13) + char(13)
-					from (
-						select top 20
-							a.lineNumber,
-							replace(a.fileString, char(9), '') as fileString_new,
-							replace(b.fileString, char(9), '') as fileString_old
-							from #configFiles a
-							left outer join audit..auditdata_config b on a.fileName = b.filePath
-								and a.lineNumber = b.lineNumber
-								and b.isCurrent = 1
-							where not (isnull(a.fileString, '') = isnull(b.fileString, ''))
-								and a.fileName = @cfileName
-							order by a.lineNumber
-						) a
+--				select @cBody = @cBody +
+--	'LINE ' + convert(varchar(20), lineNumber) + '
+--		NEW: ' + isnull(fileString_new, '') + '
+--		OLD: ' + isnull(fileString_old, '') + char(13) + char(13)
+--					from (
+--						select top 20
+--							a.lineNumber,
+--							replace(a.fileString, char(9), '') as fileString_new,
+--							replace(b.fileString, char(9), '') as fileString_old
+--							from #configFiles a
+--							left outer join audit..auditdata_config b on a.fileName = b.filePath
+--								and a.lineNumber = b.lineNumber
+--								and b.isCurrent = 1
+--							where not (isnull(a.fileString, '') = isnull(b.fileString, ''))
+--								and a.fileName = @cfileName
+--							order by a.lineNumber
+--						) a
 
-				select @cBody = @cBody +
-	'LINE ' + convert(varchar(20), lineNumber) + '
-		NEW: [LINE REMOVED]
-		OLD: ' + isnull(fileString_old, '') + char(13) + char(13)
+--				select @cBody = @cBody +
+--	'LINE ' + convert(varchar(20), lineNumber) + '
+--		NEW: [LINE REMOVED]
+--		OLD: ' + isnull(fileString_old, '') + char(13) + char(13)
 
-					from (
-						select top 20 a.lineNumber, replace(b.fileString, char(9), '') as fileString_new, replace(a.fileString, char(9), '') as fileString_old
-							from audit..auditdata_config a
-							left outer join #configFiles b on a.filePath = b.fileName
-								and a.lineNumber = b.lineNumber
-							where a.isCurrent = 1
-								and b.fileName is null
-								and a.filePath = @cfileName
-							order by a.lineNumber
-						) a
+--					from (
+--						select top 20 a.lineNumber, replace(b.fileString, char(9), '') as fileString_new, replace(a.fileString, char(9), '') as fileString_old
+--							from audit..auditdata_config a
+--							left outer join #configFiles b on a.filePath = b.fileName
+--								and a.lineNumber = b.lineNumber
+--							where a.isCurrent = 1
+--								and b.fileName is null
+--								and a.filePath = @cfileName
+--							order by a.lineNumber
+--						) a
 
-			end
-			else
-			begin
-				if @nNewLines + @nDroppedLines < @nChangedLines
-					set @nChangedLines = @nNewLines + @nDroppedLines
+--			end
+--			else
+--			begin
+--				if @nNewLines + @nDroppedLines < @nChangedLines
+--					set @nChangedLines = @nNewLines + @nDroppedLines
 
-				if @nNewLines <= 20 and @nNewLines > 0
-				begin
-				select @cBody = @cBody +
-	'LINE ' + convert(varchar(20), lineNumber) + ' ADDED
-		' + isnull(fileString, '') + char(13) + char(13)
-					from (
-						select top 20
-							a.lineNumber,
-							replace(a.fileString, char(9), '') as fileString
-							from #configFiles a
-							join #changedFilesNewLines b on a.lineNumber = b.linenumber
-								and b.fileName = a.fileName
-							where a.fileName = @cfileName
-							order by a.lineNumber
-						) a
-				end
+--				if @nNewLines <= 20 and @nNewLines > 0
+--				begin
+--				select @cBody = @cBody +
+--	'LINE ' + convert(varchar(20), lineNumber) + ' ADDED
+--		' + isnull(fileString, '') + char(13) + char(13)
+--					from (
+--						select top 20
+--							a.lineNumber,
+--							replace(a.fileString, char(9), '') as fileString
+--							from #configFiles a
+--							join #changedFilesNewLines b on a.lineNumber = b.linenumber
+--								and b.fileName = a.fileName
+--							where a.fileName = @cfileName
+--							order by a.lineNumber
+--						) a
+--				end
 
-				if @nDroppedLines <= 20 and @nDroppedLines > 0
-				begin
-				select @cBody = @cBody +
-	'LINE ' + convert(varchar(20), lineNumber) + ' REMOVED
-		' + isnull(fileString, '') + char(13) + char(13)
+--				if @nDroppedLines <= 20 and @nDroppedLines > 0
+--				begin
+--				select @cBody = @cBody +
+--	'LINE ' + convert(varchar(20), lineNumber) + ' REMOVED
+--		' + isnull(fileString, '') + char(13) + char(13)
 
-					from (
-						select top 20 a.lineNumber, replace(a.fileString, char(9), '') as fileString
-							from audit..auditdata_config a
-							join #changedFilesDroppedLines b on a.lineNumber = b.linenumber
-								and b.filePath = a.filePath
-							where a.isCurrent = 1
-								and a.filePath = @cfileName
-							order by a.lineNumber
-						) a
-				end
+--					from (
+--						select top 20 a.lineNumber, replace(a.fileString, char(9), '') as fileString
+--							from audit..auditdata_config a
+--							join #changedFilesDroppedLines b on a.lineNumber = b.linenumber
+--								and b.filePath = a.filePath
+--							where a.isCurrent = 1
+--								and a.filePath = @cfileName
+--							order by a.lineNumber
+--						) a
+--				end
 
-				if isnull(@cBody, '') = ''
-					set @cBody = convert(varchar(20), @nChangedLines) + ' lines changed in file ' + @cfileName
-			end
+--				if isnull(@cBody, '') = ''
+--					set @cBody = convert(varchar(20), @nChangedLines) + ' lines changed in file ' + @cfileName
+--			end
 
-			set @cSubject = '[' + convert(varchar(20), @nChangedLines) + ' lines changed] ' + @cfileName
+--			set @cSubject = '[' + convert(varchar(20), @nChangedLines) + ' lines changed] ' + @cfileName
 
-			set @cBody = @cBody + char(13) + char(13) +
-				'Scan date: ' + convert(varchar(20), getDate(), 120)
+--			set @cBody = @cBody + char(13) + char(13) +
+--				'Scan date: ' + convert(varchar(20), getDate(), 120)
 
-			--print @cSubject
-			--print @cBody
+--			--print @cSubject
+--			--print @cBody
 
-			-- exec notification.dbo.pr_sendMessage @cFrom, 'alerts@example.com', @cSubject, @cBody, 0
-			exec notification.dbo.pr_sendMessage @cFrom, @cTo, @cSubject, @cBody, 0
-		end
-	end
+--			-- exec notification.dbo.pr_sendMessage @cFrom, 'alerts@example.com', @cSubject, @cBody, 0
+--			exec notification.dbo.pr_sendMessage @cFrom, @cTo, @cSubject, @cBody, 0
+--		end
+--	end
 
 	update audit..auditdata_config
 		set isCurrent = 0
