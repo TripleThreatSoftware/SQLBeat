@@ -1,14 +1,19 @@
+USE [SQLBeat]
+GO
+/****** Object:  StoredProcedure [dbo].[sp_send_cdosysmail]    Script Date: 9/25/2024 2:44:45 PM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-ALTER  PROCEDURE [dbo].[sp_send_cdosysmail]
+
+-- exec sp_send_cdosysmail 'monitor@sqlbeat.com', 'cole@sqlbeat.com', 'Test message', 'Test body'
+alter  PROCEDURE [dbo].[sp_send_cdosysmail]
 	@From varchar(100) ,
 	@To varchar(100) ,
 	@Subject varchar(5000)=" ",
-	@Body varchar(8000) =" ",
+	@Body varchar(max) =" ",
 	@AttachmentPath varchar(1000) = " ",
-	@HTMLBody varchar(8000) =" "
+	@HTMLBody varchar(max) =" "
 
 	/*********************************************************************
 
@@ -35,6 +40,12 @@ begin
 	set @cSMTPPassword = (select top 1 settingValue from dm_settings where settingName = 'SMTP Password')
 	set @cSMTPPort = (select top 1 settingValue from dm_settings where settingName = 'SMTP Port')
 	set @bSMTPUseSSL = (select top 1 convert(bit, settingValue) from dm_settings where settingName = 'SMTP SSL')
+
+	print @cSMTPServer
+	print @cSMTPUserName
+	print @cSMTPPassword
+	print @cSMTPPort
+	print @bSMTPUseSSL
 
 	if isnull(@cSMTPPort, '') in ('0', '')
 		set @cSMTPPort = null
