@@ -1,6 +1,6 @@
 USE [Notification]
 GO
-/****** Object:  StoredProcedure [dbo].[pr_watchSQLConnections]    Script Date: 8/21/2024 9:53:36 AM ******/
+/****** Object:  StoredProcedure [dbo].[pr_watchSQLConnections]    Script Date: 10/6/2024 1:11:13 PM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -101,6 +101,7 @@ begin
 			and not login in ('NT Service\SQLTelemetry', 'NT SERVICE\SQLSERVERAGENT')
 			and not spid <= 55
 			and not (dbName = 'SimpleDance' and login = 'simpledance')
+			and not (hostname = 'web02' and login in ('web02\administrator'))
 			and not (hostname in ('HPDRAGONFLYG4', 'MEDIACENTER01') and login = 'sa')
 		group by login, hostname, dbname, servername, programname
 
