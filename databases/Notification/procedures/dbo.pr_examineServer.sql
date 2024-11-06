@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 8/11/2024 9:01:11 AM ******/
+/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 11/6/2024 8:28:10 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -7,7 +7,7 @@ GO
 -- exec pr_examineServer 'sqlcluster01', 600
 -- select architecture, * from dm_servers
 -- update dm_servers set password = 'REDACTED', wmiPassword = 'REDACTED'
--- exec pr_examineServer 'web04', 600
+-- exec pr_examineServer 'web02', 180
 ALTER procedure [dbo].[pr_examineServer] (@cServerName varchar(100), @nMinutesBackToLook int)
 as
 begin
@@ -57,6 +57,7 @@ begin
 	declare @nNumFailure int
 	declare @nNumAlerts int
 	declare @nNumOldAlerts int
+	declare @nRowCount int
 
 	declare @nRunStamp bigint
 	declare @nLowSpaceThreshold bigint
@@ -127,7 +128,13 @@ begin
 	if charindex('\', @cFriendlyName) > 0
 		set @cServerNamePart = left(@cFriendlyName, charindex('\', @cFriendlyName) - 1)
 
-	set @cProcedureName = 'pr_notificationTemp_' + replace(replace(replace(@cFriendlyName, '\', ''), '.', ''), '-', '')
+	set @cProcedureName = 'pr_notificationTemp_' + replace(replace(replace(@cFriendlyName, '\', ''), '.', ''), '-', '') + '_' +
+		convert(varchar(4), datepart(year, getDate())) +
+		right('00' + convert(varchar(2), datepart(month, getDate())), 2) +
+		right('00' + convert(varchar(2), datepart(day, getDate())), 2) +
+		right('00' + convert(varchar(2), datepart(hour, getDate())), 2) +
+		right('00' + convert(varchar(2), datepart(minute, getDate())), 2) +
+		right('00' + convert(varchar(2), datepart(second, getDate())), 2)
 
 	--*******************************************************************************************************************
 	-- Decide if the server is online.
@@ -197,7 +204,7 @@ begin
 	-- Change diskio from int to bigint as we were having data coming in from WEB04 that was a bigint
 	-- JReed - 04.14.16
 	create table #processes (spid int, status varchar(100), login varchar(100), hostname varchar(128),
-		blockedBy varchar(20), dbName varchar(128), command varchar(100), cputime int, diskio bigint,
+		blockedBy varchar(20), dbName varchar(128), command varchar(100), cputime bigint, diskio bigint,
 		lastBatch varchar(100), programName varchar(100), buffercontents varchar(3000),
 		lastBatchTime dateTime, locks varchar(4000),
 		isBlocked bit default 0, isBlocker bit default 0, isWild bit default 0,
@@ -227,7 +234,7 @@ begin
 	create table #maintenancePlanFailures (job_id uniqueIdentifier, activity varchar(150), message varchar(512),
 		start_time dateTime, end_time dateTime, succeeded bit)
 
-	create table #lockedObjects (dbID int, objID int, [name] varchar(200))
+	create table #lockedObjects (dbID bigint, objID bigint, [name] varchar(200))
 
 	--*********************************************************************************************************************
 	-- Trap the SQLServer version
@@ -970,7 +977,7 @@ begin
 					execute('drop procedure ' + @cProcedureName)
 
 				begin try
-					insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Retrieving names of locked objects', @cSQLString, @nUkeyGroup)
+					insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Creating ' + @cProcedureName + ' to get lock info', @cSQLString, @nUkeyGroup)
 					exec sp_executeSQL @cSQLString
 				end try
 				begin catch
@@ -986,7 +993,11 @@ begin
 				if exists (select top 1 name from sysobjects where name = @cProcedureName)
 				begin
 					begin try
+						insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Executing sproc to get locked object info', @cProcedureName, @nUkeyGroup)
+
 						EXECUTE(@cProcedureName)
+
+						insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Success!', @cProcedureName, @nUkeyGroup)
 					end try
 					begin catch
 						set @cThisMessage = 'ERROR: ' + error_message()
@@ -995,7 +1006,9 @@ begin
 				end
 			end
 
+			set @nRowCount = (select count(*) from #processes where command <> 'awaiting command')
 
+			insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, convert(varchar(20), @nRowCount) + ' active SPIDs', null, @nUkeyGroup)
 
 			-- now, identify the resources being locked for each running SPID
 			while exists (
@@ -1041,20 +1054,28 @@ begin
 
 		end
 
+		insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Locks updated in #processes', null, @nUkeyGroup)
+
 
 		-- END locks held by running processes
 		--*********************************************************************************************************************
 
-		insert into processLog(serverName, spid, status, login, hostname, blockedBy, dbName, command, cputime, diskio,
-			lastbatch, programName,	buffercontents, lastBatchTime, locks, isBlocked, isBlocker, isWild, sql_handle,
-			lastWaitType, login_time, net_address, waitType, waitTime, waitResource, ymd,
-			pagesInMemory, diskReads, diskWrites, logicalReads, numLocks)
-		select @cServerName, spid, status, login, hostname, blockedBy, dbName, command, cputime, diskio,
-			lastbatch, programName,	buffercontents, lastBatchTime, locks, isBlocked, isBlocker, isWild, sql_handle,
-			lastWaitType, login_time, net_address, waitType, waitTime, waitResource, ymd,
-			pagesInMemory, diskReads, diskWrites, logicalReads, numLocks
+		begin try
+			insert into processLog(serverName, spid, status, login, hostname, blockedBy, dbName, command, cputime, diskio,
+				lastbatch, programName,	buffercontents, lastBatchTime, locks, isBlocked, isBlocker, isWild, sql_handle,
+				lastWaitType, login_time, net_address, waitType, waitTime, waitResource, ymd,
+				pagesInMemory, diskReads, diskWrites, logicalReads, numLocks)
+			select @cServerName, spid, status, login, hostname, blockedBy, dbName, command, cputime, diskio,
+				lastbatch, programName,	buffercontents, lastBatchTime, locks, isBlocked, isBlocker, isWild, sql_handle,
+				lastWaitType, login_time, net_address, waitType, waitTime, waitResource, ymd,
+				pagesInMemory, diskReads, diskWrites, logicalReads, numLocks
 
-			from #processes
+				from #processes
+		end try
+		begin catch
+			set @cThisMessage = left('ERROR inserting into PROCESSLOG: ' + error_message(), 500)
+			insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, @cThisMessage, @cSQLString, @nUkeyGroup)
+		end catch
 
 		-- lots of blocking in Replication
 		insert into #results (message, severity, subject, isBlocking)
@@ -1367,7 +1388,7 @@ begin
 	--*********************************************************************************************************************
 	--*********************************************************************************************************************
 
-	if (select top 1 isnull(isSQLAgentServiceRunning, 0) from dm_servers where serverName = @cServerName) = 0
+	if (select top 1 isnull(isSQLAgentServiceRunning, 0) from dm_servers (nolock) where serverName = @cServerName) = 0
 		insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Job checks skipped. Agent is not running.', @cSQLString, @nUkeyGroup)
 	else
 	begin
@@ -1805,6 +1826,10 @@ begin
 
 		-- now, let's get rid of anything that is not currently running
 		delete from #runningJobs where running = 0
+
+		set @nRowCount = (select count(*) from #runningJobs)
+
+		insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, convert(varchar(20), @nRowCount) + ' running jobs', '', @nUkeyGroup)
 
 		declare @cJobID varchar(200)
 		set @cJobID = ''
@@ -2499,7 +2524,7 @@ begin
 
 	set @dLastCheck = (select max(ymd) from databaseFileSizeLog (nolock) where serverName = @cServerName)
 
-	if isnull(@dLastCheck, '') = '' or dateDiff(minute, @dLastCheck, getDate()) > 60
+	if isnull(@dLastCheck, '') = '' or dateDiff(minute, @dLastCheck, getDate()) > 60 or suser_sname() = 'sa'
 	begin
 
 		set @cSQLString = '
@@ -2677,9 +2702,9 @@ begin
 		-- here we scan for DB performance stats
 
 		create table #performanceStats (
-			[database_id] [smallint] NOT NULL,
+			[database_id] [int] NOT NULL,
 			[file_id] [smallint] NOT NULL,
-			[sample_ms] [int] NOT NULL,
+			[sample_ms] [bigint] NOT NULL,
 			[num_of_reads] [bigint] NOT NULL,
 			[num_of_bytes_read] [bigint] NOT NULL,
 			[io_stall_read_ms] [bigint] NOT NULL,
@@ -2706,14 +2731,14 @@ begin
 				select * from openquery([' + @cServerName + '], ''select [database_id], [file_id], [sample_ms], [num_of_reads], [num_of_bytes_read], [io_stall_read_ms], [num_of_writes], [num_of_bytes_written], [io_stall_write_ms], [io_stall], [size_on_disk_bytes], [file_handle], db_name(database_id) as databaseName from sys.dm_io_virtual_file_stats(null, null)'')
 				'
 
-		if @cVersion like '%sql server 2008%' or @cVersion like '%sql server 2012%' or @cVersion like '%sql server 2014%' or @cVersion like '%sql server 2016%'
-		begin
+		--if @cVersion like '%sql server 2008%' or @cVersion like '%sql server 2012%' or @cVersion like '%sql server 2014%' or @cVersion like '%sql server 2016%'
+		--begin
 			set @cSQLString = @cSQLString + '
 				insert into #serverStartDate
 				select *
 					from openQuery([' + @cServerName + '], ''SELECT sqlserver_start_time FROM sys.dm_os_sys_info'')
 				'
-		end
+		--end
 
 		set @cSQLString = @cSQLString + '
 			end'
@@ -2750,6 +2775,7 @@ begin
 --select * from #performanceStats
 --select top 10 * from databaseFileSizeLog
 
+
 		insert into filePerformance (ukey_server, serverName, databaseName, fileName, file_id,  sample_ms, serverStartDate, num_of_reads, num_of_bytes_read, io_stall_read_ms, num_of_writes, num_of_bytes_written,
 			io_stall_write_ms, io_stall, size_on_disk_bytes)
 
@@ -2776,11 +2802,11 @@ begin
 	-- CPU and Disk queues
 	--*********************************************************************************************************************
 
-	if replace(@cVersion, space(1), space(0)) like '%sqlserver2005%'
-		or replace(@cVersion, space(1), space(0)) like '%sqlserver2008%'
-		or replace(@cVersion, space(1), space(0)) like '%sqlserver2012%'
-		or replace(@cVersion, space(1), space(0)) like '%sqlserver2014%'
-	begin
+	--if replace(@cVersion, space(1), space(0)) like '%sqlserver2005%'
+	--	or replace(@cVersion, space(1), space(0)) like '%sqlserver2008%'
+	--	or replace(@cVersion, space(1), space(0)) like '%sqlserver2012%'
+	--	or replace(@cVersion, space(1), space(0)) like '%sqlserver2014%'
+	--begin
 		create table #cpuTasks (cpuNumber varchar(20), currentTasks int, waitingTasks int)
 
  		set @cSQLString = '
@@ -2949,7 +2975,7 @@ begin
 				and a.msWaiting < 1000*60*5
 
 		drop table #waitingIO
-	end
+	--end
 
 	--*********************************************************************************************************************
 	-- Send output to the notification system
