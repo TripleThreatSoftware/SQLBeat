@@ -1,18 +1,27 @@
+/****** Object:  StoredProcedure [dbo].[pr_generateTrialEmail]    Script Date: 11/11/2024 8:55:44 AM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 -- drop table trialRequests
 
 
 -- select top 10 * from AppDb..messagesSent order by ymd desc
 -- select * from trialRequests
 
--- exec pr_generateTrialEmail 'Cole', 'Getzler', 'TTS2', 'cole@triplethreatsoftware.com', 'street', 'city', 'state', 'country', 'postalcode', 'phone number'
+-- exec pr_generateTrialEmail 'Cole', 'Getzler', 'TTS', 'cole@triplethreatsoftware.com', 'street', 'city', 'state', 'country', 'postalcode', 'phone number'
 -- exec pr_generateTrialEmail 'Kevin', 'Novak', 'TTS', 'knovak@sqlbeat.com', 'street', 'city', 'state', 'postalcode', 'phone number'
 -- exec pr_generateTrialEmail 'Rusty', 'Johnson', 'TTS', 'rjohnson@sqlbeat.com', 'street', 'city', 'state', 'postalcode', 'phone number'
-alter procedure [dbo].[pr_generateTrialEmail] (
+ALTER procedure [dbo].[pr_generateTrialEmail] (
 	@cFirstName varchar(200) = '', @cLastName varchar(200) = '', @cCompanyName varchar(500) = '', @cEmailAddress varchar(200) = '', @cStreetAddress varchar(500) = '',
 	@cCity varchar(500) = '', @cState varchar(500) = '', @cCountry varchar(200) = '', @cPostalCode varchar(100) = '', @cPhoneNumber varchar(200) = ''
 )
 as
 begin
+	if charindex('?', isnull(@cCompanyName, '')) > 0
+		or charindex('http', isnull(@cCompanyName, '')) > 0
+		return
+
 	if not exists (select top 1 id from sysobjects where name = 'trialRequests')
 		create table trialRequests (ukey int identity, ymd dateTime default getDate(),
 			firstName varchar(200), lastName varchar(200), companyName varchar(500), emailAddress varchar(200),
