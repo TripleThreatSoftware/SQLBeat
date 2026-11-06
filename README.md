@@ -80,9 +80,11 @@ neither is part of SQLBeat any more. The rest of its steps still apply:
 
 ## License
 
-Free for non-commercial use under the [PolyForm Noncommercial License 1.0.0](LICENSE.md).
-Commercial use needs a license from TTS LLC: see [COMMERCIAL.md](COMMERCIAL.md).
+Free to use and modify, for any purpose, under the Apache License 2.0 with the Commons Clause
+condition: you may not sell SQLBeat, or a product or service (including hosting or paid support) whose value
+derives substantially from it. See [LICENSE.md](LICENSE.md).
 
 ## Help
 
-Questions go in [Discussions](https://github.com/TripleThreatSoftware/SQLBeat/discussions); see [SUPPORT.md](SUPPORT.md).
+Questions go in [Discussions](https://github.com/TripleThreatSoftware/SQLBeat/discussions). Paid support from TTS is at
+[support.triplethreatsoftware.com](https://support.triplethreatsoftware.com/); see [SUPPORT.md](SUPPORT.md).

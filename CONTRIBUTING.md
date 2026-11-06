@@ -7,4 +7,4 @@ Object scripts live one per file under `databases/<Database>/<type>/`. Keep the 
 and don't commit passwords, server names or customer data.
 
 By contributing, you agree that TTS LLC may distribute your contribution under SQLBeat's licenses,
-including the PolyForm Noncommercial license and TTS LLC's commercial license.
+currently the Apache License 2.0 with the Commons Clause condition.

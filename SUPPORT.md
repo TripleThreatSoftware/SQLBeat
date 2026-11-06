@@ -1,7 +1,12 @@
 # Getting help
 
-- **Questions, ideas, show and tell:** [GitHub Discussions](https://github.com/TripleThreatSoftware/SQLBeat/discussions)
-- **Bugs:** [GitHub Issues](https://github.com/TripleThreatSoftware/SQLBeat/issues). Include the SQL Server version and edition of the SQLBeat server and the monitored server, what you ran, and the full error text.
-- **Commercial license holders and services customers:** support@sqlbeat.com
+SQLBeat is free to use. Help comes two ways:
 
-Please leave passwords, server names you'd rather not share, and customer data out of public posts.
+- **Community (free):** [GitHub Discussions](https://github.com/TripleThreatSoftware/SQLBeat/discussions) for questions and ideas,
+  [GitHub Issues](https://github.com/TripleThreatSoftware/SQLBeat/issues) for bugs. Answered as people have time.
+- **Paid support from TTS:** [support.triplethreatsoftware.com](https://support.triplethreatsoftware.com/).
+  Pay as you go, prepaid hours, or a monthly support plan. See https://www.sqlbeat.com/pricing.html
+
+For bug reports, include the SQL Server version and edition of the SQLBeat server and the monitored server,
+what you ran, and the full error text. Leave passwords, server names you'd rather not share, and customer
+data out of public posts.

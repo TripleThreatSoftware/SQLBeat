@@ -26,7 +26,7 @@
 
 .NOTES
     SQLBeat is a product of TTS LLC. https://www.sqlbeat.com
-    Free for non-commercial use; commercial use needs a license. See LICENSE.
+    Free to use and modify; may not be resold. See LICENSE.md.
 #>
 [CmdletBinding(SupportsShouldProcess)]
 param(
@@ -397,5 +397,5 @@ Next:
   - Watch Notification.dbo.notificationLog for the first alerts, and confirm email arrives at $AlertEmail
 
 Questions: https://github.com/TripleThreatSoftware/SQLBeat/discussions
-Paid installation, configuration and support: https://www.sqlbeat.com/pricing
+Paid installation, configuration and support: https://support.triplethreatsoftware.com/
 "@
