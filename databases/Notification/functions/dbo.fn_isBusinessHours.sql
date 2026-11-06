@@ -1,4 +1,4 @@
-/****** Object:  UserDefinedFunction [dbo].[fn_isBusinessHours]    Script Date: 05/19/2009 13:59:45 ******/
+/****** Object:  UserDefinedFunction [dbo].[fn_isBusinessHours]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER OFF
@@ -14,7 +14,7 @@ begin
 	set @dToday = (select ymd from v_getDate)
 
 	set @bIsOffHours = 0
-	if datePart(hour, @dToday) >= 17 or datePart(hour, @dToday) < 7 or dateName(weekDay, @dToday) in ('Saturday', 'Sunday')
+	if datePart(hour, @dToday) >= 17 or datePart(hour, @dToday) < 8 or dateName(weekDay, @dToday) in ('Saturday', 'Sunday')
 		set @bIsOffHours = 1
 
 	if right(convert(varchar(10), @dToday, 120), 5) in ('01-01', '12-24', '12-25', '12-26', '07-04') -- , '12-31'  grrrrrr

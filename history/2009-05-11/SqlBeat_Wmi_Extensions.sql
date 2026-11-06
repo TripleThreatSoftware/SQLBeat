@@ -1,2 +1,0 @@
-use InstalledSoftware;
-GO

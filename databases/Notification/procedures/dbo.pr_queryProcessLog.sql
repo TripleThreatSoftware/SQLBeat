@@ -1,3 +1,4 @@
+/****** Object:  StoredProcedure [dbo].[pr_queryProcessLog]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -22,17 +23,17 @@ GO
 
 
 -- exec pr_queryProcessLog @cServerName = 'web03', @nNumHours = 48, @cDatabaseName = '', @nMinRuntime = 30
-ALTER procedure [dbo].[pr_queryProcessLog] (@cServerName varchar(100), @dStartDate dateTime = null, @dEndDate dateTime = null, @nNumHours int = 12,
+CREATE procedure [dbo].[pr_queryProcessLog] (@cServerName varchar(100), @dStartDate dateTime = null, @dEndDate dateTime = null, @nNumHours int = 12,
 	@cHostName varchar(100) = '', @cLogin varchar(100) = '', @cBuffer varchar(500) = '', @bJustBlocking bit = 0, @nMinCPU int = 0, @nMinDisk int = 0,
 	@cProgramName varchar(100) = '', @cDatabaseName varchar(100) = '', @nMinWait int = 0, @bJustRunning bit = 0, @cLocks varchar(100) = '',
 	@nMinRuntime int = 0)
 as
 begin
-	--insert into tmp_log
-	--select @cServerName, @dStartDate, @dEndDate, @nNumHours,
-	--	@cHostName, @cLogin, @cBuffer, @bJustBlocking, @nMinCPU, @nMinDisk,
-	--	@cProgramName, @cDatabaseName, @nMinWait, @bJustRunning, @cLocks,
-	--	@nMinRuntime
+	insert into tmp_log
+	select @cServerName, @dStartDate, @dEndDate, @nNumHours,
+		@cHostName, @cLogin, @cBuffer, @bJustBlocking, @nMinCPU, @nMinDisk,
+		@cProgramName, @cDatabaseName, @nMinWait, @bJustRunning, @cLocks,
+		@nMinRuntime
 
 	if isnull(@nNumHours, 0) = 0
 		set @nNumHours = 12
@@ -119,3 +120,4 @@ print datePart(year, @dStartDate)
 			order by ymd, spid
 	end
 end
+GO

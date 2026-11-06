@@ -1,21 +1,22 @@
-SET ANSI_PADDING OFF
-GO
-/****** Object:  Table [dbo].[processLog_daily]    Script Date: 05/19/2009 13:59:44 ******/
+-- ================================================================================================
+-- Notification.dbo.processLog_daily
+--
+-- This table is used internally by the date partitioning as a temporary working space
+-- ================================================================================================
+/****** Object:  Table [dbo].[processLog_daily]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-SET ANSI_PADDING ON
-GO
 CREATE TABLE [dbo].[processLog_daily](
-	[ukey] [int] IDENTITY(1,1) NOT NULL,
-	[serverName] [varchar](200) NULL,
+	[ukey] [int] IDENTITY(1,1) NOT NULL,	-- An internally used incrementing identity counter; uniquely identifies this row, and may be used as a Foreign Key.
+	[serverName] [varchar](200) NULL,	-- The server name
 	[spid] [int] NULL,
 	[status] [varchar](100) NULL,
 	[login] [varchar](100) NULL,
 	[hostname] [varchar](128) NULL,
 	[blockedBy] [varchar](20) NULL,
-	[dbName] [varchar](128) NULL,
+	[dbName] [varchar](128) NULL,	-- The database name
 	[command] [varchar](100) NULL,
 	[cputime] [int] NULL,
 	[diskio] [int] NULL,
@@ -34,6 +35,11 @@ CREATE TABLE [dbo].[processLog_daily](
 	[net_address] [varchar](12) NULL,
 	[waitType] [binary](2) NULL,
 	[waitTime] [bigint] NULL,
-	[waitResource] [varchar](256) NULL
+	[waitResource] [varchar](256) NULL,
+	[pagesInMemory] [bigint] NULL,
+	[diskReads] [bigint] NULL,
+	[diskWrites] [bigint] NULL,
+	[logicalReads] [bigint] NULL,
+	[numLocks] [int] NULL
 ) ON [PRIMARY]
 GO

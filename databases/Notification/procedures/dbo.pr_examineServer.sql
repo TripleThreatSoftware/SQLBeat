@@ -1,4 +1,14 @@
-/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 11/6/2024 8:28:10 AM ******/
+-- ================================================================================================
+-- Notification.dbo.pr_examineServer
+--
+-- Main SQL Server check, run per server group by the job "SQL Detailed Check - [GROUP]". For each
+-- server in dm_servers it: lists databases from master.dbo.sysdatabases and alerts on any SUSPECT
+-- database; logs data and log file sizes to databaseFileSizeLog and alerts on oversized tempdb,
+-- runaway log growth and sizes nearing edition limits (pr_monitorDatabaseSizes adds predictive
+-- alerts); logs file I/O from dm_io_virtual_file_stats to filePerformance (reads, writes and
+-- bytes); and records @@VERSION to dm_servers.
+-- ================================================================================================
+/****** Object:  StoredProcedure [dbo].[pr_examineServer]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -8,7 +18,7 @@ GO
 -- select architecture, * from dm_servers
 -- update dm_servers set password = 'REDACTED', wmiPassword = 'REDACTED'
 -- exec pr_examineServer 'web02', 180
-ALTER procedure [dbo].[pr_examineServer] (@cServerName varchar(100), @nMinutesBackToLook int)
+CREATE procedure [dbo].[pr_examineServer] (@cServerName varchar(100), @nMinutesBackToLook int)
 as
 begin
 -- 	declare @cServerName varchar(100)
@@ -135,6 +145,31 @@ begin
 		right('00' + convert(varchar(2), datepart(hour, getDate())), 2) +
 		right('00' + convert(varchar(2), datepart(minute, getDate())), 2) +
 		right('00' + convert(varchar(2), datepart(second, getDate())), 2)
+
+	--*******************************************************************************************************************
+	--*******************************************************************************************************************
+	-- Clean up any orphaned temp sprocs
+
+	create table #commands (commandString nvarchar(4000))
+
+	insert into #commands (commandString)
+	select 'drop procedure [' + name + ']' from sysobjects where name like 'pr_notificationTemp%' and crdate < dateadd(hour, -12, getDate()) and xtype = 'p'
+
+	delete from #commands where isnull(commandString, '') = ''
+
+	while exists (select top 1 commandString from #commands)
+	begin
+		set @cSQLString = (select top 1 commandString from #commands)
+
+		begin try
+			exec sp_executeSQL @cSQLString
+		end try
+		begin catch
+			insert into notificationLog_history (runGUID, serverName, stepName, stepData, ukey_group) values (@cRunGUID, @cServerName, 'Failed to clear orphaned temp sproc', @cSQLString, @nUkeyGroup)
+		end catch
+
+		delete from #commands where commandString = @cSQLString
+	end
 
 	--*******************************************************************************************************************
 	-- Decide if the server is online.

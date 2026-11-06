@@ -1,8 +1,9 @@
+/****** Object:  UserDefinedFunction [dbo].[fn_returnFormattedBuffer]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-ALTER function [dbo].[fn_returnFormattedBuffer] (@cBuffer varchar(8000))
+CREATE function [dbo].[fn_returnFormattedBuffer] (@cBuffer varchar(8000))
 returns varchar(8000)
 as
 begin
@@ -24,3 +25,4 @@ begin
 
 	return @cReturnString
 end
+GO

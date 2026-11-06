@@ -1,10 +1,10 @@
-/****** Object:  StoredProcedure [dbo].[pr_partitionTableDaily]    Script Date: 8/30/2024 12:45:12 PM ******/
+/****** Object:  StoredProcedure [dbo].[pr_partitionTableDaily]    Script Date: 11/6/2026 9:48:28 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
 -- The keyFieldList variable should not contain ymd_id or ymd fields
-ALTER   procedure [dbo].[pr_partitionTableDaily] (@cTableName varchar(100), @cDateField varchar(100), @cKeyfieldList varchar(100), @lMakeUkey bit, @cPrimaryIndexType varchar(100) = 'PK')
+CREATE   procedure [dbo].[pr_partitionTableDaily] (@cTableName varchar(100), @cDateField varchar(100), @cKeyfieldList varchar(100), @lMakeUkey bit, @cPrimaryIndexType varchar(100) = 'PK')
 as
 begin
 	set noCount on
@@ -297,9 +297,11 @@ begin
 				'CREATE DATABASE [' + @cDatabaseName + '] ' +
 					'ON (NAME = N''' + @cDatabaseName + ''', ' +
 						'FILENAME = N''' + @cOldestDataPath + @cDatabaseName + '_data.mdf'' , ' +
+--						'FILENAME = N''' + replace(@cOldestDataPath, 'd:', 'e:') + @cDatabaseName + '_data.mdf'' , ' +
 						'SIZE = 50, FILEGROWTH = 50) ' +
 					'LOG ON (NAME = N''' + @cDatabaseName + '_log'', ' +
 						'FILENAME = N''' + @cOldestLogPath + @cDatabaseName + '_log.ldf'' , ' +
+--						'FILENAME = N''' + replace(@cOldestLogPath, 'd:', 'e:') + @cDatabaseName + '_log.ldf'' , ' +
 						'SIZE = 25, FILEGROWTH = 25)'
 			print @cSQLString
 			exec sp_executesql @cSQLString

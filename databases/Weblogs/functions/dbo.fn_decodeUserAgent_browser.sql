@@ -1,6 +1,4 @@
-USE [Weblogs]
-GO
-/****** Object:  UserDefinedFunction [dbo].[fn_decodeUserAgent_browser]    Script Date: 9/30/2013 3:49:57 PM ******/
+/****** Object:  UserDefinedFunction [dbo].[fn_decodeUserAgent_browser]    Script Date: 11/6/2026 9:48:28 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -8,7 +6,7 @@ GO
 -- select dbo.fn_decodeUserAgent_browser('Mozilla/5.0 (Windows NT 6.3; Trident/7.0; rv 11.0) like Gecko')
 -- select dbo.fn_decodeUserAgent_browser('Mozilla/5.0 (compatible; MSIE 10.0; Windows NT 6.1; WOW64; Trident/6.0)')
 
-ALTER function [dbo].[fn_decodeUserAgent_browser] (@cUserAgent varchar(2000))
+CREATE function [dbo].[fn_decodeUserAgent_browser] (@cUserAgent varchar(2000))
 returns varchar(500)
 as
 begin
@@ -54,3 +52,4 @@ begin
 
 	return @cNewUserAgent
 end
+GO

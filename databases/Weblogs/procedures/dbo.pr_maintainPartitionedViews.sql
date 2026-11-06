@@ -1,13 +1,14 @@
+/****** Object:  StoredProcedure [dbo].[pr_maintainPartitionedViews]    Script Date: 11/6/2026 9:48:28 AM ******/
 SET ANSI_NULLS ON
 GO
-SET QUOTED_IDENTIFIER OFF
+SET QUOTED_IDENTIFIER ON
 GO
 --********************************************************************
 -- Purpose: To be run after the daily partition SP has completed
 -- to maintain the view which is used to access data from the daily
 -- partitions. This does not need to be run manually and will be called
 -- from other SPs as required.
-ALTER      procedure [dbo].[pr_maintainPartitionedViews]
+CREATE      procedure [dbo].[pr_maintainPartitionedViews]
 as
 begin
 	set nocount on
@@ -440,10 +441,11 @@ begin
 				else
 					set @nEndDate = 1
 
-				if @@version not like '%sql server 2005%' and @@version not like '%sql server 2008%'
+				if @@version not like '%sql server 2005%' and @@version not like '%sql server 2008%' and @@version not like '%sql server 2012%'
 					if (select count(*) from #allTableFields where dbname = @cDatabaseName and tableName = @cThisTableName and fieldName = 'ymd' and dataType = 'dateTime') > 0
 						and @dStartDate <> ''
-						set @cWhereClause = 'where ymd >= ''' + convert(varchar(20), @dStartDate, 120) + '''' + case when @nEndDate <> 0 then ''' and ymd < ''' + convert(varchar(10), dateAdd(day, 1, @dEndDate), 120) + '''' else '' end
+						set @cWhereClause = 'where ymd >= ''' + convert(varchar(20), @dStartDate, 120) + '' + case when @nEndDate <> 0 then ''' and ymd < ''' + convert(varchar(10), dateAdd(day, 1, @dEndDate), 120) + '''' else '' end
+--print @cWhereClause
 
 				set @cSQLString = 'select ' + @cFieldList + char(13) + char(10) + char(9) +
 						'from ' + @cDatabaseName + '..' + @cThisTableName + ' ' + @cWhereClause + case when @lLastRow = 0 and @nCounter < @nNumberOfViewTables then ' union all ' + char(13) + char(10) + char(9) else '' end
@@ -659,3 +661,4 @@ begin
 end
 
 -- exec pr_maintainPartitionedViews
+GO

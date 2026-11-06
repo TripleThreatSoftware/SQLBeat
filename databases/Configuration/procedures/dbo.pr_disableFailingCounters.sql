@@ -1,19 +1,16 @@
-USE [Configuration]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_disableFailingCounters]    Script Date: 10/08/2009 19:40:14 ******/
+/****** Object:  StoredProcedure [dbo].[pr_disableFailingCounters]    Script Date: 11/6/2026 9:47:51 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
-
-ALTER procedure [dbo].[pr_disableFailingCounters] (@nUkeyGroup int)
+CREATE procedure [dbo].[pr_disableFailingCounters] (@nUkeyGroup int)
 as
 begin
 
 	delete from runs_stage with (tablock) where ukey_group not in (select distinct ukey from notification..dm_serverGroups)
 	delete from runs_stage with (tablock) where serverName not in (select distinct serverName from notification..dm_servers)
 
+return
 --	update notification..dm_servers
 --		set configurationCheck = 1,
 --			eventLogCheck = 1,
@@ -61,3 +58,4 @@ begin
 	--			and isnull(a.lastCheck, '') < d.ymd
 
 end
+GO

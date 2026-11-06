@@ -1,4 +1,4 @@
-/****** Object:  Table [dbo].[fileText]    Script Date: 8/6/2024 11:41:33 AM ******/
+/****** Object:  Table [dbo].[fileText]    Script Date: 11/6/2026 9:45:48 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -15,7 +15,7 @@ CREATE TABLE [dbo].[fileText](
 GO
 SET ANSI_PADDING ON
 GO
-/****** Object:  Index [cix_Checksum_Text_Path_File]    Script Date: 8/6/2024 11:41:33 AM ******/
+/****** Object:  Index [cix_Checksum_Text_Path_File]    Script Date: 11/6/2026 9:45:48 AM ******/
 CREATE CLUSTERED INDEX [cix_Checksum_Text_Path_File] ON [dbo].[fileText]
 (
 	[textChecksum] ASC,
@@ -24,7 +24,7 @@ CREATE CLUSTERED INDEX [cix_Checksum_Text_Path_File] ON [dbo].[fileText]
 	[fileName] ASC
 )WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
 GO
-/****** Object:  Index [ix_isChanged]    Script Date: 8/6/2024 11:41:33 AM ******/
+/****** Object:  Index [ix_isChanged]    Script Date: 11/6/2026 9:45:48 AM ******/
 CREATE NONCLUSTERED INDEX [ix_isChanged] ON [dbo].[fileText]
 (
 	[isChanged] ASC

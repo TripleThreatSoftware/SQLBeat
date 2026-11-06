@@ -1,29 +1,20 @@
-USE [Weblogs]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_processSources]    Script Date: 6/26/2014 3:37:22 PM ******/
+/****** Object:  StoredProcedure [dbo].[pr_processSources]    Script Date: 11/6/2026 9:48:28 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
--- select count(*), min(ymd), max(ymd) from fact_weblogs (nolock)
--- select top 1000 * from fact_weblogs_stage_hist (nolock) order by ukey desc
--- select top 1 * from v_fact_weblogs_all where ymd
--- select * from scheduler.dbo.jobs order by jobname
--- select top 100 * from scheduler.dbo.jobHistory where ukey_job = 315 order by ymd desc
--- exec scheduler.dbo.pr_job_stop 315
--- exec scheduler.dbo.pr_job_start 315
--- sp_who2
--- exec pr_importWeblogs '\\appweb06\d$\iis logfiles\'
---select * from dm_sources
---update dm_sources set isEnabled = 1 where sourcePath like '%appweb%'
---alter table dm_sources add isEnabled bit default 0
+-- exec pr_processSources 'web37'
 
 --go
-ALTER procedure [dbo].[pr_processSources]
+CREATE procedure [dbo].[pr_processSources] (@cWebserver varchar(100) = '')
 as
 begin
+	--if isnull(@cWebserver, '') = ''
+	--	return
+
 	declare @cThisSource varchar(1000)
 	declare @nThisUkey int
+	declare @cWebservername varchar(50)
 
 	declare @bIsIIS bit
 	declare @bIsApache bit
@@ -34,11 +25,11 @@ begin
 	--	and not dateName(weekday, getDate()) in ('Saturday', 'Sunday')
 	--	return
 
-	insert into fact_weblogs_stage_hist (stepName) values ('Processing sources')
+	insert into fact_weblogs_stage_hist (stepName, webserver) values ('Processing sources', @cWebserver)
 
 	if (select count(*) from fact_weblogs (nolock)) > 0
 	begin
-		insert into fact_weblogs_stage_hist (stepName) values ('Dealing with leftover rows')
+		insert into fact_weblogs_stage_hist (stepName, webserver) values ('Dealing with leftover rows', @cWebserver)
 
 	end
 
@@ -46,30 +37,36 @@ begin
 		select top 1 sourcePath
 			from dm_sources
 			where ukey > @nThisUkey
-				and dateDiff(minute, isnull(lastCheck, dateAdd(week, -1, getDate())), getDate()) > isnull(checkMinuteInterval, 60)
+--				and dateDiff(minute, isnull(lastCheck, dateAdd(week, -1, getDate())), getDate()) > isnull(checkMinuteInterval, 60)
 				and isEnabled = 1
+				and (sourcePath like '%' + @cWebserver + '%' or isnull(@cWebServer, '') = '')
 		)
 	begin
-		select top 1 @cThisSource = sourcePath,
+		select top 1
+			@cThisSource = sourcePath,
 			@nThisUkey = ukey,
 			@bIsIIS = isIIS,
-			@bIsApache = isApache
+			@bIsApache = isApache,
+			@cWebservername = left(replace(sourcePath, '\\', ''), charindex('\', replace(sourcePath, '\\', '')) - 1)
 			from dm_sources
 			where ukey > @nThisUkey
-				and dateDiff(minute, isnull(lastCheck, dateAdd(week, -1, getDate())), getDate()) > isnull(checkMinuteInterval, 60)
+--				and dateDiff(minute, isnull(lastCheck, dateAdd(week, -1, getDate())), getDate()) > isnull(checkMinuteInterval, 60)
 				and isEnabled = 1
+				and (sourcePath like '%' + @cWebserver + '%' or isnull(@cWebServer, '') = '')
 			order by ukey
 
-		insert into fact_weblogs_stage_hist (stepName) values ('Importing from "' + @cThisSource + '"')
+		insert into fact_weblogs_stage_hist (stepName, webserver, ukey_source) values ('Importing from "' + @cThisSource + '"', @cWebservername, @nThisUkey)
 
 		begin try
 			exec pr_importWeblogs @nThisUkey
+
+			update dm_sources set lastCheck = getDate() where ukey = @nThisUkey
 		end try
 		begin catch
-			insert into fact_weblogs_stage_hist (stepName) values ('Error: ' + convert(varchar(20), @@error))
-			insert into fact_weblogs_stage_hist (stepName) values (error_message())
+			insert into fact_weblogs_stage_hist (stepName, webserver, ukey_source) values ('Error: ' + convert(varchar(20), @@error), @cWebservername, @nThisUkey)
+			insert into fact_weblogs_stage_hist (stepName, webserver, ukey_source) values (error_message(), @cWebservername, @nThisUkey)
 		end catch
 
-		exec pr_processFactData
 	end
 end
+GO

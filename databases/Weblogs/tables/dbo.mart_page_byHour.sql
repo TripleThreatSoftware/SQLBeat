@@ -1,19 +1,15 @@
---select MIN(ymd), MAX(ymd) from mart_page_byday (nolock)
---select MIN(ymd), MAX(ymd) from mart_page_byhour (nolock)
-
-drop table mart_page_byhour_archive
-go
-select *
-	into mart_page_byhour_archive
-	from mart_page_byhour (nolock)
-	where ymd < '2011-12-13'
-go
-
-sp_rename 'mart_page_byhour', 'mart_page_byhour_old'
-go
-
+-- ================================================================================================
+-- Weblogs.dbo.mart_page_byHour
+--
+-- An aggregated table of page-level performance, rolled up by HOUR.
+-- ================================================================================================
+/****** Object:  Table [dbo].[mart_page_byHour]    Script Date: 11/6/2026 9:48:28 AM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 CREATE TABLE [dbo].[mart_page_byHour](
-	[ukey] [int] IDENTITY(1,1) NOT NULL,
+	[ukey] [bigint] IDENTITY(1,1) NOT NULL,
 	[ukey_site] [int] NULL,
 	[ukey_uriStem] [int] NULL,
 	[requestStatus] [int] NULL,
@@ -28,16 +24,25 @@ CREATE TABLE [dbo].[mart_page_byHour](
 	[getTime] [int] NULL,
 	[postTime] [int] NULL
 ) ON [PRIMARY]
-
 GO
-
+/****** Object:  Index [ix_mart_page_byhour_compound]    Script Date: 11/6/2026 9:48:28 AM ******/
+CREATE CLUSTERED INDEX [ix_mart_page_byhour_compound] ON [dbo].[mart_page_byHour]
+(
+	[ymd] ASC,
+	[hour] ASC,
+	[ukey_site] ASC,
+	[ukey_uriStem] ASC,
+	[requestStatus] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, FILLFACTOR = 70, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+/****** Object:  Index [ix_martPageByHour_ymd_hour_site_uriStem]    Script Date: 11/6/2026 9:48:28 AM ******/
+CREATE NONCLUSTERED INDEX [ix_martPageByHour_ymd_hour_site_uriStem] ON [dbo].[mart_page_byHour]
+(
+	[ymd] ASC,
+	[hour] ASC,
+	[ukey_site] ASC,
+	[ukey_uriStem] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, FILLFACTOR = 70, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
 ALTER TABLE [dbo].[mart_page_byHour] ADD  DEFAULT ((0)) FOR [pageLoadTime]
 GO
-
-set identity_insert mart_page_byhour on
-insert into mart_page_byhour (ukey, ukey_site, ukey_uriStem, requestStatus, ymd, hour, numRequests, numRequests_human, uniques, uniques_human, pageLoadTime, pagePostTime, getTime, postTime)
-select ukey, ukey_site, ukey_uriStem, requestStatus, ymd, hour, numRequests, numRequests_human, uniques, uniques_human, pageLoadTime, pagePostTime, getTime, postTime
-	from mart_page_byhour_old (nolock)
-	where ymd >= '2011-12-13'
-
-set identity_insert mart_page_byhour off

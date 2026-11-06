@@ -1,11 +1,8 @@
-USE [Weblogs]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_importWeblogs]    Script Date: 8/30/2024 12:10:30 PM ******/
+/****** Object:  StoredProcedure [dbo].[pr_importWeblogs]    Script Date: 11/6/2026 9:48:28 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
 -- select * from dm_sources where sourcePath like '%w3svc34%' order by ukey desc
 -- select * from dm_sourceFiles where sourceFile like '%u_ex240628%'
 -- select top 100 * from dm_sourceFiles order by ukey desc
@@ -15,7 +12,7 @@ GO
 -- exec pr_importWeblogs 1, 64
 -- select * from fact_weblogs_stage_hist order by ukey
 
-ALTER  procedure [dbo].[pr_importWeblogs] (@nUkeySource int, @nUkeySourceFile int = null)
+CREATE  procedure [dbo].[pr_importWeblogs] (@nUkeySource int, @nUkeySourceFile int = null)
 as
 begin
 	set nocount on
@@ -133,7 +130,7 @@ begin
 
 --select * from #filesToImport
 
-	if @@error <> 0 or (select count(*) from #filesToImport where dirString like '%access%denied%' or dirString like '%logon failure%') > 0
+	if @@error <> 0 or (select count(*) from #filesToImport where dirString like '%access%denied%' or dirString like '%logon failure%' or dirString like '%The user name or password is incorrect%') > 0
 	begin
 		set @cThisSubject = 'Unable to read from ' + @cWeblogPath + '.'
 		set @cThisMessage = 'Received Access is denied reading ' + @cWeblogPath + '.'
@@ -948,6 +945,7 @@ begin
 				set clientIP = dbo.fn_returnListItem(xForwardedFor, 1, ',')
 				where xForwardedFor is not null
 					and xForwardedFor <> ''
+					and xForwardedFor <> '-'
 		end
 
 		if @nUkeySourceFile is null
@@ -1018,6 +1016,7 @@ begin
 			set @cThisMessage = 'Error adding to dm_sourceIP:' + isnull(ERROR_MESSAGE(), 'N/A')
 
 			insert into fact_weblogs_stage_hist (stepName, ukey_source, webserver) values (left(@cThisMessage, 10000), @nUkeySource, @cWebserver)
+			insert into notification.dbo.notificationLog_stage (servername, severity, subject, message) values (@@servername, 2, 'pr_importweblogs error adding to dm_sourceIP for ' + @cWebserver + '/' + convert(varchar(20), @nUkeySource), @cThisMessage)
 		end catch
 
 		insert into fact_weblogs_stage_hist (stepName, ukey_source, webserver) values ('Adding dm_method', @nUkeySource, @cWebserver)
@@ -1035,6 +1034,7 @@ begin
 			set @cThisMessage = 'Error adding to dm_method:' + isnull(ERROR_MESSAGE(), 'N/A')
 
 			insert into fact_weblogs_stage_hist (stepName, ukey_source, webserver) values (left(@cThisMessage, 10000), @nUkeySource, @cWebserver)
+			insert into notification.dbo.notificationLog_stage (servername, severity, subject, message) values (@@servername, 2, 'pr_importweblogs error adding to dm_method for ' + @cWebserver + '/' + convert(varchar(20), @nUkeySource), @cThisMessage)
 		end catch
 
 		insert into fact_weblogs_stage_hist (stepName, ukey_source, webserver) values ('Adding dm_uriStem', @nUkeySource, @cWebserver)
@@ -1050,6 +1050,10 @@ begin
 					and a.uriStem not like '%png%'
 					and a.uriStem not like '%dll%'
 					and a.uriStem not like '%pdf%'
+					and a.uriStem not like '%.axd'
+					and a.uriStem not like '%.css'
+					and a.uriStem not like '%.woff'
+					and a.uriStem not like '%.woff2'
 					and a.uriStem not like '%style.css%'
 					and a.uriStem not like '%favicon.ico%'
 					and a.uriStem not like '%css.aspx%'
@@ -1067,6 +1071,7 @@ begin
 			set @cThisMessage = 'Error adding to dm_uriStem:' + isnull(ERROR_MESSAGE(), 'N/A')
 
 			insert into fact_weblogs_stage_hist (stepName, ukey_source, webserver) values (left(@cThisMessage, 10000), @nUkeySource, @cWebserver)
+			insert into notification.dbo.notificationLog_stage (servername, severity, subject, message) values (@@servername, 2, 'pr_importweblogs error adding to dm_uriStem for ' + @cWebserver + '/' + convert(varchar(20), @nUkeySource), @cThisMessage)
 		end catch
 
 		insert into fact_weblogs_stage_hist (stepName, ukey_source, webserver) values ('Adding dm_clientIP', @nUkeySource, @cWebserver)
@@ -1094,6 +1099,8 @@ begin
 			set @cThisMessage = 'Error adding to dm_clientIP:' + isnull(ERROR_MESSAGE(), 'N/A')
 
 			insert into fact_weblogs_stage_hist (stepName, ukey_source, webserver) values (left(@cThisMessage, 10000), @nUkeySource, @cWebserver)
+			insert into notification.dbo.notificationLog_stage (servername, severity, subject, message) values (@@servername, 2, 'pr_importweblogs error adding to dm_clientIP for ' + @cWebserver + '/' + convert(varchar(20), @nUkeySource), @cThisMessage)
+
 		end catch
 
 		-- *****************************************************************************************************************
@@ -1108,12 +1115,24 @@ begin
 				into #allAgents
 				from #fact_weblogs_stage
 
-			insert into dm_userAgent (userAgent, isHuman, browsername, serviceName, osName)
+			insert into dm_userAgent (userAgent, isHuman, browsername, serviceName, osName, isMalicious)
 			select a.userAgent,
 				dbo.fn_isHuman(a.userAgent) as isHuman,
 				dbo.fn_decodeUserAgent_browser(a.userAgent) as browserName,
 				dbo.fn_decodeUserAgent_service(a.userAgent) as serviceName,
-				dbo.fn_decodeUserAgent_os(a.userAgent) as osName
+				dbo.fn_decodeUserAgent_os(a.userAgent) as osName,
+				case
+					when (a.userAgent like '%bot%' or a.useragent like '%service%' or a.useragent like '%crawl%' or a.useragent like '%python%' or a.useragent like '%curl%')
+						and not a.userAgent like '%googlebot%'
+						and not a.useragent like '%bingbot%'
+						and not a.useragent like '%hetrix%'
+						and not a.useragent like '%ItchyCody%'
+						and not a.useragent like '%duckduckbot%'
+						and not a.useragent like '%adsbot-google%'
+						and not a.useragent like '%google-adwords%'
+						then 1
+					else 0
+					end
 				from #allAgents a
 				left outer join dm_userAgent b on a.userAgent = b.userAgent
 				where b.userAgent is null
@@ -1126,17 +1145,17 @@ begin
 			set @cThisMessage = 'Error adding to dm_userAgent:' + isnull(ERROR_MESSAGE(), 'N/A')
 
 			insert into fact_weblogs_stage_hist (stepName, ukey_source, webserver) values (left(@cThisMessage, 10000), @nUkeySource, @cWebserver)
+			insert into notification.dbo.notificationLog_stage (servername, severity, subject, message) values (@@servername, 2, 'pr_importweblogs error adding to dm_userAgent for ' + @cWebserver + '/' + convert(varchar(20), @nUkeySource), @cThisMessage)
 		end catch
 
 		insert into fact_weblogs_stage_hist (stepName, ukey_source, webserver) values ('Adding to the fact table', @nUkeySource, @cWebserver)
-
-		-- select * from fact_weblogs
 
 		begin try
 			insert into fact_weblogs (ukey_sourceFile, ukey_site, ymd,
 				ukey_sourceIP, ukey_method, ukey_uriStem, queryString, ukey_clientIP, ukey_userAgent,
 				[requestStatus],[requestSubStatus],[win32Status],
-				referer, siteName, cookie, hostName, timeTaken, bytes
+				referer, siteName, cookie, hostName, timeTaken, bytes,
+				xforwardedfor, clientIPRaw
 				)
 			SELECT @nUkeySourceFile as ukey_sourceFile,
 				@nUkeySite as ukey_site,
@@ -1151,7 +1170,10 @@ begin
 				left(a.referer, 1000),
 				a.siteName,
 				left(a.cookie, 2000),
-				a.hostName, a.timeTaken, a.bytes
+				a.hostName, a.timeTaken, a.bytes,
+				a.xForwardedFor,
+				a.c_ip_raw
+
 
 				FROM #fact_weblogs_stage a
 				left outer join dm_sourceIP b (nolock) on isnull(a.sourceIP, '') = b.sourceIP
@@ -1174,6 +1196,7 @@ begin
 			set @cThisMessage = 'Error adding to fact_weblogs:' + isnull(ERROR_MESSAGE(), 'N/A')
 
 			insert into fact_weblogs_stage_hist (stepName, ukey_source, webserver) values (left(@cThisMessage, 10000), @nUkeySource, @cWebserver)
+			insert into notification.dbo.notificationLog_stage (servername, severity, subject, message) values (@@servername, 2, 'pr_importweblogs error adding to fact_weblogs for ' + @cWebserver + '/' + convert(varchar(20), @nUkeySource), @cThisMessage)
 		end catch
 
 		insert into fact_weblogs_stage_hist (stepName, ukey_source, webserver) values ('Truncating stage table', @nUkeySource, @cWebserver)
@@ -1218,3 +1241,4 @@ begin
 	end
 
 end
+GO

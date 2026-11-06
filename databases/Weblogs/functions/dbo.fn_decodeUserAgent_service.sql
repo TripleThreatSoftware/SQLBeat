@@ -1,4 +1,4 @@
-/****** Object:  UserDefinedFunction [dbo].[fn_decodeUserAgent_service]    Script Date: 12/04/2009 18:54:09 ******/
+/****** Object:  UserDefinedFunction [dbo].[fn_decodeUserAgent_service]    Script Date: 11/6/2026 9:48:28 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON

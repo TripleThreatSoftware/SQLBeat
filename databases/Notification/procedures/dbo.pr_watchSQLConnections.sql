@@ -1,11 +1,14 @@
-USE [Notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_watchSQLConnections]    Script Date: 10/6/2024 1:11:13 PM ******/
+-- ================================================================================================
+-- Notification.dbo.pr_watchSQLConnections
+--
+-- Alerts when a connection matches the login, host name, database or program name criteria in the
+-- watchedConnections table. Job: "Monitor for watched connections".
+-- ================================================================================================
+/****** Object:  StoredProcedure [dbo].[pr_watchSQLConnections]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
 -- select * from processLog (nolock) where servername = 'etl01' and ymd >= '2021-01-22 13:34:00.000' and login = 'sa' order by ymd
 
 
@@ -13,7 +16,7 @@ GO
 -- 	login varchar(100), hostname varchar(100), dbName varchar(100), programName varchar(100), serverName varchar(200))
 -- insert into watchedConnections (hostname, login, serverName, alertEmail) values ('webtests', 'atm', 'sqlserver\instance4', 'dba@example.com')
 
-ALTER  procedure [dbo].[pr_watchSQLConnections]
+CREATE  procedure [dbo].[pr_watchSQLConnections]
 as
 begin
 
@@ -90,29 +93,33 @@ begin
 
 	-- drop table #processes
 	-- select * from #processes
-	select login, hostname, dbname, servername, programname, max(lastBatchTime) as ymd, max(bufferContents) as bufferContents
+	select login, hostname, dbname, servername, programname, max(lastBatchTime) as ymd, max(bufferContents) as bufferContents, max(command) as command
 		into #processes
 		-- select *
 		from processLog (nolock)
 		where ymd >= dateadd(hour, -2, getDate())
 			and not servername in (@@SERVERNAME)
 			and not (status = 'background' and spid <= 70 and hostname = '' and programname = '')
-			and not command in ('BRKR TASK', 'BRKR EVENT HNDLR', 'USE DATABASE', 'TASK MANAGER')
-			and not login in ('NT Service\SQLTelemetry', 'NT SERVICE\SQLSERVERAGENT')
+			and not command in ('BRKR TASK', 'BRKR EVENT HNDLR', 'USE DATABASE', 'TASK MANAGER', 'PARALLEL REDO TASK', 'TEMPORAL_HK_FLUSH', 'TEMPORAL_CCI_RETENTION', 'BUFFER POOL PARALLEL TASK')
+			and not login in ('NT Service\SQLTelemetry', 'NT SERVICE\SQLSERVERAGENT', '.\sqlservice', 'web02\sqlservice')
 			and not spid <= 55
 			and not (dbName = 'SimpleDance' and login = 'simpledance')
-			and not (hostname = 'web02' and login in ('web02\administrator'))
+			and not (hostname = 'web02' and login in ('web02\administrator', 'web02\rmartin', 'web02\jbuchsbaum'))
+			and not (hostname = 'joshua-laptop' and login in ('itchycody', 'jbuchsbaum', 'smrt_sandbox'))
 			and not (hostname in ('HPDRAGONFLYG4', 'MEDIACENTER01') and login = 'sa')
+			and not (hostname in ('WEB02', 'MacBook-Air', 'MacBookPro', 'Joshua-Laptop') and login in ('ItchyCody', 'ShopDAPWeb', 'shopware_svc', 'IdentityWidgetUser', 'itchycody_dashboard_read', 'itchycody_dashboard_write', 'smrt_sandbox'))
+			and not (login = 'SQLBeat' and hostname = 'WEB02' and buffercontents like '%pr_generateTrialEmail%')
 		group by login, hostname, dbname, servername, programname
 
 
 	insert into notificationLog_stage (ymd, subject, message, severity, serverName)
 	select ymd,
-		'Unexpected activity. User: ' + login + ' from ' + hostname + ' (' + isnull(rtrim(programName), 'N/A') + ') at ' + convert(varchar(20), ymd) + '.',
-		'Unexpected activity. User: ' + login + ' from ' + hostname + ' (' + isnull(rtrim(programName), 'N/A') + ') at ' + convert(varchar(20), ymd) + '.'+char(13)+isnull(bufferContents, ''),
+		'Unexpected activity. User: ' + login + ' from ' + hostname + ' (' + isnull(rtrim(programName), 'N/A') + ' / ' + isnull(rtrim(command), 'N/A') + ') at ' + convert(varchar(20), ymd) + '.',
+		'Unexpected activity. User: ' + login + ' from ' + hostname + ' (' + isnull(rtrim(programName), 'N/A') + ' / ' + isnull(rtrim(command), 'N/A') + ') at ' + convert(varchar(20), ymd) + '.'+char(13)+isnull(bufferContents, ''),
 		2,
 		servername
 		from #processes
 
 	drop table #processes
 end
+GO

@@ -1,10 +1,9 @@
+/****** Object:  StoredProcedure [dbo].[pr_mart_performanceLog]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
-
-ALTER procedure [dbo].[pr_mart_performanceLog]
+CREATE procedure [dbo].[pr_mart_performanceLog]
 as
 begin
 	declare @dStartDate dateTime
@@ -40,4 +39,7 @@ begin
 		from #martPerformanceLog
 
 	drop table #martPerformanceLog
+
+	delete from mart_performanceLog_byDay where ymd < dateAdd(year, -1, getDate())
 end
+GO

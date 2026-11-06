@@ -1,6 +1,10 @@
-USE [Notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_monitorIISLogs]    Script Date: 2/13/2018 8:07:27 AM ******/
+-- ================================================================================================
+-- Notification.dbo.pr_monitorIISLogs
+--
+-- Examines eventLog for IIS events that indicate possible SQL injection and alerts on them. Job:
+-- "Monitor IIS Errors for Malicious Activity".
+-- ================================================================================================
+/****** Object:  StoredProcedure [dbo].[pr_monitorIISLogs]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -9,13 +13,13 @@ GO
 --select top 500 * from notificationLog where subject like '%malicious user%' order by ymd desc
 --select * from messageRules where doNotSendMessage = 1
 
-ALTER procedure [dbo].[pr_monitorIISLogs]
+CREATE procedure [dbo].[pr_monitorIISLogs]
 as
 begin
 	insert into notificationLog_stage (ymd, severity, servername, subject, message)
 	select
 		distinct
-		ymd, 1, servername,
+		ymd, 2, servername,
 		'Malicious user activity detected from ' + userIP + ' at ' + convert(varchar(20), ymd, 120) + '.',
 		userIP + char(13) +
 			requestURL
@@ -60,5 +64,10 @@ begin
 				)
 			and not (
 				charindex('js/%url%', requestURL) > 0
+				or charindex('scriptresource.axd', requestURL) > 0
+				)
+			and not (
+				userIP like '66.249.%'
 				)
 end
+GO

@@ -1,0 +1,392 @@
+/****** Object:  StoredProcedure [dbo].[pr_readWindowsSecurityEvents]    Script Date: 11/6/2026 9:52:52 AM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- update dm_servers set securityLogCheck = 1 where servername = 'web02'
+-- select * from dm_servers where servername = 'web02'
+-- select top 100 * from eventlog_stage
+CREATE procedure [dbo].[pr_readWindowsSecurityEvents]
+as
+begin
+
+	set nocount on
+
+	declare @cServerName varchar(500)
+	declare @cUserName varchar(100)
+	declare @cPassword varchar(100)
+	declare @dlastSecurityLogCheck dateTime
+	declare @cSQLString nvarchar(4000)
+	declare @cScriptPath varchar(2000)
+	declare @cFieldName varchar(200)
+	declare @nCategory int
+	declare @cCategoryString varchar(500)
+	declare @cData varchar(8000)
+	declare @nEventCode int
+	declare @nEventIdentifier bigint
+	declare @nEventType int
+	declare @cBasicString varchar(8000)
+	declare @cLogFile varchar(100)
+	declare @cMessage varchar(8000)
+	declare @nRecordNumber bigint
+	declare @cSourceName varchar(500)
+	declare @dTimeGenerated dateTime
+	declare @dTimeWritten dateTime
+	declare @cType varchar(100)
+	declare @cUser varchar(500)
+	declare @nUkey int
+	declare @cWideString varchar(8000)
+	declare @nRowCount int
+	declare @cLastFieldName varchar(100)
+	declare @cServerNamePart varchar(100)
+	declare @cDateString varchar(100)
+
+	set @cServerName = ''
+
+	if not exists (select top 1 ukey from dm_settings where settingName = 'shared folder')
+		insert into dm_settings (settingName, settingValue) values ('shared folder', 'C:\SHARED\')
+
+	set @cScriptPath = (select top 1 settingValue from dm_settings where settingName = 'shared folder')
+
+	if right(@cScriptPath, 1) <> '\'
+		set @cScriptPath = @cScriptPath + '\'
+
+	create table #results (ukey int identity, wideString varchar(8000), serverName varchar(500))
+	create table #events (serverName varchar(200), category bigint, categoryString varchar(200), data varchar(8000),
+		eventCode bigint, eventIdentifier bigint, eventType bigint, basicString varchar(8000), logFile varchar(500),
+		[message] varchar(8000), recordNumber bigint, sourceName varchar(500), timeGenerated dateTime, timeWritten dateTime,
+		[type] varchar(500), [user] varchar(500))
+
+	while exists (
+		select top 1 ukey
+			from dm_servers (nolock)
+			where serverName > @cServerName
+				and isServerPingable = 1
+				and securityLogCheck = 1
+				and isenabled = 1
+				and (
+					lastSecurityCheck is null
+					or dateDiff(minute, lastSecurityCheck, getDate()) > 60
+					)
+		)
+	begin
+		select top 1
+			@cServerName = serverName,
+			@cUserName = wmiUserName,
+			@cPassword = wmiPassword,
+			@dlastSecurityLogCheck = isnull(dateAdd(minute, -15, lastSecurityLogCheck), dateAdd(hour, -24, getDate()))
+			from dm_servers (nolock)
+			where serverName > @cServerName
+				and isServerPingable = 1
+				and securityLogCheck = 1
+				and isenabled = 1
+				and (
+					lastSecurityCheck is null
+					or dateDiff(minute, lastSecurityCheck, getDate()) > 60
+					)
+			order by serverName
+
+		set @cServerNamePart = @cServerName
+
+		if charindex('\', @cServerName) > 0
+		begin
+			set @cServerNamePart = left(@cServerName, charindex('\', @cServerName) - 1)
+		end
+
+		insert into eventLog_history (notes, serverName, ukey_group) values ('Reading security events since ' + convert(varchar(20), @dlastSecurityLogCheck, 120), @cServerName, null)
+
+		if datediff(hour, @dlastSecurityLogCheck, getDate()) > 2 or @dlastSecurityLogCheck is null
+			set @dlastSecurityLogCheck = dateadd(hour, -2, getDate())
+
+		set @cDateString =
+				right('00' + convert(varchar(2), datePart(month, @dlastSecurityLogCheck)), 2) + '-' +
+				right('00' + convert(varchar(2), datePart(day, @dlastSecurityLogCheck)), 2) + '-' +
+				convert(varchar(4), datePart(year, @dlastSecurityLogCheck)) + ' ' +
+
+				right('00' + convert(varchar(2), datePart(hour, @dlastSecurityLogCheck)), 2) + ':' +
+				right('00' + convert(varchar(2), datePart(minute, @dlastSecurityLogCheck)), 2) + ':' +
+				right('00' + convert(varchar(2), datePart(second, @dlastSecurityLogCheck)), 2) + '.000'
+
+
+		if isnull(@cUserName, '') = ''
+			set @cSQLString = 'powershell -file ' + @cScriptPath + 'readevents_security.ps1 -cServerName ' + @cServerNamePart + ' -cTimestamp ' + @cDateString
+		else
+			set @cSQLString = 'powershell -file ' + @cScriptPath + 'readevents_security.ps1 -cServerName ' + @cServerNamePart + ' -cUserName "' + @cUsername + '" -cPassword "' + @cPassword + '" -cTimestamp ' + @cDateString
+
+		print @cSQLString
+
+		insert into #results (wideString)
+		exec master..xp_cmdshell @cSQLString
+
+		set @nRowCount = @@rowcount
+
+		insert into eventLog_history (notes, serverName, ukey_group) values ('Read ' + convert(varchar(20), @nRowCount) + ' rows of data', @cServerName, null)
+
+		update #results set serverName = @cServerName where serverName is null
+
+		if (select count(*) from #results where wideString like '%access is denied%' and serverName = @cServerName) > 0
+			and (select count(*) from #results where serverName = @cServerName) <= 50
+		begin
+			print 'Credentials to monitor are invalid'
+			insert into eventLog_history (notes, serverName, ukey_group) values ('Credentials to monitor are invalid.', @cServerName, null)
+
+			set @cWideString = (select top 1 wideString from #results where wideString like '%access is denied%' and serverName = @cServerName)
+			insert into notificationLog_stage (serverName, subject, message, severity) values (@cServerName, 'Credentials to monitor WMI are invalid.', @cWideString, 2)
+
+			delete from #results where serverName = @cServerName
+
+			continue
+		end
+
+		update dm_servers set lastSecurityLogCheck = getDate() where serverName = @cServerName
+	end
+
+	if (select count(*) from #results where wideString like '%scripts is disabled%' or wideString like '%cannot be loaded because the execution%') > 0
+	begin
+		print 'PowerShell appears to be disabled'
+		insert into eventLog_history (notes, serverName, ukey_group) values ('Powershell appears to be disabled.', @cServerName, null)
+		return
+	end
+
+
+
+-- select * from #results
+
+	create index ix_tmp_results on #results (ukey) with fillfactor = 90
+
+--select * from #results
+
+	set @nUkey = 0
+	set @cFieldName = ''
+	set @cLastFieldName = ''
+
+	while exists (select top 1 ukey from #results where ukey > @nUkey)
+	begin
+		select top 1
+			@nUkey = ukey,
+			@cWideString = wideString,
+			@cServerName = serverName
+			from #results
+			where ukey > @nUkey
+			order by ukey
+
+		if @cWideString = '*/*/*'
+		begin
+
+			if isnull(@cMessage, '') = '' and isnull(@cBasicString, '') <> ''
+				set @cMessage = @cBasicString
+			else
+			if isnull(@cMessage, '') <> '' and isnull(@cBasicString, '') <> ''
+				set @cMessage = left(@cMessage + @cBasicString, 8000)
+
+			insert into #events (serverName, category, categoryString, data, eventCode, eventIdentifier, eventType, basicString, logFile,
+				message, recordNumber, sourceName, timeGenerated, timeWritten, [type], [user]) values (
+				@cServerName, @nCategory, @cCategoryString, @cData, @nEventCode, @nEventIdentifier, @nEventType, @cBasicString, @cLogFile,
+				@cMessage, @nRecordNumber, @cSourceName, @dTimeGenerated, @dTimeWritten, @cType, @cUser)
+
+			set @cFieldName = ''
+			set @nCategory = 0
+			set @cCategoryString = ''
+			set @cData = ''
+			set @nEventCode = 0
+			set @nEventIdentifier = 0
+			set @nEventType = 0
+			set @cBasicString = ''
+			set @cLogFile = ''
+			set @cMessage = ''
+			set @nRecordNumber = 0
+			set @cSourceName = ''
+			set @dTimeGenerated = ''
+			set @dTimeWritten = ''
+			set @cType = ''
+			set @cUser = ''
+			set @cLastFieldName = ''
+
+
+			continue
+		end
+
+		set @cLastFieldName = @cFieldName
+
+		set @cFieldName = case
+			when @cWideString like 'Category:%' then 'Category'
+			when @cWideString like 'Category String:%' then 'Category String'
+			when @cWideString like 'Data:%' then 'Data'
+			when @cWideString like 'Event Code:%' then 'Event Code'
+			when @cWideString like 'Event Identifier:%' then 'Event Identifier'
+			when @cWideString like 'Event Type:%' then 'Event Type'
+			when @cWideString like 'Insertion Strings:%' then 'Insertion Strings'
+			when @cWideString like 'Logfile:%' then 'Logfile'
+			when @cWideString like 'Message:%' then 'Message'
+			when @cWideString like 'Record Number:%' then 'Record Number'
+			when @cWideString like 'Source Name:%' then 'Source Name'
+			when @cWideString like 'Time Generated:%' then 'Time Generated'
+			when @cWideString like 'Time Written:%' then 'Time Written'
+			when @cWideString like 'Type:%' then 'Type'
+			when @cWideString like 'User:%' then 'User'
+			else @cFieldName
+			end
+
+
+		begin try
+
+			if @cFieldName = 'Category'
+			begin
+				if isnumeric(rtrim(ltrim(isnull(replace(@cWideString, 'Category: ', ''), 0)))) = 1
+				begin
+					set @nCategory = rtrim(ltrim(isnull(replace(@cWideString, 'Category: ', ''), 0)))
+					set @cWideString = ''
+				end
+				else
+					set @cFieldName = @cLastFieldName
+			end
+
+			if @cFieldName = 'Record Number'
+			begin
+				if isnumeric(rtrim(ltrim(replace(@cWideString, 'Record Number: ', '')))) = 1
+				begin
+					set @nRecordNumber = rtrim(ltrim(replace(@cWideString, 'Record Number: ', '')))
+					set @cWideString = ''
+				end
+				else
+					set @cFieldName = @cLastFieldName
+			end
+
+			if @cFieldName = 'Event Code'
+			begin
+				if isnumeric(rtrim(ltrim(replace(@cWideString, 'Event Code: ', '')))) = 1
+				begin
+					set @nEventCode = rtrim(ltrim(replace(@cWideString, 'Event Code: ', '')))
+					set @cWideString = ''
+				end
+				else
+					set @cFieldName = @cLastFieldName
+			end
+
+			if @cFieldName = 'Event Identifier'
+			begin
+				if isnumeric(rtrim(ltrim(replace(@cWideString, 'Event Identifier: ', '')))) = 1
+				begin
+					set @nEventIdentifier = rtrim(ltrim(replace(@cWideString, 'Event Identifier: ', '')))
+					set @cWideString = ''
+				end
+				else
+					set @cFieldName = @cLastFieldName
+			end
+
+			if @cFieldName = 'Event Type'
+			begin
+				if isnumeric(rtrim(ltrim(replace(@cWideString, 'Event Type: ', '')))) = 1
+				begin
+					set @nEventType = rtrim(ltrim(replace(@cWideString, 'Event Type: ', '')))
+					set @cWideString = ''
+				end
+				else
+					set @cFieldName = @cLastFieldName
+			end
+
+			if @cFieldName = 'Category String'
+			begin
+				set @cCategoryString = isnull(@cCategoryString, '') + rtrim(ltrim(isnull(replace(@cWideString, 'Category String: ', ''), '')))
+				set @cWideString = ''
+			end
+
+			if @cFieldName = 'Data'
+			begin
+				set @cData = isnull(@cData, '') + rtrim(ltrim(isnull(replace(@cWideString, 'Data: ', ''), '')))
+				set @cWideString = ''
+			end
+
+			if @cFieldName = 'Insertion Strings'
+			begin
+				set @cBasicString = left(isnull(@cBasicString, '') + rtrim(ltrim(isnull(replace(@cWideString, 'Insertion Strings: ', ''), ''))), 8000)
+				set @cWideString = ''
+			end
+
+			if @cFieldName = 'Logfile'
+			begin
+				set @cLogFile = rtrim(ltrim(replace(@cWideString, 'Logfile: ', '')))
+				set @cWideString = ''
+			end
+
+			if @cFieldName = 'Message'
+			begin
+				set @cMessage = left(isnull(@cMessage, '') + rtrim(ltrim(isnull(replace(@cWideString, 'Message: ', ''), ''))), 8000)
+				set @cWideString = ''
+			end
+
+			if @cFieldName = 'Source Name'
+			begin
+				set @cSourceName = isnull(@cSourceName, '') + rtrim(ltrim(isnull(replace(@cWideString, 'Source Name: ', ''), '')))
+				set @cWideString = ''
+			end
+
+			if @cFieldName = 'Time Generated'
+			begin
+				set @dTimeGenerated = dbo.fn_convertUTCDateString(rtrim(ltrim(isnull(replace(@cWideString, 'Time Generated: ', ''), ''))))
+				set @cWideString = ''
+			end
+
+			if @cFieldName = 'Time Written'
+			begin
+				set @dTimeWritten = dbo.fn_convertUTCDateString(rtrim(ltrim(isnull(replace(@cWideString, 'Time Written: ', ''), ''))))
+				set @cWideString = ''
+			end
+
+			if @cFieldName = 'Type'
+			begin
+				set @cType = isnull(@cType, '') + rtrim(ltrim(isnull(replace(@cWideString, 'Type: ', ''), '')))
+				set @cWideString = ''
+			end
+
+			if @cFieldName = 'User'
+			begin
+				set @cUser = isnull(@cUser, '') + rtrim(ltrim(isnull(replace(@cWideString, 'User: ', ''), '')))
+				set @cWideString = ''
+			end
+		end try
+		begin catch
+			print 'Hit an error, continuing'
+		end catch
+
+		--if isnull(@cWideString, '') <> '' and @cWideString <> '*/*/*' and @cWideString <> 'Category: ' and @cWideString <> 'Category:'
+		--begin
+
+		--	if @cWideString like '%rpc server is unavailable%'
+		--	begin
+		--		insert into notificationLog_stage (serverName, subject, message, severity) values (@cServerName, @cWideString, @cWideString, 3)
+
+		--		delete from #results where serverName = @cServerName
+		--	end
+		--	else
+		--		insert into notificationLog_stage (serverName, subject, message, severity) values (@cServerName, @cWideString, @cWideString, 3)
+
+		--	-- here, we have an error
+		--	print '   ERROR: ' + @cWideString
+		--end
+
+	end
+
+--	print 'Adding to stage table'
+
+	insert into eventLog_stage (logType, category, computername, message, sourcename, timewritten, type, auser, monitordate)
+	select
+		left(logFile, 100),
+		left(category, 200),
+		left(servername, 200),
+		left(message, 8000),
+		left(sourceName + case when isnull(categoryString, '') <> '' then ': ' + categoryString else '' end, 200),
+		dateAdd(hour, -dateDiff(hour, getDate(), getUTCDate()), timeWritten),
+		left([type], 200),
+		left([user], 200),
+		getDate()
+		from #events
+
+	set @nRowCount = @@rowcount
+	insert into eventLog_history (notes, ukey_group) values ('Added ' + convert(varchar(20), @nRowCount) + ' events to be staged', null)
+
+	drop table #results
+	drop table #events
+
+end
+GO

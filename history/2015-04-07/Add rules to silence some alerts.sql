@@ -1,8 +1,0 @@
-insert into messageRules (sendMessage, doNotSendMessage, subjectLike, isLongRunningJob) values (0, 1, 'Monitor sites', 1)
-insert into messageRules (sendMessage, doNotSendMessage, subjectLike, isLongRunningJob) values (0, 1, 'Maintenance', 1)
-insert into messageRules (sendMessage, doNotSendMessage, subjectLike, isLongRunningJob) values (0, 1, 'Maintain', 1)
-insert into messageRules (sendMessage, doNotSendMessage, subjectLike, isLongRunningJob) values (0, 1, 'Exchange', 1)
-insert into messageRules (sendMessage, doNotSendMessage, subjectLike, isLongRunningJob) values (0, 1, 'Backup', 1)
-insert into messageRules (sendMessage, doNotSendMessage, subjectLike) values (0, 1, 'the system time has changed')
-insert into messageRules (sendMessage, doNotSendMessage, subjectLike) values (0, 1, 'activation context generation')
-insert into messageRules (sendMessage, doNotSendMessage, messageLike) values (0, 1, 'object reference not set to an instance%orderstatus.aspx')

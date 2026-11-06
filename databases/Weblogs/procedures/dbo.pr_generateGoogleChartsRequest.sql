@@ -1,11 +1,9 @@
-/****** Object:  StoredProcedure [dbo].[pr_generateGoogleChartsRequest]    Script Date: 10/20/2010 11:53:12 ******/
+/****** Object:  StoredProcedure [dbo].[pr_generateGoogleChartsRequest]    Script Date: 11/6/2026 9:48:28 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-create procedure [dbo].[pr_generateGoogleChartsRequest] (@nWidth int, @nHeight int, @bRelativeToTotal bit = 0,
-	@bAbsoluteYAxis bit = 0, @bShowPie bit = 0, @bLeavePeaks bit = 0, @bAlwaysShowLegend bit = 0, @bLeaveAllSets bit = 0,
-	@bShowTitle bit = 0, @cTitle varchar(200) = '', @cGraphURL varchar(8000) output)
+CREATE procedure [dbo].[pr_generateGoogleChartsRequest] (@nWidth int, @nHeight int, @bRelativeToTotal bit = 0, @bAbsoluteYAxis bit = 0, @bShowPie bit = 0, @bLeavePeaks bit = 0, @bShowBar bit = 0)
 as
 begin
 	if isnull(@nHeight, 0) = 0
@@ -23,7 +21,7 @@ begin
 
 	if (select count(*) from #dataValues) = 0
 	begin
-		set @cGraphURL = 'images/not-available.jpg'
+		select '/images/singlepixel.gif' as graphURL
 		return
 	end
 
@@ -40,7 +38,7 @@ begin
 	declare @nMinSeriesValue decimal(20,6)
 	declare @nNumDataPoints decimal(10,2)
 
-	set @cURLString = 'http://chart.apis.google.com/chart?chs=' + convert(varchar(20), @nWidth) + 'x' + convert(varchar(20), @nHeight) + '&chd=t:'
+	set @cURLString = 'https://chart.googleapis.com/chart?chs=' + convert(varchar(20), @nWidth) + 'x' + convert(varchar(20), @nHeight) + '&chd=t:'
 
 	set @cSeriesName = ''
 	set @cDatapoints = ''
@@ -81,7 +79,7 @@ begin
 			end
 
 			-- anything that doesn't hit at least 5% of the highest reading, ignore
-			if @nMaxValue <> 0 and @bLeaveAllSets = 0
+			if @nMaxValue <> 0 and @bLeavePeaks = 0
 				delete #dataValues
 					from #dataValues a
 					join (
@@ -100,22 +98,20 @@ begin
 			set @nAvgValue = (select avg(axis_y) from (select axis_x, sum(axis_y) as axis_y from #dataValues where seriesName = @cSeriesName group by axis_x) a)
 
 			-- anything that doesn't hit at least 5% of overall load at a reading point, ignore
-			if @nMaxValue <> 0 and @bLeaveAllSets = 0
-				delete #dataValues
-					from #dataValues a
-					join (
-						select setName, max(axis_y) as maxValue
-							from #dataValues
-							where seriesName = @cSeriesName
-							group by setName
-							having (max(axis_y) / @nMaxValue) < .05
-						) b on a.setName = b.setName
-					where a.seriesName = @cSeriesName
+			delete #dataValues
+				from #dataValues a
+				join (
+					select setName, max(axis_y) as maxValue
+						from #dataValues
+						where seriesName = @cSeriesName
+						group by setName
+						having (max(axis_y) / @nMaxValue) < .05
+					) b on a.setName = b.setName
+				where a.seriesName = @cSeriesName
 		end
 
 		print 'Working on series: ' + @cSeriesName
 		print 'Max value: ' + convert(varchar(20), @nMaxvalue)
-		print 'Avg value: ' + convert(varchar(20), @nAvgValue)
 
 		if isnull(@nMinSeriesValue, 0) = isnull(@nMaxValue, 0)
 			set @nMinSeriesValue = 0
@@ -132,7 +128,7 @@ begin
 
 			print '   Working on set: ' + @cSetName
 
-			if ((select count(distinct seriesName) from #dataValues) = 1 or @cSeriesName = @cSetName)
+			if (select count(distinct seriesName) from #dataValues) = 1 or @cSeriesName = @cSetName
 				set @cLegend = @cLegend + @cSetName + '|'
 			else
 				set @cLegend = @cLegend + @cSeriesName + '-' + @cSetName + '|'
@@ -212,20 +208,38 @@ begin
 	set @cURLString = @cURLString + @cDatapoints
 
 	set @cURLString = @cURLString +
-		case when (select count(distinct setName) from #dataValues) = 1 and not @bAlwaysShowLegend = 1 then '' else '&chdl=' + @cLegend end + -- legend
-		'&chco=ff0000,00ff00,0000ff,CCCCCC,849738,ff7e00,00f6ff,e4ff00,f600ff,20ae27,603897' -- showing in these colors
+		case when (select count(distinct setName) from #dataValues) = 1 then '' else '&chdl=' + @cLegend end -- legend
 
-	if @bShowTitle = 1
+	--if @bShowNeedle = 1
+	--begin
+	--	set @cURLString = @cURLString +
+	--		'&cht=gom' + -- 3d pie chart
+	--		'&chl=' + @cAxisLabels_x -- with these wedge names
+	--end
+	--else
+	if @bShowBar = 1
+	begin
 		set @cURLString = @cURLString +
-			'&chtt=' + @cTitle
-
+			'&cht=bvg' + -- bar graph
+			'&chbh=18,1,15' + -- bar group spacing
+			'&chco=ffffff,7dc1f0' + -- colors
+			'&chf=bg,s,1869b7' + -- background color
+			'&chxs=0,ffffff' + -- axis label colors
+			'&chxt=x' + -- axis to show
+			'&chxl=0:|' + @cAxisLabels_x   -- x axis ranges
+	end
+	else
 	if @bShowPie = 1
+	begin
 		set @cURLString = @cURLString +
 			'&cht=p3' + -- 3d pie chart
+			'&chco=ff0000,00ff00,00ad00,004fff,0083c6,f600ff,603897,be5252,82b4ff' + -- showing in these colors
 			'&chl=' + @cAxisLabels_x -- with these wedge names
+	end
 	else
 		set @cURLString = @cURLString +
 			'&cht=lc' + -- line chart
+			'&chco=ff0000,00ff00,00ad00,004fff,0083c6,f600ff,603897,be5252,82b4ff' + -- showing in these colors
 			'&chxt=x,y' + -- showing X and Y axis
 			'&chxl=0:|' + @cAxisLabels_x +   -- x axis ranges
 			'&chxr=1,' +
@@ -238,8 +252,13 @@ begin
 					else '100'
 					end
 
-	set @cGraphURL = isnull(@cURLString , 'images/not-available.jpg')
+	if isnull(@cURLString, '') = ''
+		set @cURLString = '/images/singlepixel.gif'
+
+	select @cURLString as graphURL
 
 	drop table #xAxis
 end
+
+
 GO

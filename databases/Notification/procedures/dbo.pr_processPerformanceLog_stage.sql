@@ -1,9 +1,9 @@
-/****** Object:  StoredProcedure [dbo].[pr_processPerformanceLog_stage]    Script Date: 01/10/2012 16:47:13 ******/
+/****** Object:  StoredProcedure [dbo].[pr_processPerformanceLog_stage]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-ALTER procedure [dbo].[pr_processPerformanceLog_stage]
+CREATE procedure [dbo].[pr_processPerformanceLog_stage]
 as
 begin
 

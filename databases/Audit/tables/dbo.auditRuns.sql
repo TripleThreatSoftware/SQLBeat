@@ -1,4 +1,4 @@
-/****** Object:  Table [dbo].[auditRuns]    Script Date: 8/6/2024 11:41:33 AM ******/
+/****** Object:  Table [dbo].[auditRuns]    Script Date: 11/6/2026 9:45:48 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -8,7 +8,7 @@ CREATE TABLE [dbo].[auditRuns](
 	[ymd] [datetime] NULL
 ) ON [PRIMARY]
 GO
-/****** Object:  Index [ix_auditRuns_ukey_ymd]    Script Date: 8/6/2024 11:41:33 AM ******/
+/****** Object:  Index [ix_auditRuns_ukey_ymd]    Script Date: 11/6/2026 9:45:48 AM ******/
 CREATE CLUSTERED INDEX [ix_auditRuns_ukey_ymd] ON [dbo].[auditRuns]
 (
 	[ukey] ASC,

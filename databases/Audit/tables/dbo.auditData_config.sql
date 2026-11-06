@@ -1,4 +1,10 @@
-/****** Object:  Table [dbo].[auditData_config]    Script Date: 8/6/2024 11:41:33 AM ******/
+-- ================================================================================================
+-- Audit.dbo.auditData_config
+--
+-- Holds a record of configuration file contents monitored by SQLBeat. This table holds a full
+-- historical record and does not have a corresponding partitioned view.
+-- ================================================================================================
+/****** Object:  Table [dbo].[auditData_config]    Script Date: 11/6/2026 9:45:48 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -13,7 +19,7 @@ CREATE TABLE [dbo].[auditData_config](
 	[lineNumber] [int] NULL
 ) ON [PRIMARY]
 GO
-/****** Object:  Index [ix_auditdataconfig_ukey]    Script Date: 8/6/2024 11:41:33 AM ******/
+/****** Object:  Index [ix_auditdataconfig_ukey]    Script Date: 11/6/2026 9:45:48 AM ******/
 CREATE CLUSTERED INDEX [ix_auditdataconfig_ukey] ON [dbo].[auditData_config]
 (
 	[ukey] ASC
@@ -21,7 +27,7 @@ CREATE CLUSTERED INDEX [ix_auditdataconfig_ukey] ON [dbo].[auditData_config]
 GO
 SET ANSI_PADDING ON
 GO
-/****** Object:  Index [ix_auditdataconfig_isCurrent_filepath_linenumber_inc_fileString]    Script Date: 8/6/2024 11:41:33 AM ******/
+/****** Object:  Index [ix_auditdataconfig_isCurrent_filepath_linenumber_inc_fileString]    Script Date: 11/6/2026 9:45:48 AM ******/
 CREATE NONCLUSTERED INDEX [ix_auditdataconfig_isCurrent_filepath_linenumber_inc_fileString] ON [dbo].[auditData_config]
 (
 	[isCurrent] ASC,

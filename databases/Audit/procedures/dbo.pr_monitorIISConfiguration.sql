@@ -1,4 +1,12 @@
-/****** Object:  StoredProcedure [dbo].[pr_monitorIISConfiguration]    Script Date: 8/6/2024 11:41:33 AM ******/
+-- ================================================================================================
+-- Audit.dbo.pr_monitorIISConfiguration
+--
+-- Builds a manifest of a server's configuration files and keeps their history and changes in
+-- auditData_config. By default this covers every web.config under inetpub, the .NET framework
+-- web.config, machine.config and aspnet.config, and the IIS schema and administration config files
+-- under System32\inetsrv\config. Job: "IIS Monitor - [SERVERNAME]".
+-- ================================================================================================
+/****** Object:  StoredProcedure [dbo].[pr_monitorIISConfiguration]    Script Date: 11/6/2026 9:45:48 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -24,8 +32,8 @@ begin
 	declare @cBody varchar(4000)
 	declare @nChangedFiles int
 
-	set @cTo = 'alerts@example.com'
-	set @cFrom = 'alerts@example.com'
+	set @cTo = 'cole@sqlbeat.com'
+	set @cFrom = 'monitor@sqlbeat.com'
 
 	set nocount on
 
@@ -292,7 +300,6 @@ begin
 			--print @cSubject
 			--print @cBody
 
-			-- exec notification.dbo.pr_sendMessage @cFrom, 'alerts@example.com', @cSubject, @cBody, 0
 			exec notification.dbo.pr_sendMessage @cFrom, @cTo, @cSubject, @cBody, 0
 		end
 	end

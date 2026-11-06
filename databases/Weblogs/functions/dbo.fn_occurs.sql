@@ -1,9 +1,9 @@
-/****** Object:  UserDefinedFunction [dbo].[fn_occurs]    Script Date: 12/04/2009 18:54:11 ******/
+/****** Object:  UserDefinedFunction [dbo].[fn_occurs]    Script Date: 11/6/2026 9:48:28 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE function [dbo].[fn_occurs] (@cStringToFind varchar(500), @cSource varchar(500))
+CREATE function [dbo].[fn_occurs] (@cStringToFind varchar(8000), @cSource varchar(8000))
 returns int
 as
 begin
@@ -22,4 +22,5 @@ begin
 
 	return @nOccurs
 end
+-- select dbo.fn_occurs('agfgd', 'abag')
 GO

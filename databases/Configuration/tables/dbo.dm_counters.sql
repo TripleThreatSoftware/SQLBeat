@@ -1,9 +1,13 @@
-/****** Object:  Table [dbo].[dm_counters]    Script Date: 05/19/2009 13:59:56 ******/
+-- ================================================================================================
+-- Configuration.dbo.dm_counters
+--
+-- A dimension table holding a listing of WMI counters available for SQLBeat to query. This can be
+-- edited at any time to add new counters, or remove deprecated ones.
+-- ================================================================================================
+/****** Object:  Table [dbo].[dm_counters]    Script Date: 11/6/2026 9:47:51 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
-GO
-SET ANSI_PADDING ON
 GO
 CREATE TABLE [dbo].[dm_counters](
 	[ukey] [bigint] IDENTITY(1,1) NOT NULL,
@@ -14,26 +18,30 @@ CREATE TABLE [dbo].[dm_counters](
  CONSTRAINT [PK_dm_counters] PRIMARY KEY NONCLUSTERED
 (
 	[ukey] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
 ) ON [PRIMARY]
 GO
-SET ANSI_PADDING OFF
+SET ANSI_PADDING ON
 GO
-CREATE CLUSTERED INDEX [ix_dm_counters_ukey_name] ON [dbo].[dm_counters]
+/****** Object:  Index [ix_dmCounters_ukey_name_isEnabled]    Script Date: 11/6/2026 9:47:51 AM ******/
+CREATE CLUSTERED INDEX [ix_dmCounters_ukey_name_isEnabled] ON [dbo].[dm_counters]
 (
 	[ukey] ASC,
-	[counterName] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+	[counterName] ASC,
+	[isEnabled] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, FILLFACTOR = 95, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
 GO
+SET ANSI_PADDING ON
+GO
+/****** Object:  Index [ix_dmCounters_counterName]    Script Date: 11/6/2026 9:47:51 AM ******/
 CREATE NONCLUSTERED INDEX [ix_dmCounters_counterName] ON [dbo].[dm_counters]
 (
 	[counterName] ASC,
+	[isEnabled] ASC,
 	[ukey] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, FILLFACTOR = 95, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
 GO
-/****** Object:  Default [DF__dm_counte__isEna__7D78A4E7]    Script Date: 05/19/2009 13:59:56 ******/
 ALTER TABLE [dbo].[dm_counters] ADD  DEFAULT ((1)) FOR [isEnabled]
 GO
-/****** Object:  Default [DF__dm_counte__check__7E6CC920]    Script Date: 05/19/2009 13:59:56 ******/
 ALTER TABLE [dbo].[dm_counters] ADD  DEFAULT ((60)) FOR [checkMinuteInterval]
 GO

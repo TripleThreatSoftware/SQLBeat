@@ -1,12 +1,16 @@
-USE [Notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_monitorProductionConnections]    Script Date: 4/13/2016 1:18:05 PM ******/
+-- ================================================================================================
+-- Notification.dbo.pr_monitorProductionConnections
+--
+-- Uses processLog to alert on any instance with more connections than dm_servers.numConnections, or
+-- more active connections than dm_servers.numActiveConnections (750 and 250 when not set). Job:
+-- "Monitor production connections".
+-- ================================================================================================
+/****** Object:  StoredProcedure [dbo].[pr_monitorProductionConnections]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
-ALTER procedure [dbo].[pr_monitorProductionConnections]
+CREATE procedure [dbo].[pr_monitorProductionConnections]
 as
 begin
 
@@ -30,3 +34,4 @@ begin
 				or isnull(a.numActiveConnections, 0) > isnull(activeConnectionAlertThreshold, 250)
 				)
 end
+GO

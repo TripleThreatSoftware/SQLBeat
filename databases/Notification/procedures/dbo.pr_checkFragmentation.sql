@@ -1,12 +1,8 @@
-USE [notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_checkFragmentation]    Script Date: 12/20/2011 11:10:48 ******/
+/****** Object:  StoredProcedure [dbo].[pr_checkFragmentation]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
-
 --create table fragmentationLog (ukey int identity, ukey_group int, ukey_server int, ymd dateTime, dbName varchar(200), objectName varchar(200),
 --	indexName varchar(200), [rows] bigint, extents bigint, extentSwitches bigint, scanDensity decimal(20,5))
 --
@@ -15,7 +11,7 @@ GO
 -- exec pr_checkFragmentation 2
 --
 
-ALTER  procedure [dbo].[pr_checkFragmentation] (@nServerGroup int)
+CREATE  procedure [dbo].[pr_checkFragmentation] (@nServerGroup int)
 as
 begin
 
@@ -94,12 +90,12 @@ begin
 		if isnull(@cUserName, '') <> ''
 		begin
 			-- with password
-			set @cSQLString = @cSharedFolder + '\osql -S' + @cServerName + ' -U' + @cUserName + ' -P"' + isnull(@cPassword, '') + '" -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\fragmentation_check_and_fix.SQL"'
+			set @cSQLString = 'osql -S' + @cServerName + ' -U' + @cUserName + ' -P"' + isnull(@cPassword, '') + '" -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\fragmentation_check_and_fix.SQL"'
 		end
 		else
 		begin
 			-- without password under windows authentication
-			set @cSQLString = @cSharedFolder + '\osql -S' + @cServerName + ' -E -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\fragmentation_check_and_fix.SQL"'
+			set @cSQLString = 'osql -S' + @cServerName + ' -E -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\fragmentation_check_and_fix.SQL"'
 		end
 
 		insert into #results (resultLine)
@@ -178,3 +174,4 @@ begin
 
 	drop table #results
 end
+GO

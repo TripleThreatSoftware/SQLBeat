@@ -1,16 +1,13 @@
-USE [Configuration]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_monitorConfigurationFiles]    Script Date: 8/30/2024 11:50:40 AM ******/
+/****** Object:  StoredProcedure [dbo].[pr_monitorConfigurationFiles]    Script Date: 11/6/2026 9:47:51 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
 -- select top 100 * from configuration.dbo.configFileLog where tagPath like '%sitedirector%'
 
 -- select top 100 * from configFileLog order by ymd desc
 -- truncate table configFileLog
-ALTER procedure [dbo].[pr_monitorConfigurationFiles]
+CREATE procedure [dbo].[pr_monitorConfigurationFiles]
 as
 begin
 	-- now that we have DFS managing this, an alert is not needed
@@ -852,3 +849,4 @@ begin
 	drop table #directories
 	drop table #configFiles
 end
+GO

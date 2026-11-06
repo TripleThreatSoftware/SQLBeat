@@ -1,4 +1,10 @@
-/****** Object:  Table [dbo].[auditData_sysmembers]    Script Date: 8/6/2024 11:41:33 AM ******/
+-- ================================================================================================
+-- Audit.dbo.auditData_sysmembers
+--
+-- Holds a record of SYSMEMBERS as snapshotted by SQLBeat. This table holds a full historical record
+-- and does not have a corresponding partitioned view.
+-- ================================================================================================
+/****** Object:  Table [dbo].[auditData_sysmembers]    Script Date: 11/6/2026 9:45:48 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -12,7 +18,7 @@ CREATE TABLE [dbo].[auditData_sysmembers](
 	[groupuid] [smallint] NULL
 ) ON [PRIMARY]
 GO
-/****** Object:  Index [ix_auditData_sysMembers_auditRun_server]    Script Date: 8/6/2024 11:41:33 AM ******/
+/****** Object:  Index [ix_auditData_sysMembers_auditRun_server]    Script Date: 11/6/2026 9:45:48 AM ******/
 CREATE CLUSTERED INDEX [ix_auditData_sysMembers_auditRun_server] ON [dbo].[auditData_sysmembers]
 (
 	[ukey_auditRun] ASC,

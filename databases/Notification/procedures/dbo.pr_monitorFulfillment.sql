@@ -1,9 +1,9 @@
+/****** Object:  StoredProcedure [dbo].[pr_monitorFulfillment]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
-ALTER procedure [dbo].[pr_monitorFulfillment]
+CREATE procedure [dbo].[pr_monitorFulfillment]
 as
 begin
 	declare @cThisMessage varchar(8000)
@@ -164,8 +164,9 @@ begin
 			and b.ymd >= dateAdd(minute, -10, getDate())
 
 	insert into notificationLog_stage (serverName, subject, message, severity)
-	select serverName, 'Fulfillment failure at ' + convert(varchar(20), getDate(), 120), messageBody, 1 as severity
+	select serverName, 'Fulfillment failure at ' + convert(varchar(20), getDate(), 120), messageBody, 2 as severity
 		from #results
 
 	drop table #results
 end
+GO

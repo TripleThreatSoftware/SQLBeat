@@ -1,9 +1,8 @@
+/****** Object:  StoredProcedure [dbo].[pr_configureForProfile]    Script Date: 11/6/2026 9:47:51 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
-
 -- select * from configuration..dm_counters where (counterName like '%cpu%' or countername like '%process%' or countername like '%service%' or counterName like '%disk%') and isEnabled = 1 order by counterName
 -- update configuration..dm_counters set isEnabled = 1 where counterName = 'Win32_PerfFormattedData_PerfDisk_PhysicalDisk'
 
@@ -12,7 +11,7 @@ GO
 --exec pr_configureForProfile 'appweb03', 'Server - Production'
 --exec pr_configureForProfile 'appweb04', 'Server - Production'
 
-ALTER procedure [dbo].[pr_configureForProfile] (@cServerName varchar(200) = '', @cProfileName varchar(200), @nUkeyServer int = 0)
+CREATE procedure [dbo].[pr_configureForProfile] (@cServerName varchar(200) = '', @cProfileName varchar(200), @nUkeyServer int = 0)
 as
 begin
 	declare @counters table (ukey_counter int, checkMinuteInterval int)
@@ -52,13 +51,13 @@ begin
 	--********************************************************************************
 	-- Now, add counters appropriate to the groups within the profile
 
-	if exists (select top 1 groupName from @groups where groupName = 'IIS')
-	begin
-		insert into @counters (ukey_counter, checkMinuteInterval)
-		select ukey, 5
-			from dm_counters (nolock)
-			where counterName IN ('IIsWebInfo', 'IIsWebService', 'IIsWebService', 'IIsWebVirtualDirSetting')
-	end
+	--if exists (select top 1 groupName from @groups where groupName = 'IIS')
+	--begin
+	--	insert into @counters (ukey_counter, checkMinuteInterval)
+	--	select ukey, 5
+	--		from dm_counters (nolock)
+	--		where counterName IN ('IIsWebInfo', 'IIsWebService', 'IIsWebService', 'IIsWebVirtualDirSetting')
+	--end
 
 	if exists (select top 1 groupName from @groups where groupName = 'OS')
 	begin
@@ -82,7 +81,7 @@ begin
 		insert into @counters (ukey_counter, checkMinuteInterval)
 		select ukey, 30
 			from dm_counters (nolock)
-			where counterName in ('Win32_PerfFormattedData_PerfProc_Process', 'Win32_Process')
+			where counterName in ('Win32_Process') -- 'Win32_PerfFormattedData_PerfProc_Process',
 	end
 
 	if exists (select top 1 groupName from @groups where groupName = 'Services')
@@ -138,3 +137,4 @@ begin
 			configurationCheckMinuteInterval = case when isnull(configurationCheckMinuteInterval, 0) = 0 then 5 else configurationCheckMinuteInterval end
 		where serverName = @cServerName
 end
+GO

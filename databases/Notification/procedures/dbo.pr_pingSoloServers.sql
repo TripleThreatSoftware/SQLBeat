@@ -1,4 +1,10 @@
-/****** Object:  StoredProcedure [dbo].[pr_pingSoloServers]    Script Date: 05/19/2009 13:59:45 ******/
+-- ================================================================================================
+-- Notification.dbo.pr_pingSoloServers
+--
+-- Calls pr_pingServer for each configured device in a server group. Job: "PING check solo servers -
+-- [GROUP]".
+-- ================================================================================================
+/****** Object:  StoredProcedure [dbo].[pr_pingSoloServers]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -46,6 +52,8 @@ begin
 --				and detailedCheck = 0
 
 			order by serverName
+
+		print @cServerName
 
 		if isnull(@bSkipNextRun, 0) = 0
 			exec @nReturnStatus = pr_pingServer @cServerName

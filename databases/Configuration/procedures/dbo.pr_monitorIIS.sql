@@ -1,12 +1,10 @@
-USE [Configuration]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_monitorIIS]    Script Date: 8/30/2024 11:41:29 AM ******/
+/****** Object:  StoredProcedure [dbo].[pr_monitorIIS]    Script Date: 11/6/2026 9:47:51 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
 -- exec pr_monitorIIS 'appweb49'
-ALTER procedure [dbo].[pr_monitorIIS] (@cServerName varchar(500))
+CREATE procedure [dbo].[pr_monitorIIS] (@cServerName varchar(500))
 as
 begin
 	-- declare @cServerName varchar(500) = 'appweb34'
@@ -66,3 +64,4 @@ end
 --select *
 --	from tmp_iis_snapshot
 --	where counterName like '%Win32_PerfFormattedData_NETDataProviderforSqlServer_NETDataProviderforSqlServer%'
+GO

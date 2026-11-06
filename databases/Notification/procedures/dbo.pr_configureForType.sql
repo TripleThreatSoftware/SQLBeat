@@ -1,9 +1,10 @@
+/****** Object:  StoredProcedure [dbo].[pr_configureForType]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
 -- exec pr_configureForType 'web03', 'SQL Server'
-ALTER procedure [dbo].[pr_configureForType] (@cServerName varchar(100), @cServerType varchar(100), @nUkeyGroup int = 0, @bEnableWMI bit = 1,
+CREATE procedure [dbo].[pr_configureForType] (@cServerName varchar(100), @cServerType varchar(100), @nUkeyGroup int = 0, @bEnableWMI bit = 1,
 	@cSQLUsername varchar(500) = '', @cSQLPassword varchar(500) = '', @cWMIUsername varchar(500) = '', @cWMIPassword varchar(500) = '')
 as
 begin
@@ -28,7 +29,7 @@ begin
 
 	if @cServerType = 'SQL Server'
 	begin
-		update dm_servers
+		update dm_servers with (rowlock)
 			set isEnabled = 1,
 				detailedCheck = 1,
 				detailedCheckMinuteInterval = 2,
@@ -38,7 +39,7 @@ begin
 				configurationCheckMinuteInterval = 10,
 				isSQLBox = 1,
 				isClusterNode = 0,
-				fragmentationCheck = 1,
+				fragmentationCheck = 0,
 				fragmentationCheckMinuteInterval = 60*24*7,
 				integrityCheck = 1,
 				integrityCheckMinuteInterval = 60*24*7,
@@ -76,7 +77,7 @@ begin
 
 	if @cServerType = 'IIS Web Server'
 	begin
-		update dm_servers
+		update dm_servers with (rowlock)
 			set isEnabled = 1,
 				pingCheck = 1,
 				pingCheckMinuteInterval = 2,
@@ -100,7 +101,7 @@ begin
 
 	if @cServerType = 'Server'
 	begin
-		update dm_servers
+		update dm_servers with (rowlock)
 			set isEnabled = 1,
 				pingCheck = 1,
 				pingCheckMinuteInterval = 2,
@@ -127,3 +128,4 @@ begin
 		exec configuration.dbo.pr_configureForProfile @cServerName, @cConfigurationProfile
 	end
 end
+GO

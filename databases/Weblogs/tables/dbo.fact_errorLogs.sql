@@ -1,11 +1,7 @@
-SET ANSI_PADDING OFF
-GO
-/****** Object:  Table [dbo].[fact_errorLogs]    Script Date: 12/04/2009 18:52:59 ******/
+/****** Object:  Table [dbo].[fact_errorLogs]    Script Date: 11/6/2026 9:48:28 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
-GO
-SET ANSI_PADDING ON
 GO
 CREATE TABLE [dbo].[fact_errorLogs](
 	[ukey] [int] IDENTITY(1,1) NOT NULL,
@@ -23,11 +19,10 @@ CREATE TABLE [dbo].[fact_errorLogs](
 	[ukey_site] [int] NULL
 ) ON [PRIMARY]
 GO
-SET ANSI_PADDING OFF
-GO
+/****** Object:  Index [ix_fact_errorlogs_compound]    Script Date: 11/6/2026 9:48:28 AM ******/
 CREATE CLUSTERED INDEX [ix_fact_errorlogs_compound] ON [dbo].[fact_errorLogs]
 (
 	[ymd] ASC,
 	[ukey_site] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 70) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, FILLFACTOR = 70, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
 GO

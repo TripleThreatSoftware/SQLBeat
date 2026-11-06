@@ -1,12 +1,9 @@
-USE [Notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_rpt_PINGTimeIncreases]    Script Date: 8/6/2024 11:35:27 AM ******/
+/****** Object:  StoredProcedure [dbo].[pr_alert_PINGTimeIncreases]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
-ALTER procedure [dbo].[pr_alert_PINGTimeIncreases]
+create procedure [dbo].[pr_alert_PINGTimeIncreases]
 as
 begin
 
@@ -149,3 +146,4 @@ begin
 	drop table #weeklyResults
 	drop table #weeksAvailable
 end
+GO

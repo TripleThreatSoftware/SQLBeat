@@ -1,10 +1,10 @@
-/****** Object:  Database [Audit]    Script Date: 8/6/2024 11:41:33 AM ******/
+/****** Object:  Database [Audit]    Script Date: 11/6/2026 9:45:48 AM ******/
 CREATE DATABASE [Audit]
  CONTAINMENT = NONE
  ON  PRIMARY
-( NAME = N'Audit', FILENAME = N'd:\sqldata\Audit.mdf' , SIZE = 88064KB , MAXSIZE = UNLIMITED, FILEGROWTH = 102400KB )
+( NAME = N'Audit', FILENAME = N'd:\sqldata\Audit.mdf' , SIZE = 190464KB , MAXSIZE = UNLIMITED, FILEGROWTH = 102400KB )
  LOG ON
-( NAME = N'Audit_log', FILENAME = N'd:\SQLlog\Audit.ldf' , SIZE = 1024KB , MAXSIZE = 2048GB , FILEGROWTH = 102400KB )
+( NAME = N'Audit_log', FILENAME = N'd:\SQLlog\Audit.ldf' , SIZE = 103424KB , MAXSIZE = 2048GB , FILEGROWTH = 102400KB )
  WITH CATALOG_COLLATION = DATABASE_DEFAULT, LEDGER = OFF
 GO
 ALTER DATABASE [Audit] SET COMPATIBILITY_LEVEL = 100

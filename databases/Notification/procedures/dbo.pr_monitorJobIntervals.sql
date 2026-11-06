@@ -1,13 +1,9 @@
-USE [Notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_monitorJobIntervals]    Script Date: 9/27/2013 3:32:55 PM ******/
+/****** Object:  StoredProcedure [dbo].[pr_monitorJobIntervals]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
-
-ALTER procedure [dbo].[pr_monitorJobIntervals]
+CREATE procedure [dbo].[pr_monitorJobIntervals]
 as
 begin
 	declare @cSQLString nvarchar(4000)
@@ -280,7 +276,7 @@ begin
 					join (
 						select ukey, jobName, substring(jobName, charindex(' - ', jobName) + 3, 100) as groupName
 							from scheduler..jobs  (nolock)
-							where jobName like '%eventlog check%'
+							where jobName like '%EventLog Check - All Servers%'
 								and isEnabled = 0
 						) b on a.groupName = b.groupName
 					left outer join dm_servers c (nolock) on a.ukey = c.ukey_group
@@ -518,23 +514,23 @@ begin
 					having count(distinct c.ukey) = 0
 				) a
 
-		insert into #commands (commandText, commandNotes)
-		select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @Enabled = 1', 'Enabling Windows Event Log Check for ' + a.groupName
-			from (
-				select a.groupName, b.job_id, jobName, count(distinct c.ukey) as numServers
-					from dm_serverGroups a (nolock)
-					join (
-						select job_id, [name] as jobName, substring([name], charindex(' - ', [name]) + 3, 100) as groupName
-							from msdb..sysjobs (nolock)
-							where [name] like '%eventlog check%'
-								and enabled = 0
-						) b on a.groupName = b.groupName
-					left outer join dm_servers c (nolock) on a.ukey = c.ukey_group
-						and c.eventLogCheck = 1
-						and c.isEnabled = 1
-					group by a.groupName, b.job_id, jobName
-					having count(distinct c.ukey) > 0
-				) a
+		--insert into #commands (commandText, commandNotes)
+		--select 'EXEC msdb.dbo.sp_update_job ''' + convert(varchar(100), job_id) + ''', @Enabled = 1', 'Enabling Windows Event Log Check for ' + a.groupName
+		--	from (
+		--		select a.groupName, b.job_id, jobName, count(distinct c.ukey) as numServers
+		--			from dm_serverGroups a (nolock)
+		--			join (
+		--				select job_id, [name] as jobName, substring([name], charindex(' - ', [name]) + 3, 100) as groupName
+		--					from msdb..sysjobs (nolock)
+		--					where [name] like '%EventLog Check - All Servers%'
+		--						and enabled = 0
+		--				) b on a.groupName = b.groupName
+		--			left outer join dm_servers c (nolock) on a.ukey = c.ukey_group
+		--				and c.eventLogCheck = 1
+		--				and c.isEnabled = 1
+		--			group by a.groupName, b.job_id, jobName
+		--			having count(distinct c.ukey) > 0
+		--		) a
 	end
 
 
@@ -553,3 +549,4 @@ begin
 	end
 
 end
+GO

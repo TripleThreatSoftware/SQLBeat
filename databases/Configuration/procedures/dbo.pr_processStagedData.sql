@@ -1,20 +1,17 @@
-USE [configuration]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_processStagedData]    Script Date: 12/20/2011 11:02:51 ******/
+/****** Object:  StoredProcedure [dbo].[pr_processStagedData]    Script Date: 11/6/2026 9:47:51 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
 --alter table runs_stage add ukey_group int
 --alter table runs_log add ukey_group int
 --GO
-ALTER procedure [dbo].[pr_processStagedData] (@nUkeyGroup int)
+CREATE procedure [dbo].[pr_processStagedData] (@nUkeyGroup int)
 as
 begin
 	declare @nUkeyRun bigint
 	declare @dRunStart dateTime
-	declare @cInstance varchar(8000)
+	declare @cInstance varchar(200)
 	declare @nCounter int
 
 	set @dRunStart = (select dateAdd(minute, -5, min(ymd)) from runs_stage (nolock) where ukey_group = @nUkeyGroup)
@@ -57,7 +54,7 @@ begin
 				convert(varchar(20), instance)
 
 	insert into runs_data (ukey, ukey_run, ukey_server, ukey_counter, ukey_keyName, keyValue, instance)
-	select ukey, ukey_run, ukey_server, ukey_counter, ukey_keyName, left(keyValue, 1000), instance
+	select ukey, ukey_run, ukey_server, ukey_counter, ukey_keyName, left(keyValue,1000), instance
 		from #runResults
 
 --	insert into runs_data_condensed (ukey_run, ukey_server, condensedData)
@@ -139,3 +136,4 @@ begin
 	drop table #disableServers
 
 end
+GO

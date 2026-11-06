@@ -1,15 +1,12 @@
-USE [notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_monitorPerformanceLog]    Script Date: 01/10/2012 11:20:12 ******/
+/****** Object:  StoredProcedure [dbo].[pr_monitorPerformanceLog]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
 -- exec pr_monitorPerformanceLog '2009-08-20 00:09.000'
 -- exec pr_monitorPerformanceLog '2009-09-21 13:22.000'
 
-ALTER procedure [dbo].[pr_monitorPerformanceLog] (@dRightNow dateTime = null)
+CREATE procedure [dbo].[pr_monitorPerformanceLog] (@dRightNow dateTime = null)
 as
 begin
 	set nocount on
@@ -613,3 +610,4 @@ begin
 	drop table #servers
 	drop table #allRuns
 end
+GO

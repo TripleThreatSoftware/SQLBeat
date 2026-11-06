@@ -1,16 +1,13 @@
-USE [notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_processStagedAlerts]    Script Date: 05/17/2012 10:55:30 ******/
+/****** Object:  StoredProcedure [dbo].[pr_processStagedAlerts]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
 --select top 100 * from notificationLog
 --select top 100 * from notificationLog_stage
 
 
-ALTER procedure [dbo].[pr_processStagedAlerts]
+CREATE procedure [dbo].[pr_processStagedAlerts]
 as
 begin
 	declare @nMaxUkey int
@@ -83,7 +80,7 @@ begin
 	-- Get rid of duplicate messages
 	--***************************************************************************************************
 
-	delete from notificationLog_stage where message like '%the activated proc%'
+	delete from notificationLog_stage where subject is null and message is null
 
 	-- get rid of doubles in the staged messages
 	delete a
@@ -122,6 +119,12 @@ begin
 	update notificationLog_stage
 		set severity = 2
 		where message like '%cannot obtain the schema%'
+
+	--updated 2015/1/6 DJB.  Sets severity to high for auth.net errors.
+	update notificationLog_stage
+		set severity = 1
+		where [subject] like '%ERROR in checkout_step2%'
+			and [message] not like '%query string is empty%'
 
 --	update notificationLog_stage
 --		set severity = 2
@@ -235,6 +238,7 @@ begin
 			) b on a.serverName = b.serverName
 		where isConnectivity = 1
 
+
 	--***************************************************************************************************
 	-- Get down to the business of sending
 	--***************************************************************************************************
@@ -261,3 +265,4 @@ begin
 
 	drop table #exceptions
 end
+GO

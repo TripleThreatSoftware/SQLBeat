@@ -1,5 +1,10 @@
+/****** Object:  StoredProcedure [dbo].[pr_returnReports]    Script Date: 11/6/2026 9:52:52 AM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 -- exec pr_returnReports null, null, 'SQL'
-alter procedure [dbo].[pr_returnReports] (@nDepth int = 0, @nUkeyParent int = 0, @cServerName varchar(100) = '', @cReportGroup varchar(100) = '')
+CREATE procedure [dbo].[pr_returnReports] (@nDepth int = 0, @nUkeyParent int = 0, @cServerName varchar(100) = '', @cReportGroup varchar(100) = '')
 as
 begin
 	declare @nUkey int

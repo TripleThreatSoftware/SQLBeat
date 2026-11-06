@@ -1,10 +1,18 @@
+-- ================================================================================================
+-- Notification.dbo.pr_monitorSQLStatistics
+--
+-- Snapshots sysperfinfo, dm_os_sys_info, dm_os_memory_clerks and dm_os_virtual_address_dump into
+-- performanceLog to record SQL Server resource use. Alerts from performanceLog come from
+-- pr_alert_SQLStatistics (thresholds in dm_performanceStatThresholds), pr_monitorPageLifeExpectancy
+-- (dm_servers.pageLifeExpectancyAlertThreshold) and pr_monitorPerformanceLog. Job: "Monitor SQL
+-- Statistics".
+-- ================================================================================================
+/****** Object:  StoredProcedure [dbo].[pr_monitorSQLStatistics]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
-
-ALTER procedure [dbo].[pr_monitorSQLStatistics]
+CREATE procedure [dbo].[pr_monitorSQLStatistics]
 as
 begin
 	set nocount on
@@ -95,7 +103,7 @@ begin
 			insert into notificationLog_stage (subject, message, serverName, severity) values (@cSubject, @cMessage, @cServerName, 2)
 		end catch
 
-		if @cVersion like '%sql server 2005%' or @cVersion like '%sql server 2008%'
+		if @cVersion like '%sql server 2005%' or @cVersion like '%sql server 2008%' or @cVersion like '%sql server 2014%'
 		begin
 
 			create table #memory ([size] bigint, [base] bigint)
@@ -180,17 +188,28 @@ begin
 			--***********************************************************************************
 			--***********************************************************************************
 			-- clerk consumers of memory
-			create table #clerks (clerkType varchar(500), clerkName varchar(800), singlePages bigint, multiPages bigint, virtualMemoryReserved bigint,
+			create table #clerks (clerkType varchar(500), clerkName varchar(800), singlePages bigint, virtualMemoryReserved bigint,
 				virtualMemoryCommitted  bigint, aweAllocated bigint, sharedMemoryReserved bigint, sharedMemoryCommitted bigint)
 
 			set @cSQLString = '
 				insert into #clerks
 				select *
 					from openQuery([' + @cServerName + '], ''
-						SELECT [type], [name], single_pages_kb, multi_pages_kb, virtual_memory_reserved_kb, virtual_memory_committed_kb, awe_allocated_kb, shared_memory_reserved_kb, shared_memory_committed_kb
+						SELECT [type], [name], pages_kb, virtual_memory_reserved_kb, virtual_memory_committed_kb, awe_allocated_kb, shared_memory_reserved_kb, shared_memory_committed_kb
 						FROM sys.dm_os_memory_clerks
-						WHERE (single_pages_kb + multi_pages_kb + virtual_memory_reserved_kb + virtual_memory_committed_kb + awe_allocated_kb + shared_memory_reserved_kb + shared_memory_committed_kb) > 0
+						WHERE (pages_kb + virtual_memory_reserved_kb + virtual_memory_committed_kb + awe_allocated_kb + shared_memory_reserved_kb + shared_memory_committed_kb) > 0
 						'')'
+
+			--set @cSQLString = '
+			--	insert into #clerks
+			--	select *
+			--		from openQuery([' + @cServerName + '], ''
+			--			SELECT [type], [name], single_pages_kb, multi_pages_kb, virtual_memory_reserved_kb, virtual_memory_committed_kb, awe_allocated_kb, shared_memory_reserved_kb, shared_memory_committed_kb
+			--			FROM sys.dm_os_memory_clerks
+			--			WHERE (single_pages_kb + multi_pages_kb + virtual_memory_reserved_kb + virtual_memory_committed_kb + awe_allocated_kb + shared_memory_reserved_kb + shared_memory_committed_kb) > 0
+			--			'')'
+
+select top 100 * from sys.dm_os_memory_clerks
 
 			begin try
 				exec sp_executeSQL @cSQLString
@@ -209,8 +228,8 @@ begin
 			insert into performanceLog_stage (serverName, [objectName], [counterName], [instanceName], counterValue, counterType, runStamp)
 			select @cServerName, 'Memory Clerks:' + rtrim(ltrim(clerkType)), clerkName, 'Single Pages (kb)', singlePages, '', @nRunStamp from #clerks
 			union
-			select @cServerName, 'Memory Clerks:' + rtrim(ltrim(clerkType)), clerkName, 'Multiple Pages (kb)', multiPages, '', @nRunStamp from #clerks
-			union
+			--select @cServerName, 'Memory Clerks:' + rtrim(ltrim(clerkType)), clerkName, 'Multiple Pages (kb)', multiPages, '', @nRunStamp from #clerks
+			--union
 			select @cServerName, 'Memory Clerks:' + rtrim(ltrim(clerkType)), clerkName, 'Virtual Memory Reserved (kb)', virtualMemoryReserved, '', @nRunStamp from #clerks
 			union
 			select @cServerName, 'Memory Clerks:' + rtrim(ltrim(clerkType)), clerkName, 'Virtual Memory Committed (kb)', virtualMemoryCommitted, '', @nRunStamp from #clerks
@@ -232,8 +251,18 @@ begin
 				insert into #memorySummary
 				select *
 					from openQuery([' + @cServerName + '], ''
-						SELECT physical_memory_in_bytes / 1024 as physicalMemory, virtual_memory_in_bytes / 1024 as virtualMemory,	bpool_committed, bpool_commit_target, bpool_visible
+						SELECT physical_memory_kb as physicalMemory, virtual_memory_kb as virtualMemory,	bpool_committed, bpool_commit_target, bpool_visible
 							FROM sys.dm_os_sys_info  '')'
+
+			--set @cSQLString = '
+			--	insert into #memorySummary
+			--	select *
+			--		from openQuery([' + @cServerName + '], ''
+			--			SELECT physical_memory_in_bytes / 1024 as physicalMemory, virtual_memory_in_bytes / 1024 as virtualMemory,	bpool_committed, bpool_commit_target, bpool_visible
+			--				FROM sys.dm_os_sys_info  '')'
+
+
+select top 100 * from sys.dm_os_sys_info
 
 			begin try
 				exec sp_executeSQL @cSQLString
@@ -263,12 +292,12 @@ begin
 			--***********************************************************************************
 			--***********************************************************************************
 			-- pages of memory consumed
-			create table #memoryConsumed (type varchar(500), pagesAllocated bigint)
+			create table #memoryConsumed (type varchar(500), pagesInBytes bigint)
 
 			set @cSQLString = '
 				insert into #memoryConsumed
 				select *
-					from openQuery([' + @cServerName + '], ''select [type], sum(PAGES_ALLOCATED_COUNT) as pagesAllocated from SYS.DM_OS_MEMORY_OBJECTS group by [type]'')'
+					from openQuery([' + @cServerName + '], ''select [type], sum(pages_in_bytes) as pagesInBytes from SYS.DM_OS_MEMORY_OBJECTS group by [type]'')'
 
 			begin try
 				exec sp_executeSQL @cSQLString
@@ -283,7 +312,7 @@ begin
 			end catch
 
 			insert into performanceLog_stage (serverName, [objectName], [counterName], [instanceName], counterValue, counterType, runStamp)
-			select @cServerName, 'SQLBeat Statistics', 'Memory Pages Allocated', [type], pagesAllocated, '', @nRunStamp from #memoryConsumed
+			select @cServerName, 'SQLBeat Statistics', 'Memory Pages in Bytes', [type], pagesInBytes, '', @nRunStamp from #memoryConsumed
 
 			drop table #memoryConsumed
 		end
@@ -292,3 +321,4 @@ begin
 
 	delete from performanceLog_stage where counterName like '%acrUserStore%'
 end
+GO

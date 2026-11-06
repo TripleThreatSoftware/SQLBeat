@@ -1,11 +1,7 @@
-SET ANSI_PADDING OFF
-GO
-/****** Object:  Table [dbo].[fact_errorLogs_stage]    Script Date: 12/04/2009 18:53:05 ******/
+/****** Object:  Table [dbo].[fact_errorLogs_stage]    Script Date: 11/6/2026 9:48:28 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
-GO
-SET ANSI_PADDING ON
 GO
 CREATE TABLE [dbo].[fact_errorLogs_stage](
 	[date] [varchar](10) NULL,

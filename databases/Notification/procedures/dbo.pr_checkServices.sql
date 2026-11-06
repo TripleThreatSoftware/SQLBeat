@@ -1,13 +1,17 @@
-USE [Notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_checkServices]    Script Date: 2/13/2018 8:12:26 AM ******/
+-- ================================================================================================
+-- Notification.dbo.pr_checkServices
+--
+-- Runs NET START on each server, logs the result to serviceLog and alerts when a service's running
+-- state changes. Job: "SQL Service Check - [GROUP]".
+-- ================================================================================================
+/****** Object:  StoredProcedure [dbo].[pr_checkServices]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+--exec [pr_checkServices] 1
 
-
-ALTER      procedure [dbo].[pr_checkServices] (@nUkeyGroup int)
+CREATE procedure [dbo].[pr_checkServices] (@nUkeyGroup int)
 as
 begin
 	set nocount on
@@ -95,16 +99,34 @@ begin
 		if @cUserName is not null
 		begin
 			-- with password, for stores
-			set @cSQLString = @cSharedFolder + '\osql -S' + @cServerName + ' -U' + @cUserName + ' -P"' + @cPassword + '" -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\runningServices.SQL"'
+			set @cSQLString = 'osql -S' + @cServerName + ' -U' + @cUserName + ' -P"' + @cPassword + '" -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\runningServices.SQL"'
 		end
 		else
 		begin
 			-- without password, for local boxes that'll accept CORP\sqladmin under windows authentication
-			set @cSQLString = @cSharedFolder + '\osql -S' + @cServerName + ' -E -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\runningServices.SQL"'
+			set @cSQLString = 'osql -S' + @cServerName + ' -E -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\runningServices.SQL"'
 		end
 
 		insert into #runningServices (serviceName)
 		exec master..xp_cmdshell @cSQLString
+
+		--******************************************************************************************************************************************************************
+		--added for troubleshooting of "SQLSERVER service is offline on " alert for new ATL boxes. 20220627
+		--create table sandbox.dbo.runningservices_troubleshoot (ukey int identity, ymd datetime default getdate(), servername varchar(200), serviceName varchar(500))
+
+		if isnull(@cServerName, '') in ('Atl-Sql-096', 'Atl-Sql-097')
+		begin
+			insert into sandbox.dbo.runningservices_troubleshoot(servername, serviceName)
+			select @cServerName, servicename
+				from #runningServices
+
+			delete a
+			from sandbox.dbo.runningservices_troubleshoot a
+			where ymd < datediff(day, -7, getdate())
+
+		end
+		--******************************************************************************************************************************************************************
+
 
 		update #runningServices
 			set serviceName = rtrim(ltrim(replace(replace(replace(serviceName, char(9), ''), char(13), ''), '  ', ' ')))
@@ -240,3 +262,4 @@ begin
 	drop table #messages
 	drop table #runningServices
 end
+GO

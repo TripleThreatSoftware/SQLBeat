@@ -1,2 +1,0 @@
-use configuration
-GO

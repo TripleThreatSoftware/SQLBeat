@@ -1,18 +1,22 @@
-USE [Configuration]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_processApplicationPools]    Script Date: 2/7/2017 9:42:09 AM ******/
+-- ================================================================================================
+-- Configuration.dbo.pr_processApplicationPools
+--
+-- Extracts IIS application pool (w3wp) process data from RUNS_DATA into applicationPoolLog: pool
+-- name, instance, command line, handles, memory, page faults, I/O and thread counts. Can alert on
+-- new and dropped application pools.
+-- ================================================================================================
+/****** Object:  StoredProcedure [dbo].[pr_processApplicationPools]    Script Date: 11/6/2026 9:47:51 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
 --
 --truncate table applicationPoolLog
--- delete from applicationPoolLog where ymd >= '2017-02-06'
 --
 --go
 
 -- exec pr_processApplicationPools '2009-09-23'
-ALTER procedure [dbo].[pr_processApplicationPools] (@dStartDate dateTime = '', @dEndDate dateTime = '')
+CREATE procedure [dbo].[pr_processApplicationPools] (@dStartDate dateTime = '', @dEndDate dateTime = '')
 as
 begin
 	if isnull(@dStartDate, '') = ''
@@ -157,3 +161,4 @@ begin
 	drop table #applicationPoolData
 
 end
+GO

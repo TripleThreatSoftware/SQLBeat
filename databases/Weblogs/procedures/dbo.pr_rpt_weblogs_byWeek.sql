@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[pr_rpt_weblogs_byWeek]    Script Date: 12/04/2009 18:52:02 ******/
+/****** Object:  StoredProcedure [dbo].[pr_rpt_weblogs_byWeek]    Script Date: 11/6/2026 9:48:28 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON

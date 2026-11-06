@@ -1,4 +1,11 @@
-/****** Object:  StoredProcedure [dbo].[pr_updateExecutionStats]    Script Date: 8/6/2024 11:41:33 AM ******/
+-- ================================================================================================
+-- Audit.dbo.pr_updateExecutionStats
+--
+-- For each server, logs total logical writes and reads, elapsed time and execution count per
+-- statement (dm_exec_query_stats with dm_exec_sql_text) to executionStats. Data only, no alerts.
+-- Job: "Monitor execution statistics".
+-- ================================================================================================
+/****** Object:  StoredProcedure [dbo].[pr_updateExecutionStats]    Script Date: 11/6/2026 9:45:48 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON

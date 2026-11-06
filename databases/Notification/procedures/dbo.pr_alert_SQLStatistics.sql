@@ -1,3 +1,8 @@
+/****** Object:  StoredProcedure [dbo].[pr_alert_SQLStatistics]    Script Date: 11/6/2026 9:52:52 AM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 create procedure [dbo].[pr_alert_SQLStatistics]
 as
 begin
@@ -71,3 +76,4 @@ begin
 	drop table #latestRun
 	drop table #results
 end
+GO

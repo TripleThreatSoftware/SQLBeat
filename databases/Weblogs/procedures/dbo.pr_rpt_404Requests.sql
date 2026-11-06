@@ -1,9 +1,10 @@
+/****** Object:  StoredProcedure [dbo].[pr_rpt_404Requests]    Script Date: 11/6/2026 9:48:28 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
 -- exec pr_rpt_404Requests 'GAOSA - ScoreCard', null, null
-ALTER procedure [dbo].[pr_rpt_404Requests] (@cSiteName varchar(100) = '', @dStartDate dateTime = '', @dEndDate dateTime = '')
+CREATE procedure [dbo].[pr_rpt_404Requests] (@cSiteName varchar(100), @dStartDate dateTime, @dEndDate dateTime)
 as
 begin
 	set @dStartDate = convert(varchar(10), isnull(@dStartDate, dateAdd(hour, -48, getDate())), 120)
@@ -26,3 +27,4 @@ begin
 		order by b.friendlyName, numRequests desc
 
 end
+GO

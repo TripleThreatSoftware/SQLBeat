@@ -1,15 +1,9 @@
-USE [notification]
-GO
-
-/****** Object:  StoredProcedure [dbo].[pr_returnSMTPConfiguration]    Script Date: 06/18/2012 10:26:42 ******/
+/****** Object:  StoredProcedure [dbo].[pr_returnSMTPConfiguration]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
-
 SET QUOTED_IDENTIFIER ON
 GO
-
-
-ALTER procedure [dbo].[pr_returnSMTPConfiguration]
+CREATE procedure [dbo].[pr_returnSMTPConfiguration]
 as
 begin
 	declare @cServer varchar(200)
@@ -24,7 +18,6 @@ begin
 	set @cPassword = (select settingValue from dm_settings where settingName = 'SMTP Password')
 	set @bUseSSL = (select case when settingValue = 1 then 1 else 0 end from dm_settings where settingName = 'SMTP SSL')
 
-	select @cServer as serverName, isnull(@nPort, 25) as port, isnull(@cUserName, '') as userName, isnull(@cPassword, '') as password, isnull(@bUseSSL, 0) as useSSL, 1 as ukey
+	select @cServer as serverName, @nPort as port, @cUserName as userName, @cPassword as password, @bUseSSL as useSSL, 1 as ukey
 end
-
 GO

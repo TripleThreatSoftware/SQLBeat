@@ -1,3 +1,8 @@
+/****** Object:  StoredProcedure [dbo].[pr_returnServerUser]    Script Date: 11/6/2026 9:52:52 AM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 create PROCEDURE [dbo].[pr_returnServerUser] @ukey int
 AS
 BEGIN
@@ -6,3 +11,4 @@ BEGIN
 
 	select @username as username, @wmiUsername as wmiusername
 END
+GO

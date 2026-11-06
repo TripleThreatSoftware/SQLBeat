@@ -1,9 +1,9 @@
-/****** Object:  UserDefinedFunction [dbo].[fn_isHuman]    Script Date: 12/04/2009 18:54:09 ******/
+/****** Object:  UserDefinedFunction [dbo].[fn_isHuman]    Script Date: 11/6/2026 9:48:28 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-create   function [dbo].[fn_isHuman](@cMachineType varchar(500))
+CREATE   function [dbo].[fn_isHuman](@cMachineType varchar(500))
 returns bit
 as
 begin
@@ -24,6 +24,8 @@ begin
 		or @cMachineType like '%ocelli%'
 		or @cMachineType like '%wget%'
 		or @cMachineType like '%hobbit%'
+		or @cMachineType like '%python%'
+		or @cMachineType like '%curl%'
 		or @cMachineType like '%search%'
 		or @cMachineType like '%java%'
 		or @cMachineType like '%RPT-HTTPClient%'

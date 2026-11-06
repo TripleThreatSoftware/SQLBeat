@@ -1,14 +1,11 @@
-USE [Notification]
-GO
-/****** Object:  UserDefinedFunction [dbo].[fn_checksum]    Script Date: 12/10/2010 10:05:04 ******/
+/****** Object:  UserDefinedFunction [dbo].[fn_checksum]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
 -- select dbo.fn_checksum('hello world')
 -- select dbo.fn_checksum('hello world2')
-ALTER function [dbo].[fn_checksum](@cString varchar(max))
+CREATE function [dbo].[fn_checksum](@cString varchar(max))
 returns bigint
 as
 begin
@@ -30,3 +27,4 @@ begin
 
 	return @nResults
 end
+GO

@@ -1,9 +1,13 @@
-/****** Object:  StoredProcedure [dbo].[pr_sendMessage]    Script Date: 05/19/2009 13:59:45 ******/
+/****** Object:  StoredProcedure [dbo].[pr_sendMessage]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-CREATE procedure [dbo].[pr_sendMessage] (@cFrom varchar(100), @cTo varchar(500), @cSubject varchar(500), @cBody varchar(8000))
+--declare @cMessage varchar(8000)
+--set @cMessage = 'this' + char(13) + 'is a test'
+--exec pr_sendMessage 'monitor@sqlbeat.com', 'cole@sqlbeat.com', 'Test message', @cMessage, 1
+
+CREATE procedure [dbo].[pr_sendMessage] (@cFrom varchar(100), @cTo varchar(500), @cSubject varchar(2000), @cBody varchar(max), @bSendHTML bit = 1)
 as
 begin
 	declare @cClientCode varchar(100)
@@ -26,15 +30,24 @@ begin
 			recipient varchar(100),
 			sender varchar(100),
 			subject varchar(500),
-			body varchar(8000)
+			body varchar(max)
 		)
 	END
 
-	insert into messagesSent (recipient, sender, subject, body) values (@cTo, @cFrom, @cSubject, @cBody)
+	if @bSendHTML = 1
+	begin
+		set @cBody = '<div style="font-family:Courier; font-size: x-small;">' + replace(@cBody, char(13), '<br>') + '</div>' + '
+<hr>
+<table width="100%" border="0" cellspacing="0" cellpadding="0"><tr>
+<td align="left"><div style="font-family:Verdana; font-size:x-small; margin:0;">SQLBeat</div></td>
+<td align="right"><div style="font-family:Verdana; font-size:x-small; margin:0;"><a href="http://' + @@servername + '/sqlControlPanel.aspx">Control Panel</a></div></td>
+</tr></table>'
 
-	exec sp_send_cdosysmail @cFrom, @cTo, @cSubject, @cBody
 
---	set @cTo = 'cole@triplethreatsoftware.com'
---	exec sp_send_cdosysmail @cFrom, @cTo, @cSubject, @cBody
+		exec sp_send_cdosysmail @cFrom, @cTo, @cSubject, '', '', @cBody
+	end
+	else
+		exec sp_send_cdosysmail @cFrom, @cTo, @cSubject, @cBody
+
 end
 GO

@@ -1,4 +1,4 @@
-/****** Object:  UserDefinedFunction [dbo].[fn_returnShortDate]    Script Date: 05/19/2009 13:59:31 ******/
+/****** Object:  UserDefinedFunction [dbo].[fn_returnShortDate]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON

@@ -1,4 +1,11 @@
-/****** Object:  Table [dbo].[auditData_objectText]    Script Date: 8/6/2024 11:41:33 AM ******/
+-- ================================================================================================
+-- Audit.dbo.auditData_objectText
+--
+-- Holds a record of stored procedure, function and other object definition as snapshotted by
+-- SQLBeat. This table holds a full historical record and does not have a corresponding partitioned
+-- view.
+-- ================================================================================================
+/****** Object:  Table [dbo].[auditData_objectText]    Script Date: 11/6/2026 9:45:48 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -20,7 +27,7 @@ CREATE TABLE [dbo].[auditData_objectText](
 GO
 SET ANSI_PADDING ON
 GO
-/****** Object:  Index [ix_objectText_serverName_databaseName_objectName]    Script Date: 8/6/2024 11:41:33 AM ******/
+/****** Object:  Index [ix_objectText_serverName_databaseName_objectName]    Script Date: 11/6/2026 9:45:48 AM ******/
 CREATE CLUSTERED INDEX [ix_objectText_serverName_databaseName_objectName] ON [dbo].[auditData_objectText]
 (
 	[serverName] ASC,
@@ -30,7 +37,7 @@ CREATE CLUSTERED INDEX [ix_objectText_serverName_databaseName_objectName] ON [db
 GO
 SET ANSI_PADDING ON
 GO
-/****** Object:  Index [ix_auditDataObjectText_current_firstSeen_serverName_databaseName]    Script Date: 8/6/2024 11:41:33 AM ******/
+/****** Object:  Index [ix_auditDataObjectText_current_firstSeen_serverName_databaseName]    Script Date: 11/6/2026 9:45:48 AM ******/
 CREATE NONCLUSTERED INDEX [ix_auditDataObjectText_current_firstSeen_serverName_databaseName] ON [dbo].[auditData_objectText]
 (
 	[isCurrent] ASC,
@@ -41,7 +48,7 @@ CREATE NONCLUSTERED INDEX [ix_auditDataObjectText_current_firstSeen_serverName_d
 GO
 SET ANSI_PADDING ON
 GO
-/****** Object:  Index [ix_auditDataObjectText_current_lastSeen_serverName_databaseName]    Script Date: 8/6/2024 11:41:33 AM ******/
+/****** Object:  Index [ix_auditDataObjectText_current_lastSeen_serverName_databaseName]    Script Date: 11/6/2026 9:45:48 AM ******/
 CREATE NONCLUSTERED INDEX [ix_auditDataObjectText_current_lastSeen_serverName_databaseName] ON [dbo].[auditData_objectText]
 (
 	[isCurrent] ASC,
@@ -52,7 +59,7 @@ CREATE NONCLUSTERED INDEX [ix_auditDataObjectText_current_lastSeen_serverName_da
 GO
 SET ANSI_PADDING ON
 GO
-/****** Object:  Index [ix_auditDataObjectText_current_serverName_databaseName_objectName_objectText_xtype_colid]    Script Date: 8/6/2024 11:41:33 AM ******/
+/****** Object:  Index [ix_auditDataObjectText_current_serverName_databaseName_objectName_objectText_xtype_colid]    Script Date: 11/6/2026 9:45:48 AM ******/
 CREATE NONCLUSTERED INDEX [ix_auditDataObjectText_current_serverName_databaseName_objectName_objectText_xtype_colid] ON [dbo].[auditData_objectText]
 (
 	[isCurrent] ASC,
@@ -64,7 +71,7 @@ INCLUDE([objectText],[xtype],[colID]) WITH (PAD_INDEX = OFF, STATISTICS_NORECOMP
 GO
 SET ANSI_PADDING ON
 GO
-/****** Object:  Index [ix_auditDataObjectText_server_database_objectID]    Script Date: 8/6/2024 11:41:33 AM ******/
+/****** Object:  Index [ix_auditDataObjectText_server_database_objectID]    Script Date: 11/6/2026 9:45:48 AM ******/
 CREATE NONCLUSTERED INDEX [ix_auditDataObjectText_server_database_objectID] ON [dbo].[auditData_objectText]
 (
 	[serverName] ASC,
@@ -75,7 +82,7 @@ INCLUDE([isCurrent]) WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_I
 GO
 SET ANSI_PADDING ON
 GO
-/****** Object:  Index [ix_auditDataObjectText_serverName_firstSeen_lastSeen]    Script Date: 8/6/2024 11:41:33 AM ******/
+/****** Object:  Index [ix_auditDataObjectText_serverName_firstSeen_lastSeen]    Script Date: 11/6/2026 9:45:48 AM ******/
 CREATE NONCLUSTERED INDEX [ix_auditDataObjectText_serverName_firstSeen_lastSeen] ON [dbo].[auditData_objectText]
 (
 	[serverName] ASC,

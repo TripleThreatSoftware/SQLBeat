@@ -1,6 +1,4 @@
-USE [Configuration]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_graph_cpuUtilization]    Script Date: 02/17/2010 10:27:25 ******/
+/****** Object:  StoredProcedure [dbo].[pr_graph_cpuUtilization]    Script Date: 11/6/2026 9:47:51 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -9,7 +7,7 @@ GO
 
 -- exec pr_graph_cpuUtilization 445
 
-ALTER procedure [dbo].[pr_graph_cpuUtilization] (@nUkeyServer int, @nNumHours int = 48)
+CREATE procedure [dbo].[pr_graph_cpuUtilization] (@nUkeyServer int, @nNumHours int = 48)
 as
 begin
 	create table #dataValues (setName varchar(200), seriesName varchar(100), axis_x varchar(100), axis_y decimal(20,4), sortOrder int identity)
@@ -41,3 +39,4 @@ begin
 	drop table #reportData
 
 end
+GO

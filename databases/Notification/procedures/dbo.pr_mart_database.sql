@@ -1,9 +1,9 @@
+/****** Object:  StoredProcedure [dbo].[pr_mart_database]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
-ALTER procedure [dbo].[pr_mart_database]
+CREATE procedure [dbo].[pr_mart_database]
 as
 begin
 	declare @dStartDate dateTime
@@ -30,7 +30,7 @@ begin
 		identity(int) as ukey
 		into #activity
 		from (
-			select serverName, spid, hostname, dbname, rtrim(programName) as programName, login, login_time, ymd, lastBatchTime, sum(cpuTime) as cpuTime, sum(diskIO) as diskIO
+			select serverName, spid, hostname, dbname, rtrim(programName) as programName, login, login_time, ymd, lastBatchTime, sum(convert(bigint, cpuTime)) as cpuTime, sum(convert(bigint, diskIO)) as diskIO
 				from processLog (nolock)
 				where ymd >= @dStartDate
 					and lastBatchTime >= @dStartDate
@@ -126,3 +126,4 @@ begin
 
 	drop table #activity
 end
+GO

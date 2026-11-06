@@ -1,4 +1,9 @@
-/****** Object:  StoredProcedure [dbo].[pr_monitorIPAddresses]    Script Date: 05/19/2009 13:59:45 ******/
+-- ================================================================================================
+-- Notification.dbo.pr_monitorIPAddresses
+--
+-- Uses pingLog to alert when a device's IP address changes. Job: "Monitor IP addresses".
+-- ================================================================================================
+/****** Object:  StoredProcedure [dbo].[pr_monitorIPAddresses]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -39,7 +44,7 @@ begin
 		'IP address changed from ' + a.ipAddress + ' to ' + b.ipAddress + ' around ' + convert(varchar(20), a.lastSeen, 120) + '.' as subject,
 		'IP address ' + a.ipAddress + ' was last seen at ' + convert(varchar(20), a.lastSeen, 120) + '.' + char(13) +
 			'IP Address ' + b.ipAddress + ' was first seen at ' + convert(varchar(20), b.firstSeen, 120) + '.' as message,
-		1 as severity
+		3 as severity
 		from #changes a
 		join #changes b on a.ukey = b.ukey - 1
 			and a.serverName = b.serverName

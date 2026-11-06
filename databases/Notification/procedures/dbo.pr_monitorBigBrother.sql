@@ -1,17 +1,15 @@
-USE [Notification]
-GO
+/****** Object:  StoredProcedure [dbo].[pr_monitorBigBrother]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
 -- update dm_servers set serviceCheck = 1 where isSQLBox = 1 and detailedCheck = 1
 
 -- select top 100 * from messagesSent order by ymd desc
 -- select top 100 * from notificationLog order by ymd desc
 -- select * from notificationLog_stage
 
-ALTER procedure [dbo].[pr_monitorBigBrother]
+CREATE procedure [dbo].[pr_monitorBigBrother]
 as
 begin
 	set nocount on
@@ -215,7 +213,7 @@ begin
 		set @cSharedFolder = (select top 1 settingValue from notification.dbo.dm_settings where settingName = 'Shared Folder')
 
 		-- without password, for local boxes that'll accept sqladmin under windows authentication
-		set @cSQLString = @cSharedFolder + '\osql -S' + @cServerName + ' -E -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\all_user_activity.SQL"'
+		set @cSQLString = 'osql -S' + @cServerName + ' -E -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\all_user_activity.SQL"'
 
 		insert into #userActivity (nastyLine)
 		exec master..xp_cmdShell @cSQLString
@@ -553,8 +551,8 @@ begin
 
 	end
 
-	--else
-	--begin
+	else
+	begin
 
 		--*********************************************************************************************************************
 		-- Job average runtimes
@@ -764,7 +762,7 @@ begin
 			from #runningJobs a
 			left outer join master..sysprocesses c (nolock) on substring(c.program_name,32,32)= a.job_id_char
 
-	--end
+	end
 
 	--*********************************************************************************************************************
 	-- Add job data to local mart tables
@@ -945,6 +943,7 @@ begin
 			or jobName like 'maintenance%'
 			or jobName like '%mart%'
 			or jobName like '%backup%'
+			or jobName like '%dashboard - process next server%'
 			or jobName like '%production connections%'
 			or jobName like '%execution statistics%'
 
@@ -952,10 +951,22 @@ begin
 			or jobName like '%LSRestore%'
 			or jobName like '%LSAlert%'
 
+			or jobName like '%monitor files%'
+			or jobName like '%website monitor%'
+
 			or jobName like 'MP%'
 
 			or jobName like 'AppDb%'
 			or jobName like 'Restore%'
+			or jobName like 'Website Monitor%'
+			or jobName like 'Weblogs%'
+
+			-- add code to allow certificate renewal to run long
+			-- Chris Draper - 02/08/2021 @ 8:47 AM
+			or jobName like 'Certificate Renewal%'
+			or jobname = 'Send staged messages'
+
+			or jobName = 'CPU Counter Check - All Servers'
 
 	-- jobs that we have a history for
 	insert into #results (message, severity, subject, isLongRunningJob)
@@ -1653,13 +1664,18 @@ begin
 
 	insert into #results (message, severity, subject, isDriveSpace)
 	select 'Drive ' + driveLetter + ' is down to ' + convert(varchar(100), freeSpace) + 'mb free.',
-		2 as severity,
+		1 as severity,
 		'Drive ' + driveLetter + ' is down to ' + convert(varchar(100), freeSpace) + 'mb free.' as subject,
 		1 as isDriveSpace
 		from #drives
-		where freeSpace < 500
+		where freeSpace < 20600
+
+	insert into drivespaceLog (serverName, driveLetter, driveSpace)
+	select @@servername, driveLetter, freeSpace
+		from #drives
 
 	DROP TABLE #drives
+
 
 	-- insert into hist_monitorBigBrother (stepName) values ('Drive space checked')
 
@@ -1905,7 +1921,7 @@ begin
 
 		where a.serverName is not null
 			and isnull(a.notes, '') not like '%Examination Completed%'
-			and dateDiff(minute, a.ymd, getDate()) > 20
+			and dateDiff(minute, a.ymd, getDate()) > 60
 			and e.jobName is not null
 
 --	insert into #results (subject, message, severity, serverName)
@@ -2133,3 +2149,4 @@ begin
 	-- insert into hist_monitorBigBrother (stepName) values ('Alerts sent')
 
 end
+GO

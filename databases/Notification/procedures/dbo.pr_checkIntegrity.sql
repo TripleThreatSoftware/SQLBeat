@@ -1,4 +1,15 @@
-ALTER  procedure [dbo].[pr_checkIntegrity] (@nServerGroup int)
+-- ================================================================================================
+-- Notification.dbo.pr_checkIntegrity
+--
+-- Runs DBCC CHECKDB on every database of each server with dm_servers.integrityCheck set, logs
+-- results to integrityLog and alerts on any errors. Job: "SQL Integrity Check - [GROUP]".
+-- ================================================================================================
+/****** Object:  StoredProcedure [dbo].[pr_checkIntegrity]    Script Date: 11/6/2026 9:52:52 AM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE  procedure [dbo].[pr_checkIntegrity] (@nServerGroup int)
 as
 begin
 
@@ -134,12 +145,12 @@ begin
 				if isnull(@cUserName, '') <> ''
 				begin
 					-- with password
-					set @cSQLString = @cSharedFolder + '\osql -S' + @cServerName + ' -U' + @cUserName + ' -P"' + isnull(@cPassword, '') + '" -n -h-1 -w300 -d' + @cDatabaseName + ' -q "dbcc checkdb"'
+					set @cSQLString = 'osql -S' + @cServerName + ' -U' + @cUserName + ' -P"' + isnull(@cPassword, '') + '" -n -h-1 -w300 -d' + @cDatabaseName + ' -q "dbcc checkdb"'
 				end
 				else
 				begin
 					-- without password under windows authentication
-					set @cSQLString = @cSharedFolder + '\osql -S' + @cServerName + ' -E -n -h-1 -w300 -d' + @cDatabaseName + ' -q "dbcc checkdb"'
+					set @cSQLString = 'osql -S' + @cServerName + ' -E -n -h-1 -w300 -d' + @cDatabaseName + ' -q "dbcc checkdb"'
 				end
 
 				insert into #results (resultLine)

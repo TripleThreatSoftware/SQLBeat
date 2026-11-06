@@ -1,12 +1,10 @@
-USE [Weblogs]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_archiveOldPartitionedTables]    Script Date: 6/12/2017 8:58:39 AM ******/
+/****** Object:  StoredProcedure [dbo].[pr_archiveOldPartitionedTables]    Script Date: 11/6/2026 9:48:28 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER OFF
 GO
 -- The keyFieldList variable should not contain ymd_id or ymd fields
-ALTER  procedure [dbo].[pr_archiveOldPartitionedTables] (@cTableName varchar(100), @cDateField varchar(100), @cKeyfieldList varchar(100), @cPrimaryIndexType varchar(100) = 'PK')
+CREATE  procedure [dbo].[pr_archiveOldPartitionedTables] (@cTableName varchar(100), @cDateField varchar(100), @cKeyfieldList varchar(100), @cPrimaryIndexType varchar(100) = 'PK')
 as
 begin
 --	print 'Beginning to archive old partitioned tables'
@@ -278,7 +276,14 @@ begin
 				set @cSQLString = 'use ' + @cThisDatabase + '
 					insert into ' + @cWeekTable + '(' + @cFieldList + ') select ' + @cFieldList + ' from ' + @cThisTable
 --				print @cSQLString
-				exec sp_executesql @cSQLString
+				begin try
+					exec sp_executesql @cSQLString
+				end try
+				begin catch
+					print error_message()
+					insert into notification..notificationLog_stage (servername, severity, subject, message) values (@@servername, 2, 'pr_archiveOldPartitionedTables - ' + error_message(), error_message())
+					--insert into notification.dbo.notificationLog_stage
+				end catch
 			end
 
 			-- double check that permissions are set properly by re-applying them
@@ -307,3 +312,4 @@ begin
 end
 
 -- exec pr_archiveOldPartitionedTables 'mart_vehicle_byday_daily', 'ukey_auto'
+GO

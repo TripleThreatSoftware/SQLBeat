@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[pr_monitorPageLifeExpectancy]    Script Date: 05/19/2009 13:59:45 ******/
+/****** Object:  StoredProcedure [dbo].[pr_monitorPageLifeExpectancy]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -16,7 +16,7 @@ begin
 	set @nUkeyObject = (select top 1 ukey from dm_performanceObjects (nolock) where objectName = 'SQLServer:Buffer Manager')
 
 	insert into notificationLog_stage (serverName, severity, subject, message)
-	select serverName, 2 as severity,
+	select serverName, 3 as severity,
 		'Average page life expectancy is ' + convert(varchar(20), pageLifeExpectancy_avg) + ' @ ' + convert(varchar(20), b.ymd, 120) as subject,
 		'Over ' + convert(varchar(20), numReadings) + ' readings starting at ' + convert(varchar(20), b.ymd, 120) + ' average page life expectancy was ' + convert(varchar(20), pageLifeExpectancy_avg) + '.'
 
@@ -31,7 +31,7 @@ begin
 				from performanceLog a (nolock)
 				where ukey_counter = @nUkeyCounter
 					and ukey_object = @nUkeyObject
-					and ymd >= dateAdd(minute, -20, getDate())
+					and ymd >= dateAdd(minute, -180, getDate())
 					and runstamp >= @nRunStamp
 				group by ukey_server
 				having count(*) >= 2

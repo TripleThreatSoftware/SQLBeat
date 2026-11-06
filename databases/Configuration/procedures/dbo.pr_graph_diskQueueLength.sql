@@ -1,8 +1,9 @@
+/****** Object:  StoredProcedure [dbo].[pr_graph_diskQueueLength]    Script Date: 11/6/2026 9:47:51 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-ALTER procedure [dbo].[pr_graph_diskQueueLength] (@nUkeyServer int, @nNumHours int = 48)
+CREATE procedure [dbo].[pr_graph_diskQueueLength] (@nUkeyServer int, @nNumHours int = 48)
 as
 begin
 
@@ -41,3 +42,4 @@ begin
 	drop table #dataValues
 	drop table #diskQueue
 end
+GO

@@ -1,19 +1,14 @@
-USE [Weblogs]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_mart_page]    Script Date: 9/10/2024 8:28:19 AM ******/
+/****** Object:  StoredProcedure [dbo].[pr_mart_page]    Script Date: 11/6/2026 9:48:28 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
-
-
 --set statistics io on
--- exec pr_mart_page '2024-02-01', '2024-09-11'
+-- exec pr_mart_page '2024-01-02', '2024-01-02'
 
 -- alter table mart_page_byday add friendlyPageName varchar(100)
 
-ALTER procedure [dbo].[pr_mart_page] (@dStartDate dateTime, @dEndDate dateTime)
+CREATE procedure [dbo].[pr_mart_page] (@dStartDate dateTime, @dEndDate dateTime)
 as
 begin
 
@@ -176,55 +171,55 @@ begin
 	set @nRowcount = @@rowcount
 	insert into fact_weblogs_stage_hist (stepName) values ('PR_MART_PAGE - Identified pages (' + convert(varchar(20), @nRowcount) + ')')
 
---	update #pagesUsed
---		set friendlyPageName = left(
---			case
---				when uristem in ('/checkout_step1.aspx', '/checkout_step2.aspx', '/checkout_thanks.aspx', '/productDetails.aspx', '/default.aspx', '/showAssembly.aspx',
---					'/cart.aspx', '/landingpage.aspx', '/productSearch.aspx', '/findDealer.aspx', '/parttype.aspx', '/', '/browseaccessories.aspx', '/manage/recentorders.aspx', '/manage/home.aspx', '/manage/login.aspx') then uristem
---				when uristem like '%/AjaxGlobalTranslations' then 'AjaxGlobalTranslations'
---				when uristem like '%/GetUserVehicles' then 'GetUserVehicles'
---				when uristem like '%/GetInterpretForModal' then 'GetInterpretForModal'
---				when uristem like '%/GetSmartSearchResults' then 'GetSmartSearchResults'
---				when uristem like '%/InsertVehicle' then 'InsertVehicle'
---				when uristem like '%/GetHotspots' then 'GetHotspots'
---				when uristem like '%/GetInterpretForMyGarage' then 'GetInterpretForMyGarage'
---				when uristem like '%/GetInterpretForRedirect' then 'GetInterpretForRedirect'
---				when uristem like '%/AsyncRefineSearch' then 'AsyncRefineSearch'
---				when uristem like '%/RemoveUserVehicles' then 'RemoveUserVehicles'
---				when uristem like '%/CreateVinLinks' then 'CreateVinLinks'
---				when uristem like '%/GetPartTypeResults' then 'GetPartTypeResults'
---				when uristem like '%/UpdateUserVehicles' then 'UpdateUserVehicles'
---				when uristem like '%/ReturnCartContents' then 'ReturnCartContents'
---				when uristem like '%/ReturnCartNumItems' then 'ReturnCartNumItems'
---				when uristem like '%/ReturnCartNumberItems' then 'ReturnCartNumberItems'
---				when uristem like '%/ReturnCartSummary' then 'ReturnCartSummary'
-----				when uristem like '%/GetPartTypeResults' then ''
-----				when uristem like '%/GetPartTypeResults' then ''
---				when uristem like '%/RecordAction.ashx' then 'RecordAction'
---				when uristem like '/products/%' or uristem like '/p/%' then '/productDetails.aspx'
---				when uristem like '/cars/%html' or uristem like '/s/%' then '/refineCar.aspx'
---				when uristem like '/a/%html' then '/showAssembly.aspx'
---				when uristem like '/g/%' or uriStem like '/accessories%' then '/browseaccessories.aspx'
---				when uristem like '/go/%' then '/landingpage.aspx'
---				when uristem like '/manufacturers/%' then '/manufacturers.aspx'
---				when uristem like '/policies%' then 'Policies'
---				when uristem like '/bikes/%html' then '/refineCar.aspx'
---				when uristem like '%refinecar.aspx' or uristem like '/cars/%' then '/refineCar.aspx'
---				when uristem like '/sitemaps/%' then 'Sitemaps'
---				when uristem = '/cart.aspx' then '/cart.aspx'
---				when uristem like '/categories/%html' or uristem = '/productSearch.aspx' then '/productSearch.aspx'
---				when uristem = '/default.aspx' then '/'
---				when uristem like '/%.html' and charindex('_', uriStem) > 0 then '/'
---				when uristem like '%.css' then 'CSS'
---				when uristem like '%.woff%' or uristem like '%.ttf' or uristem like '%.eot' or uristem like '%/fonts/%' then 'Font'
---				when uristem like '%.ico' then 'FavIco'
---				when uriStem like '/errors%' then uriStem
---	--			when uristem like '%.php' then 'Hack Attempt'
---				else 'Other'
---				end, 100)
+	update #pagesUsed
+		set friendlyPageName = left(
+			case
+				when uristem in ('/checkout_step1.aspx', '/checkout_step2.aspx', '/checkout_thanks.aspx', '/productDetails.aspx', '/default.aspx', '/showAssembly.aspx',
+					'/cart.aspx', '/landingpage.aspx', '/productSearch.aspx', '/findDealer.aspx', '/parttype.aspx', '/', '/browseaccessories.aspx', '/manage/recentorders.aspx', '/manage/home.aspx', '/manage/login.aspx') then uristem
+				when uristem like '%/AjaxGlobalTranslations' then 'AjaxGlobalTranslations'
+				when uristem like '%/GetUserVehicles' then 'GetUserVehicles'
+				when uristem like '%/GetInterpretForModal' then 'GetInterpretForModal'
+				when uristem like '%/GetSmartSearchResults' then 'GetSmartSearchResults'
+				when uristem like '%/InsertVehicle' then 'InsertVehicle'
+				when uristem like '%/GetHotspots' then 'GetHotspots'
+				when uristem like '%/GetInterpretForMyGarage' then 'GetInterpretForMyGarage'
+				when uristem like '%/GetInterpretForRedirect' then 'GetInterpretForRedirect'
+				when uristem like '%/AsyncRefineSearch' then 'AsyncRefineSearch'
+				when uristem like '%/RemoveUserVehicles' then 'RemoveUserVehicles'
+				when uristem like '%/CreateVinLinks' then 'CreateVinLinks'
+				when uristem like '%/GetPartTypeResults' then 'GetPartTypeResults'
+				when uristem like '%/UpdateUserVehicles' then 'UpdateUserVehicles'
+				when uristem like '%/ReturnCartContents' then 'ReturnCartContents'
+				when uristem like '%/ReturnCartNumItems' then 'ReturnCartNumItems'
+				when uristem like '%/ReturnCartNumberItems' then 'ReturnCartNumberItems'
+				when uristem like '%/ReturnCartSummary' then 'ReturnCartSummary'
+--				when uristem like '%/GetPartTypeResults' then ''
+--				when uristem like '%/GetPartTypeResults' then ''
+				when uristem like '%/RecordAction.ashx' then 'RecordAction'
+				when uristem like '/products/%' or uristem like '/p/%' then '/productDetails.aspx'
+				when uristem like '/cars/%html' or uristem like '/s/%' then '/refineCar.aspx'
+				when uristem like '/a/%html' then '/showAssembly.aspx'
+				when uristem like '/g/%' or uriStem like '/accessories%' then '/browseaccessories.aspx'
+				when uristem like '/go/%' then '/landingpage.aspx'
+				when uristem like '/manufacturers/%' then '/manufacturers.aspx'
+				when uristem like '/policies%' then 'Policies'
+				when uristem like '/bikes/%html' then '/refineCar.aspx'
+				when uristem like '%refinecar.aspx' or uristem like '/cars/%' then '/refineCar.aspx'
+				when uristem like '/sitemaps/%' then 'Sitemaps'
+				when uristem = '/cart.aspx' then '/cart.aspx'
+				when uristem like '/categories/%html' or uristem = '/productSearch.aspx' then '/productSearch.aspx'
+				when uristem = '/default.aspx' then '/'
+				when uristem like '/%.html' and charindex('_', uriStem) > 0 then '/'
+				when uristem like '%.css' then 'CSS'
+				when uristem like '%.woff%' or uristem like '%.ttf' or uristem like '%.eot' or uristem like '%/fonts/%' then 'Font'
+				when uristem like '%.ico' then 'FavIco'
+				when uriStem like '/errors%' then uriStem
+	--			when uristem like '%.php' then 'Hack Attempt'
+				else 'Other'
+				end, 100)
 
---	set @nRowcount = @@rowcount
---	insert into fact_weblogs_stage_hist (stepName) values ('PR_MART_PAGE - Friendly page names set (' + convert(varchar(20), @nRowcount) + ')')
+	set @nRowcount = @@rowcount
+	insert into fact_weblogs_stage_hist (stepName) values ('PR_MART_PAGE - Friendly page names set (' + convert(varchar(20), @nRowcount) + ')')
 
 --if suser_sname() like '%admin%'
 --	select * from #pagesUsed where friendlyPageName = 'Other' order by numHits desc
@@ -232,16 +227,12 @@ begin
 	--alter table mart_page_byday add numGet bigint, numPost bigint
 -- select * from #pagesUsed where friendlyPageName = 'Other' and uristem like '/%.html' and charindex('_', uriStem) > 0
 
-	insert into mart_page_byday (ukey_site,
-		--friendlyPageName,
-		ukey_uriStem,
-		requestStatus, ymd,
+	insert into mart_page_byday (ukey_site, friendlyPageName, requestStatus, ymd,
 		numRequests, numRequests_human,
 		uniques, uniques_human, pageLoadTime, getTime, postTime, numGet, numPost)
 	select
 		a.ukey_site,
-		--friendlyPageName,
-		a.ukey_uristem,
+		friendlyPageName,
 		a.requestStatus,
 		a.ymd,
 		sum(numRequests),
@@ -264,7 +255,7 @@ begin
 		--where a.ymd >= @dStartDate
 		--	and a.ymd < dateAdd(day, 1, @dEndDate)
 
-		group by a.ymd, a.ukey_site, a.ukey_uristem, a.requestStatus
+		group by a.ymd, a.ukey_site, friendlyPageName, a.requestStatus
 
 	set @nRowcount = @@rowcount
 	insert into fact_weblogs_stage_hist (stepName) values ('PR_MART_PAGE - Inserted Results (' + convert(varchar(20), @nRowcount) + ')')
@@ -274,3 +265,4 @@ begin
 	drop table #allPages
 
 end
+GO

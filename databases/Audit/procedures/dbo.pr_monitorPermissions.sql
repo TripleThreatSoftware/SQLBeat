@@ -1,4 +1,11 @@
-/****** Object:  StoredProcedure [dbo].[pr_monitorPermissions]    Script Date: 8/6/2024 11:41:33 AM ******/
+-- ================================================================================================
+-- Audit.dbo.pr_monitorPermissions
+--
+-- For each server and database, snapshots sysusers, syspermissions, sysmembers, sysprotects,
+-- syslogins, database_role_members and database_principals into the matching auditData_ tables,
+-- giving a history of logins and rights. Job: "SQL Permissions Check".
+-- ================================================================================================
+/****** Object:  StoredProcedure [dbo].[pr_monitorPermissions]    Script Date: 11/6/2026 9:45:48 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON

@@ -1,9 +1,9 @@
-/****** Object:  UserDefinedFunction [dbo].[fn_returnDigits]    Script Date: 8/6/2024 11:41:33 AM ******/
+/****** Object:  UserDefinedFunction [dbo].[fn_returnDigits]    Script Date: 11/6/2026 9:48:28 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-create         function [dbo].[fn_returnDigits](@cSomeString varchar(50), @lStopAtFirstNonNumber bit = 0)
+CREATE         function [dbo].[fn_returnDigits](@cSomeString varchar(50), @lStopAtFirstNonNumber bit = 0)
 returns bigInt
 as
 begin

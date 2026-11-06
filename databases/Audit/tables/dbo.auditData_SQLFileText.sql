@@ -1,4 +1,10 @@
-/****** Object:  Table [dbo].[auditData_SQLFileText]    Script Date: 8/6/2024 11:41:33 AM ******/
+-- ================================================================================================
+-- Audit.dbo.auditData_SQLFileText
+--
+-- Holds a record of the contents of .SQL files in monitored folders. This table holds a full
+-- historical record and does not have a corresponding partitioned view.
+-- ================================================================================================
+/****** Object:  Table [dbo].[auditData_SQLFileText]    Script Date: 11/6/2026 9:45:48 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -17,7 +23,7 @@ CREATE TABLE [dbo].[auditData_SQLFileText](
 GO
 SET ANSI_PADDING ON
 GO
-/****** Object:  Index [ix_objectText_filePath_fileName]    Script Date: 8/6/2024 11:41:33 AM ******/
+/****** Object:  Index [ix_objectText_filePath_fileName]    Script Date: 11/6/2026 9:45:48 AM ******/
 CREATE CLUSTERED INDEX [ix_objectText_filePath_fileName] ON [dbo].[auditData_SQLFileText]
 (
 	[filePath] ASC,
@@ -26,7 +32,7 @@ CREATE CLUSTERED INDEX [ix_objectText_filePath_fileName] ON [dbo].[auditData_SQL
 GO
 SET ANSI_PADDING ON
 GO
-/****** Object:  Index [ix_auditDataObjectText_current_filePath_fileName]    Script Date: 8/6/2024 11:41:33 AM ******/
+/****** Object:  Index [ix_auditDataObjectText_current_filePath_fileName]    Script Date: 11/6/2026 9:45:48 AM ******/
 CREATE NONCLUSTERED INDEX [ix_auditDataObjectText_current_filePath_fileName] ON [dbo].[auditData_SQLFileText]
 (
 	[isCurrent] ASC,
@@ -36,7 +42,7 @@ CREATE NONCLUSTERED INDEX [ix_auditDataObjectText_current_filePath_fileName] ON 
 GO
 SET ANSI_PADDING ON
 GO
-/****** Object:  Index [ix_auditDataObjectText_current_firstSeen_filePath]    Script Date: 8/6/2024 11:41:33 AM ******/
+/****** Object:  Index [ix_auditDataObjectText_current_firstSeen_filePath]    Script Date: 11/6/2026 9:45:48 AM ******/
 CREATE NONCLUSTERED INDEX [ix_auditDataObjectText_current_firstSeen_filePath] ON [dbo].[auditData_SQLFileText]
 (
 	[isCurrent] ASC,
@@ -46,7 +52,7 @@ CREATE NONCLUSTERED INDEX [ix_auditDataObjectText_current_firstSeen_filePath] ON
 GO
 SET ANSI_PADDING ON
 GO
-/****** Object:  Index [ix_auditDataObjectText_current_lastSeen_filePath]    Script Date: 8/6/2024 11:41:33 AM ******/
+/****** Object:  Index [ix_auditDataObjectText_current_lastSeen_filePath]    Script Date: 11/6/2026 9:45:48 AM ******/
 CREATE NONCLUSTERED INDEX [ix_auditDataObjectText_current_lastSeen_filePath] ON [dbo].[auditData_SQLFileText]
 (
 	[isCurrent] ASC,
@@ -56,7 +62,7 @@ CREATE NONCLUSTERED INDEX [ix_auditDataObjectText_current_lastSeen_filePath] ON 
 GO
 SET ANSI_PADDING ON
 GO
-/****** Object:  Index [ix_auditDataObjectText_filePath_firstSeen_lastSeen]    Script Date: 8/6/2024 11:41:33 AM ******/
+/****** Object:  Index [ix_auditDataObjectText_filePath_firstSeen_lastSeen]    Script Date: 11/6/2026 9:45:48 AM ******/
 CREATE NONCLUSTERED INDEX [ix_auditDataObjectText_filePath_firstSeen_lastSeen] ON [dbo].[auditData_SQLFileText]
 (
 	[filePath] ASC,

@@ -1,10 +1,16 @@
-/****** Object:  StoredProcedure [dbo].[pr_monitorFile]    Script Date: 05/19/2009 13:59:45 ******/
+-- ================================================================================================
+-- Notification.dbo.pr_monitorFile
+--
+-- Scans a given file for given text and alerts if it is found. Intended for critical device or OS
+-- configuration and log files.
+-- ================================================================================================
+/****** Object:  StoredProcedure [dbo].[pr_monitorFile]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
 -- exec pr_monitorFile '\\appapps02\c$\AppServices\UnisonFolderSync\unisonFileSync.log', 'Error', 'appapps02'
-create procedure [dbo].[pr_monitorFile] (@cFileToMonitor varchar(500), @cStringToFind varchar(100), @cServerName varchar(200))
+CREATE procedure [dbo].[pr_monitorFile] (@cFileToMonitor varchar(500), @cStringToFind varchar(100), @cServerName varchar(200))
 as
 begin
 
@@ -79,7 +85,7 @@ begin
 		print @cMessage
 
 		insert into notificationLog_stage (serverName, subject, message, severity) values (
-			@cServerName, @cSubject, @cMessage, 2)
+			@cServerName, @cSubject, @cMessage, 1)
 
 	end
 

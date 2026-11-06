@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[pr_alert_objectChanges]    Script Date: 8/6/2024 11:41:33 AM ******/
+/****** Object:  StoredProcedure [dbo].[pr_alert_objectChanges]    Script Date: 11/6/2026 9:45:48 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -9,10 +9,10 @@ GO
 CREATE procedure [dbo].[pr_alert_objectChanges] (@dStartDate dateTime = null, @dEndDate dateTime = null)
 as
 begin
-	set nocount on
 
-	--declare @dStartDate dateTime
-	--declare @dEndDate dateTime
+	-- declare @dStartDate dateTime, @dEndDate dateTime
+
+	set nocount on
 
 	declare @dChange dateTime
 
@@ -593,7 +593,7 @@ begin
 			if @cMessage <> ''
 				and @dChange >= dateadd(week, -1, getDate())
 			begin
-				insert into #messages (serverName, [subject], [message], ymd, databaseName, objectName, objectType) values (@cServerName, @cSubject, @cMessage, @dChange, @cDatabaseName, @cObjectName, @cObjectType)
+				insert into #messages (serverName, [subject], [message], ymd, databaseName, objectName, objectType) values (left(@cServerName, 200), left(@cSubject, 500), @cMessage, @dChange, left(@cDatabaseName, 200), left(@cObjectName, 200), left(@cObjectType, 200))
 			end
 		end
 
@@ -696,7 +696,7 @@ begin
 	else
 	begin
 		insert into notification..notificationLog_stage (ymd, serverName, subject, message, severity)
-		select distinct ymd, serverName, subject, left(message, 4000), 2 as severity
+		select distinct ymd, left(serverName, 100), left(subject, 300), left(message, 4000), 2 as severity
 			from #messages
 	end
 

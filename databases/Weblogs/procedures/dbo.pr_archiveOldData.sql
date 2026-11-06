@@ -1,5 +1,4 @@
-USE [Weblogs]
-GO
+/****** Object:  StoredProcedure [dbo].[pr_archiveOldData]    Script Date: 11/6/2026 9:48:28 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -10,7 +9,7 @@ GO
 
 -- select max(ymd) from weblogs_archive.dbo.mart_page_byday_archive
 
-ALTER procedure [dbo].[pr_archiveOldData]
+CREATE procedure [dbo].[pr_archiveOldData]
 as
 begin
 	if not exists (select top 1 name from weblogs_archive.dbo.sysobjects where name = 'mart_page_byday_archive')
@@ -74,3 +73,4 @@ end
 
 --select * from scheduler.dbo.jobs order by jobname
 --select * from scheduler.dbo.jobHistory where ukey_job = 276 order by ukey
+GO

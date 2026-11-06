@@ -1,3 +1,4 @@
+/****** Object:  StoredProcedure [dbo].[pr_readWMIObjects]    Script Date: 11/6/2026 9:47:51 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -8,7 +9,7 @@ GO
 -- truncate table runs_log
 -- select * from runs_log order by ymd desc
 
-ALTER procedure [dbo].[pr_readWMIObjects] (@nUkeyGroup int)
+CREATE procedure [dbo].[pr_readWMIObjects] (@nUkeyGroup int)
 as
 begin
 
@@ -93,10 +94,18 @@ begin
 			where ukey > @nUkey
 			order by ukey
 
-		if isnull(@cUserName, '') = ''
-			set @cSQLString = 'powershell -file ' + @cScriptPath + 'readWMI.ps1 -cServerName ' + @cServerName + ' -cObjectName ' + @cCounterName
+		--Adding APC SNMP handling here.  04/29/2014.
+		if @cObjectName = 'APCSNMP'
+--			if isnull(@cUserName, '') = ''
+--			set @cSQLString = 'powershell -file ' + @cScriptPath + 'readSNMPfromAPCs.ps1'
+--			else
+				set @cSQLString = 'powershell -file ' + @cScriptPath + 'readSNMPfromAPCs.ps1'
 		else
-			set @cSQLString = 'powershell -file ' + @cScriptPath + 'readWMI.ps1 -cServerName ' + @cServerName + ' -cUserName "' + @cUsername + '" -cPassword "' + @cPassword + '" -cObjectName ' + @cCounterName
+			if isnull(@cUserName, '') = ''
+				set @cSQLString = 'powershell -file ' + @cScriptPath + 'readWMI.ps1 -cServerName ' + @cServerName + ' -cObjectName ' + @cCounterName
+			else
+				set @cSQLString = 'powershell -file ' + @cScriptPath + 'readWMI.ps1 -cServerName ' + @cServerName + ' -cUserName "' + @cUsername + '" -cPassword "' + @cPassword + '" -cObjectName ' + @cCounterName
+
 
 --		print @cSQLString
 
@@ -173,3 +182,4 @@ begin
 	drop table #objectData
 
 end
+GO

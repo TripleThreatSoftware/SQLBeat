@@ -1,4 +1,10 @@
-/****** Object:  StoredProcedure [dbo].[pr_activeDirectory_scanUsers]    Script Date: 8/6/2024 11:41:33 AM ******/
+-- ================================================================================================
+-- Audit.dbo.pr_activeDirectory_scanUsers
+--
+-- Runs the ad_users_last60 and ad_computers_last60 PowerShell scripts against an AD server and
+-- stores the results in auditData_activeDirectory. Job: "Monitor Active Directory".
+-- ================================================================================================
+/****** Object:  StoredProcedure [dbo].[pr_activeDirectory_scanUsers]    Script Date: 11/6/2026 9:45:48 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON

@@ -1,4 +1,10 @@
-/****** Object:  Table [dbo].[auditData_sysLogins]    Script Date: 8/6/2024 11:41:33 AM ******/
+-- ================================================================================================
+-- Audit.dbo.auditData_sysLogins
+--
+-- Holds a record of SYSLOGINS as snapshotted by SQLBeat. This table holds a full historical record
+-- and does not have a corresponding partitioned view.
+-- ================================================================================================
+/****** Object:  Table [dbo].[auditData_sysLogins]    Script Date: 11/6/2026 9:45:48 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON

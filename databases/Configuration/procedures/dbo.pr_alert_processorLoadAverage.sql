@@ -1,11 +1,9 @@
-USE [Configuration]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_alert_processorLoadAverage]    Script Date: 8/30/2018 4:52:25 PM ******/
+/****** Object:  StoredProcedure [dbo].[pr_alert_processorLoadAverage]    Script Date: 11/6/2026 9:47:51 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-ALTER procedure [dbo].[pr_alert_processorLoadAverage]
+CREATE procedure [dbo].[pr_alert_processorLoadAverage]
 as
 begin
 
@@ -42,7 +40,8 @@ begin
 			'indicated an average CPU load of ' + convert(varchar(20), convert(decimal(10,2), a.avgValue)) + '%. ' +
 			'This is an increase of ' + convert(varchar(20), convert(decimal(10,2), (a.avgValue - b.processorLoad))) + ' percentage points, ' +
 			'or ' + convert(varchar(20), convert(decimal(10,2), ((a.avgValue - b.processorLoad) / b.processorLoad) * 100)) + '% net.' as message,
-		case when abs(a.avgValue - b.processorLoad) > 20 then 1 else 2 end as severity
+		2
+		--case when abs(a.avgValue - b.processorLoad) > 20 then 1 else 2 end as severity
 		from (
 			-- yesterday
 			select
@@ -68,3 +67,4 @@ begin
 	drop table #readings
 	drop table #averages
 end
+GO

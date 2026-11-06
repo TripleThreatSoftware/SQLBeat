@@ -1,7 +1,12 @@
+/****** Object:  StoredProcedure [dbo].[pr_updateState]    Script Date: 11/6/2026 9:52:52 AM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 -- select * from stateLog
 -- select * from dm_stateKeys
 
-alter procedure [dbo].[pr_updateState] (@cKeyName varchar(500), @cState varchar(200), @dYMD dateTime = '', @cCategory varchar(200) = 'Uncategorized', @bIsGood bit = 1)
+CREATE procedure [dbo].[pr_updateState] (@cKeyName varchar(500), @cState varchar(200), @dYMD dateTime = '', @cCategory varchar(200) = 'Uncategorized', @bIsGood bit = 1)
 as
 begin
 	declare @nUkeyKey int

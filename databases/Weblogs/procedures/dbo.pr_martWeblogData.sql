@@ -1,11 +1,9 @@
-USE [Weblogs]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_martWeblogData]    Script Date: 9/24/2024 10:49:34 AM ******/
+/****** Object:  StoredProcedure [dbo].[pr_martWeblogData]    Script Date: 11/6/2026 9:48:28 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-ALTER procedure [dbo].[pr_martWeblogData]
+CREATE procedure [dbo].[pr_martWeblogData]
 as
 begin
 
@@ -58,17 +56,6 @@ begin
 			insert into notification..notificationLog_stage (ymd, subject, message, serverName) values (getDate(), @cSubject, @cMessage, @@servername)
 		end catch
 
-		insert into fact_weblogs_stage_hist (stepName) values ('MART - pr_mart_site_page ' + convert(varchar(10), @dToday, 120) + '.')
-		begin try
-			exec pr_mart_site_page @dToday, @dToday
-		end try
-		begin catch
-			set @cSubject = 'pr_martWeblogData failure - pr_mart_site_page @ ' + convert(varchar(20), getDate(), 120)
-			set @cMessage = error_message()
-
-			insert into notification..notificationLog_stage (ymd, subject, message, serverName) values (getDate(), @cSubject, @cMessage, @@servername)
-		end catch
-
 		insert into fact_weblogs_stage_hist (stepName) values ('MART - Processing User ' + convert(varchar(10), @dToday, 120) + '.')
 		begin try
 			exec pr_mart_userAgent @dToday, @dToday
@@ -94,3 +81,4 @@ begin
 		insert into fact_weblogs_stage_hist (stepName) values ('MART - Day Done ' + convert(varchar(10), @dToday, 120) + '.')
 	end
 end
+GO

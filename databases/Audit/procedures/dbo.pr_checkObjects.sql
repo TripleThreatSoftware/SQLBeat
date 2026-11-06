@@ -1,13 +1,18 @@
-USE [Audit]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_checkObjects]    Script Date: 8/20/2024 3:19:40 PM ******/
+-- ================================================================================================
+-- Audit.dbo.pr_checkObjects
+--
+-- For each server and database, snapshots indexes, table structure, foreign keys and object text
+-- (procedures, functions, views) from the system tables into auditData_indexes,
+-- auditData_tableStructure, auditData_foreignKeys and auditData_objectText, with a change history.
+-- Alerts come from pr_alert_objectChanges and pr_alert_indexChanges. Job: "Monitor SQL objects".
+-- ================================================================================================
+/****** Object:  StoredProcedure [dbo].[pr_checkObjects]    Script Date: 11/6/2026 9:45:48 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
 -- update notification..dm_servers set lastObjectCheck = null where servername = 'web16-remote'
-ALTER procedure [dbo].[pr_checkObjects]
+CREATE procedure [dbo].[pr_checkObjects]
 as
 begin
 	set nocount on
@@ -474,3 +479,4 @@ begin
 	drop table #indexes
 	drop table #foreignKeys
 end
+GO

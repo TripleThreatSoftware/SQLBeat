@@ -1,28 +1,30 @@
-SET ANSI_PADDING OFF
-GO
-/****** Object:  Table [dbo].[fragmentationLog]    Script Date: 05/19/2009 13:59:45 ******/
+-- ================================================================================================
+-- Notification.dbo.fragmentationLog
+--
+-- Holds a record of database/table/index fragmentation
+-- ================================================================================================
+/****** Object:  Table [dbo].[fragmentationLog]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-SET ANSI_PADDING ON
-GO
 CREATE TABLE [dbo].[fragmentationLog](
-	[ukey] [int] IDENTITY(1,1) NOT NULL,
-	[ukey_group] [int] NULL,
-	[ukey_server] [int] NULL,
-	[ymd] [datetime] NULL,
-	[dbName] [varchar](200) NULL,
-	[objectName] [varchar](200) NULL,
-	[indexName] [varchar](200) NULL,
-	[rows] [bigint] NULL,
-	[extents] [bigint] NULL,
-	[extentSwitches] [bigint] NULL,
-	[scanDensity] [decimal](20, 5) NULL
+	[ukey] [int] IDENTITY(1,1) NOT NULL,	-- An internally used incrementing identity counter; uniquely identifies this row, and may be used as a Foreign Key.
+	[ukey_group] [int] NULL,	-- A foreign key to DM_SERVERGROUPS.UKEY
+	[ukey_server] [int] NULL,	-- A foreign key to DM_SERVERS.UKEY
+	[ymd] [datetime] NULL,	-- The time at which this reading was taken and the record created.
+	[dbName] [varchar](200) NULL,	-- The database name
+	[objectName] [varchar](200) NULL,	-- The name of the table
+	[indexName] [varchar](200) NULL,	-- The name of the index (empty if there is no index on this table)
+	[rows] [bigint] NULL,	-- The number of rows in the table
+	[extents] [bigint] NULL,	-- Extents
+	[extentSwitches] [bigint] NULL,	-- Extent switches
+	[scanDensity] [decimal](20, 5) NULL	-- The observed scan density
 ) ON [PRIMARY]
 GO
-SET ANSI_PADDING OFF
+SET ANSI_PADDING ON
 GO
+/****** Object:  Index [ix_fragmentationLog_ukeyServer_ymd_dbName_objectName]    Script Date: 11/6/2026 9:52:52 AM ******/
 CREATE CLUSTERED INDEX [ix_fragmentationLog_ukeyServer_ymd_dbName_objectName] ON [dbo].[fragmentationLog]
 (
 	[ukey_server] ASC,
@@ -30,8 +32,7 @@ CREATE CLUSTERED INDEX [ix_fragmentationLog_ukeyServer_ymd_dbName_objectName] ON
 	[dbName] ASC,
 	[objectName] ASC,
 	[ukey] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 80) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, FILLFACTOR = 80, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
 GO
-/****** Object:  Default [DF__fragmentati__ymd__0CBAE877]    Script Date: 05/19/2009 13:59:45 ******/
 ALTER TABLE [dbo].[fragmentationLog] ADD  DEFAULT (getdate()) FOR [ymd]
 GO

@@ -1,16 +1,15 @@
-USE [Notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_sendAlerts]    Script Date: 11/13/2018 1:57:25 PM ******/
+/****** Object:  StoredProcedure [dbo].[pr_sendAlerts]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
 -- sp_who2
 -- exec pr_sendAlerts '', 1, 0, 0
+-- exec pr_sendAlerts '', 0, 0, 1
 -- dbcc inputbuffer(74)
 -- delete from messageRules where ukey = 18
 
-ALTER procedure [dbo].[pr_sendAlerts] (@cUserName varchar(100) = '', @bIsPreview bit = 0, @bOverride bit = 0, @bClearQueue bit = 0)
+CREATE procedure [dbo].[pr_sendAlerts] (@cUserName varchar(100) = '', @bIsPreview bit = 0, @bOverride bit = 0, @bClearQueue bit = 0)
 as
 begin
 	--if @bIsPreview = 0
@@ -37,10 +36,15 @@ begin
 	else
 		set @bIsBusinessHours = 0
 
+	select *
+		into #notificationLog
+		from notificationLog (nolock)
+		where ymd >= dateAdd(hour, -72, getdate())
+
 	select
-		b.ukey as ukey_rule, isnull(b.userName, c.userName) as userName, c.emailAddress, a.*
+		b.ukey as ukey_rule, isnull(b.userName, c.userName) as userName, c.emailAddress, a.*, d.ukey_group as ukey_server_group, convert(bit, 0) as doNotSend
 		into #messages
-		from notificationLog a (nolock)
+		from #notificationLog a
 		join messageRules b (nolock) on
 			(a.serverName = b.serverEquals or isnull(b.serverEquals, '') = '')
 			and (a.serverName like '%' + b.serverLike + '%' or isnull(b.serverLike, '') = '')
@@ -86,7 +90,7 @@ begin
 				)
 		join userEmails c (nolock) on b.ukey_userEmail = c.ukey
 			and (isnull(b.userName, c.userName) = @cUserName or isnull(@cUserName, '') = '')
-		left outer join dm_servers d (nolock) on a.serverName = d.serverName
+		left outer join dm_servers d (nolock) on (a.serverName = d.serverName or (a.servername = d.friendlyName and isnull(d.friendlyName, '') <> ''))
 		where (
 				b.ukey_group = d.ukey_group
 				or isnull(b.ukey_group, 0) = 0
@@ -94,7 +98,15 @@ begin
 				)
 			and (a.ymd >= dateAdd(hour, -72, getdate()) or @bIsPreview = 1)
 
+	-- delete any messages we have already sent
 	delete #messages
+		from #messages a
+		join notificationsSent b (nolock) on a.ukey = b.ukey_notification
+			and a.username = b.username
+			and a.emailaddress = b.emailAddress
+
+	update #messages
+		set doNotSend = 1
 		from #messages a
 		join messageRules b (nolock) on
 			(a.serverName = b.serverEquals or b.serverEquals is null)
@@ -142,12 +154,14 @@ begin
 --					and not @bIsPreview = 1
 				)
 			and (b.userName = a.userName or isnull(b.userName, '') = '')
-		left outer join dm_servers d (nolock) on a.serverName = d.serverName
+		left outer join dm_servers d (nolock) on (a.serverName = d.serverName or (a.servername = d.friendlyName and isnull(d.friendlyName, '') <> ''))
 		where (
 			b.ukey_group = d.ukey_group
 			or isnull(b.ukey_group, 0) = 0
 --			or isnull(d.ukey_group, 0) = 0
 			)
+
+	delete from #messages where doNotSend = 1
 
 --select * from #messages
 --select * from userEmails
@@ -160,7 +174,7 @@ begin
 		insert into notificationsSent (ukey_notification, userName, emailAddress)
 		select distinct ukey, userName, emailAddress
 			from #messages
-			where subject like '%sitefeeds%'
+--			where subject like '%transaction log%'
 	end
 
 	select distinct a.serverName, a.userName, a.emailAddress, a.subject, a.message, a.ukey as ukey_notification, a.ymd,
@@ -192,14 +206,14 @@ begin
 
 		-- rate limiter!
 
-		if (select count(*) from #messagesToSend) > 2000 and @bOverride = 0
+		if (select count(*) from #messagesToSend) > 10000 and @bOverride = 0
 		begin
 			-- panic! email Cole, do not send these out
 
-			set @cThisSubject = 'SQLBeat (' + @@servername + '): More than 2000 messages are queued to send'
+			set @cThisSubject = 'SQLBeat (' + @@servername + '): More than 10,000 messages are queued to send'
 			set @cThisMessage = 'There are ' + convert(varchar(20), (select count(*) from #messagesToSend)) + ' messages in the hopper to send for ' + @@servername + '.'
 
-			exec pr_sendMessage '', 'DBA', 'More than 2000 messages are queued to send', @cThisMessage
+			exec pr_sendMessage '', 'DBA', 'More than 3500 messages are queued to send', @cThisMessage
 		end
 		else
 		begin
@@ -239,4 +253,6 @@ begin
 
 	drop table #messages
 	drop table #messagesToSend
+	drop table #notificationLog
 end
+GO

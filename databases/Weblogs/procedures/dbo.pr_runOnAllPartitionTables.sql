@@ -1,12 +1,10 @@
-USE [Weblogs]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_createIndexOnAllPartitionTables]    Script Date: 6/12/2017 10:28:58 AM ******/
+/****** Object:  StoredProcedure [dbo].[pr_runOnAllPartitionTables]    Script Date: 11/6/2026 9:48:28 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
 -- exec pr_runOnAllPartitionTables 'fact_weblogs', 'select top 100 * from *tablename*'
-alter procedure [dbo].[pr_runOnAllPartitionTables] (@cTableMask varchar(100), @cCommand varchar(8000))
+CREATE procedure [dbo].[pr_runOnAllPartitionTables] (@cTableMask varchar(100), @cCommand varchar(8000))
 as
 begin
 
@@ -53,3 +51,4 @@ begin
 	drop table #databases
 	drop table #tables
 end
+GO

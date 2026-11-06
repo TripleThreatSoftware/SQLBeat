@@ -1,4 +1,10 @@
-/****** Object:  Table [dbo].[auditData_files]    Script Date: 8/6/2024 11:41:33 AM ******/
+-- ================================================================================================
+-- Audit.dbo.auditData_files
+--
+-- Holds a record of size and date of files monitored by SQLBeat. This table holds a full historical
+-- record and does not have a corresponding partitioned view.
+-- ================================================================================================
+/****** Object:  Table [dbo].[auditData_files]    Script Date: 11/6/2026 9:45:48 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -13,7 +19,7 @@ CREATE TABLE [dbo].[auditData_files](
 	[scanDate] [datetime] NULL
 ) ON [PRIMARY]
 GO
-/****** Object:  Index [ix_auditDataFiles_ukey]    Script Date: 8/6/2024 11:41:33 AM ******/
+/****** Object:  Index [ix_auditDataFiles_ukey]    Script Date: 11/6/2026 9:45:48 AM ******/
 CREATE CLUSTERED INDEX [ix_auditDataFiles_ukey] ON [dbo].[auditData_files]
 (
 	[ukey] ASC
@@ -21,7 +27,7 @@ CREATE CLUSTERED INDEX [ix_auditDataFiles_ukey] ON [dbo].[auditData_files]
 GO
 SET ANSI_PADDING ON
 GO
-/****** Object:  Index [ix_auditDataFiles_filepath_directory_filename_scandate_inc_filesize_filedate]    Script Date: 8/6/2024 11:41:33 AM ******/
+/****** Object:  Index [ix_auditDataFiles_filepath_directory_filename_scandate_inc_filesize_filedate]    Script Date: 11/6/2026 9:45:48 AM ******/
 CREATE NONCLUSTERED INDEX [ix_auditDataFiles_filepath_directory_filename_scandate_inc_filesize_filedate] ON [dbo].[auditData_files]
 (
 	[filePath] ASC,
@@ -31,7 +37,7 @@ CREATE NONCLUSTERED INDEX [ix_auditDataFiles_filepath_directory_filename_scandat
 )
 INCLUDE([fileSize],[fileDate]) WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, FILLFACTOR = 80, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
 GO
-/****** Object:  Index [ix_auditDataFiles_scandate_inc_director_filepath_filedate_filesize_filename]    Script Date: 8/6/2024 11:41:33 AM ******/
+/****** Object:  Index [ix_auditDataFiles_scandate_inc_director_filepath_filedate_filesize_filename]    Script Date: 11/6/2026 9:45:48 AM ******/
 CREATE NONCLUSTERED INDEX [ix_auditDataFiles_scandate_inc_director_filepath_filedate_filesize_filename] ON [dbo].[auditData_files]
 (
 	[scanDate] ASC

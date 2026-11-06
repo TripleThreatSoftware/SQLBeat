@@ -1,12 +1,9 @@
-USE [Notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_checkDisabledServers]    Script Date: 03/17/2010 10:35:02 ******/
+/****** Object:  StoredProcedure [dbo].[pr_checkDisabledServers]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
-ALTER procedure [dbo].[pr_checkDisabledServers]
+CREATE procedure [dbo].[pr_checkDisabledServers]
 as
 begin
 	declare @cServerName varchar(100)
@@ -24,13 +21,14 @@ begin
 				max(case when isServerPingable = 0 then ymd else null end) as latestNotPingable,
 				max(case when isServerPingable = 1 then ymd else null end) as latestPingable
 				from pingLog (nolock)
-				where ymd > dateAdd(minute, -60, getDate())
+				where ymd > dateAdd(hour, -2, getDate())
 				group by serverName
 			) b on a.serverName = b.serverName
 		where a.pingCheck = 1
 			and a.isEnabled = 1
 			and convert(decimal(10,2), case when pingable > 0 then convert(decimal(10,4), notPingable) / convert(decimal(10,4), pingable) else 0 end) > .75
 			and (latestNotPingable > latestPingable or latestPingable is null)
+			and notpingable >= 10
 
 	insert into notificationLog_stage (serverName, subject, message, severity)
 	select serverName,
@@ -70,3 +68,4 @@ begin
 --		exec pr_pingServer @cServerName
 --	end
 end
+GO

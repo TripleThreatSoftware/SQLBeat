@@ -1,3 +1,12 @@
+-- ================================================================================================
+-- Notification.dbo.pr_checkDeepSQLStats
+--
+-- For each server with dm_servers.deepSQL2005Check set, captures low-level performance data as
+-- timestamped key/value pairs in deepSQLStats and its sub-tables: dm_os_wait_stats, DBCC
+-- MEMORYSTATUS, dm_os_memory_clerks, and buffer pool contents from sys.allocation_units,
+-- dm_os_buffer_descriptors and sys.partitions.
+-- ================================================================================================
+/****** Object:  StoredProcedure [dbo].[pr_checkDeepSQLStats]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -7,7 +16,7 @@ GO
 
 -- pr_checkDeepSQLStats
 -- update dm_servers set lastDeepSQL2005Check = null
-ALTER procedure [dbo].[pr_checkDeepSQLStats]
+CREATE procedure [dbo].[pr_checkDeepSQLStats]
 as
 begin
 
@@ -60,12 +69,12 @@ begin
 		if @cUserName is not null
 		begin
 			-- with password
-			set @cSQLString = @cSharedFolder + '\osql -S' + @cServerName + ' -U' + @cUserName + ' -P"' + @cPassword + '" -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\server_performance.SQL"'
+			set @cSQLString = 'osql -S' + @cServerName + ' -U' + @cUserName + ' -P"' + @cPassword + '" -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\server_performance.SQL"'
 		end
 		else
 		begin
 			-- without password, for local boxes that'll accept sqladmin under windows authentication
-			set @cSQLString = @cSharedFolder + '\osql -S' + @cServerName + ' -E -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\server_performance.SQL"'
+			set @cSQLString = 'osql -S' + @cServerName + ' -E -n -h-1 -w300 -dmaster -i"' + @cSharedFolder + '\server_performance.SQL"'
 		end
 
 		insert into #performance (nastyLine)
@@ -334,3 +343,4 @@ begin
 	drop table #performance
 	drop table #results
 end
+GO

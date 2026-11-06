@@ -1,11 +1,10 @@
-USE [Weblogs]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_processFactData]    Script Date: 6/12/2017 10:25:43 AM ******/
+/****** Object:  StoredProcedure [dbo].[pr_processFactData]    Script Date: 11/6/2026 9:48:28 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-ALTER procedure [dbo].[pr_processFactData]
+-- exec [pr_processFactData] @bRecoverFromFailure = 1
+CREATE procedure [dbo].[pr_processFactData] (@bRecoverFromFailure bit = 0)
 as
 begin
 	declare @dStartDate dateTime
@@ -15,9 +14,24 @@ begin
 
 	set @bIsIIS = 1
 
-	if (select count(*) from fact_weblogs (nolock)) = 0
-		return
+	if @bRecoverFromFailure = 0
+	begin
 
+		if (select count(*) from fact_weblogs (nolock)) = 0
+			return
+
+		if exists (select top 1 id from sysobjects where name = 'fact_weblogs_daily')
+			drop table fact_weblogs_daily
+
+		begin transaction
+			select *
+				into fact_weblogs_daily
+				from fact_weblogs
+
+			truncate table fact_weblogs
+		commit transaction
+
+	end
 
 	insert into fact_weblogs_stage_hist (stepName) values ('Counting records')
 
@@ -30,7 +44,7 @@ begin
 		max(convert(varchar(10), ymd, 120)) as endDate,
 		count(*) as numRecords
 		into #datesImported
-		from fact_weblogs (nolock)
+		from fact_weblogs_daily (nolock)
 		group by ukey_site, ukey_sourceFile, datePart(week, ymd), datePart(year, ymd)
 
 	create clustered index ix_tmp_datesImported on #datesImported (startDate, endDate, ukey_site, ukey_sourceFile) with fillfactor = 100
@@ -73,8 +87,8 @@ begin
 
 			-- this code removes incoming records that we already have in the kitty
 			-- this is useful when we have a whole mess of incoming data
-			delete fact_weblogs with (tablock)
-				from fact_weblogs a
+			delete fact_weblogs_daily with (tablock)
+				from fact_weblogs_daily a
 				join v_fact_weblogs_all b on a.ukey_sourceFile = b.ukey_sourceFile
 					and a.ukey_site = b.ukey_site
 					and a.ymd = b.ymd
@@ -93,13 +107,13 @@ begin
 
 	insert into fact_weblogs_stage_hist (stepName) values ('Setting sessionID values')
 
-	update fact_weblogs with (tablock)
+	update fact_weblogs_daily with (tablock)
 		set sessionID = isnull(dbo.fn_returnKeyValue(cookie, 'ASP.NET_SessionId', ';+'), convert(varchar(20), ukey_clientIP) + space(1) + convert(varchar(20), ukey_userAgent)),
 			appSessionID = isnull(dbo.fn_returnKeyValue(cookie, 'GBaseSessionID', ';+'), '') + isnull(dbo.fn_returnKeyValue(cookie, 'GBaseUserID', ';+'), '')
 		where cookie is not null
 			and @bIsIIS = 1
 
-	update fact_weblogs with (tablock)
+	update fact_weblogs_daily with (tablock)
 		set sessionID = isnull(dbo.fn_returnKeyValue(queryString, 'p_usercode', '&'), convert(varchar(20), ukey_clientIP) + space(1) + convert(varchar(20), ukey_userAgent)),
 			appSessionID = isnull(dbo.fn_returnKeyValue(queryString, 'p_usercode', '&'), '')
 		where queryString like '%p_usercode%'
@@ -109,7 +123,7 @@ begin
 	begin try
 		--exec pr_partitionTableDaily 'fact_weblogs', 'ymd', 'ukey_site, ukey_sourceFile, ukey_uriStem, ukey_clientIP, ukey_userAgent, ukey', 0
 		-- I'm not sure that supplying the @cKeyFieldList value does anything for us here .. but I don't think it hurts either. Hard to tell what comes of it downstream. I think it's for de-duplication.
-		exec pr_partitionTableDaily 'fact_weblogs', 'ymd', 'ukey_site, ukey_sourcefile, ymd, ukey', 0, 'Cluster'
+		exec pr_partitionTableDaily 'fact_weblogs_daily', 'ymd', 'ukey_site, ukey_sourcefile, ymd, ukey', 0, 'Cluster'
 
 		insert into fact_weblogs_stage_hist (stepName) values ('Creating indexes')
 		exec pr_createIndexOnAllPartitionTables 'fact_weblogs', 'site_source_ymd', 'ukey_site, ukey_sourcefile, ymd', 80
@@ -130,5 +144,7 @@ begin
 	end catch
 
 	drop table #datesImported
-	truncate table fact_weblogs
+
+	drop table fact_weblogs_daily
 end
+GO

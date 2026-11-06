@@ -1,5 +1,10 @@
+/****** Object:  UserDefinedFunction [dbo].[fn_isDatabaseAvailable]    Script Date: 11/6/2026 9:52:52 AM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 --select dbo.fn_isDatabaseAvailable('switch_ap')
-alter function fn_isDatabaseAvailable(@cDatabaseName varchar(200))
+CREATE function [dbo].[fn_isDatabaseAvailable](@cDatabaseName varchar(200))
 returns bit
 as
 begin
@@ -26,3 +31,4 @@ begin
 
 	return @bReturn
 end
+GO

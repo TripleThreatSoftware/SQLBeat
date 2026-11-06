@@ -1,3 +1,8 @@
+/****** Object:  StoredProcedure [dbo].[pr_addNewServerGroup]    Script Date: 11/6/2026 9:52:52 AM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 CREATE PROCEDURE [dbo].[pr_addNewServerGroup] @groupName varchar(25), @isProduction bit
 AS
 BEGIN
@@ -11,3 +16,4 @@ BEGIN
 		set @returnString = 'Group Name already exists. Try again!'
 	Select @returnString as returnString
 END
+GO

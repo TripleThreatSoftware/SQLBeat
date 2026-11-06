@@ -1,12 +1,14 @@
-USE [Notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_checkTableSizes]    Script Date: 8/11/2024 9:23:45 AM ******/
+-- ================================================================================================
+-- Notification.dbo.pr_checkTableSizes
+--
+-- Runs sp_spaceused for every table in every database and logs rows, reserved, data, index and
+-- unused space to tableSizeLog. Data only, no alerts. Job: "Monitor table sizes".
+-- ================================================================================================
+/****** Object:  StoredProcedure [dbo].[pr_checkTableSizes]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
-
 --
 --create table tableSizeLog (ymd dateTime default getDate(), serverName varchar(200),
 --	databaseName varchar(200), tableName varchar(200), rows varchar(100), reserved varchar(50), data varchar(50), indexSize varchar(50), unused varchar(50))
@@ -18,7 +20,7 @@ GO
 --update dm_servers set tableSizeCheck = 1, tableSizeCheckMinuteInterval = 720 where isSQLBox = 1
 --go
 
-ALTER procedure [dbo].[pr_checkTableSizes]
+CREATE procedure [dbo].[pr_checkTableSizes]
 as
 begin
 	set nocount on
@@ -125,3 +127,4 @@ begin
 
 	drop table #history
 end
+GO

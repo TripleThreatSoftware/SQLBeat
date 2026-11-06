@@ -1,8 +1,9 @@
+/****** Object:  StoredProcedure [dbo].[pr_checkStatus]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-ALTER procedure [dbo].[pr_checkStatus]
+CREATE procedure [dbo].[pr_checkStatus]
 as
 begin
 	declare @cMessage varchar(8000)
@@ -25,5 +26,6 @@ begin
 	set @nCount = (select count(distinct serverName) from processLog (nolock) where ymd >= dateAdd(hour, -2, getDate()) and serverName <> @@servername)
 	set @cMessage = @cMessage + '<b>ProcessLog Servers:</b> ' + convert(varchar(20), isnull(@nCount, 0)) + '<br>'
 
-	insert into notificationLog_stage (subject, message, serverName, severity) values (@cSubject, @cMessage, @@servername, 1)
+	insert into notificationLog_stage (subject, message, serverName, severity) values (@cSubject, @cMessage, @@servername, 2)
 end
+GO

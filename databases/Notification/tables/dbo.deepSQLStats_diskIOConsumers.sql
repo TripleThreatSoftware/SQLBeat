@@ -1,28 +1,32 @@
-/****** Object:  Table [dbo].[deepSQLStats_diskIOConsumers]    Script Date: 05/19/2009 13:59:44 ******/
+-- ================================================================================================
+-- Notification.dbo.deepSQLStats_diskIOConsumers
+--
+-- Holds information about Disk IO consumed by specific stored procedure or adHoc calls, based on
+-- Cached Plan DMV data from the Deep Scan. Records are written here by three separate scans:
+-- Cumulative, Individual and Queries.
+-- ================================================================================================
+/****** Object:  Table [dbo].[deepSQLStats_diskIOConsumers]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-SET ANSI_PADDING ON
-GO
 CREATE TABLE [dbo].[deepSQLStats_diskIOConsumers](
-	[ukey] [int] IDENTITY(1,1) NOT NULL,
-	[ymd] [datetime] NULL,
-	[ukey_server] [int] NULL,
-	[serverName] [varchar](100) NULL,
-	[bufferContents] [varchar](8000) NULL,
-	[numExecutions] [bigint] NULL,
-	[numMinutes] [bigint] NULL,
-	[diskIOUnits] [bigint] NULL,
-	[readingType] [varchar](100) NULL
+	[ukey] [int] IDENTITY(1,1) NOT NULL,	-- An internally used incrementing identity counter; uniquely identifies this row, and may be used as a Foreign Key.
+	[ymd] [datetime] NULL,	-- The time at which this reading was taken and the record created.
+	[ukey_server] [int] NULL,	-- A foreign key to DM_SERVERS.UKEY
+	[serverName] [varchar](100) NULL,	-- The server name
+	[bufferContents] [varchar](8000) NULL,	-- The cached plan object text (ie, the adhoc code or stored procedure call)
+	[numExecutions] [bigint] NULL,	-- The number of times this buffer has executed
+	[numMinutes] [bigint] NULL,	-- The number of minutes of executing time
+	[diskIOUnits] [bigint] NULL,	-- The sum of Read and Write units of Disk IO
+	[readingType] [varchar](100) NULL	-- A string representing whether this is a Cumulative reading of all observed executions, a reading of what each Individual execution of this plan generates, or a record of an adhoc Query recorded in cached plan data.
 ) ON [PRIMARY]
 GO
-SET ANSI_PADDING OFF
-GO
+/****** Object:  Index [ix_deepSQLStatsDiskIOConsumers_ukey_ukeyServer_ymd]    Script Date: 11/6/2026 9:52:52 AM ******/
 CREATE CLUSTERED INDEX [ix_deepSQLStatsDiskIOConsumers_ukey_ukeyServer_ymd] ON [dbo].[deepSQLStats_diskIOConsumers]
 (
 	[ukey] ASC,
 	[ukey_server] ASC,
 	[ymd] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 80) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, FILLFACTOR = 80, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
 GO

@@ -1,20 +1,19 @@
-USE [Notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_processEventLogMessages]    Script Date: 11/1/2018 9:45:27 AM ******/
+/****** Object:  StoredProcedure [dbo].[pr_processEventLogMessages]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
 -- create table eventLog_stage_hist (ukey_group int, ymd dateTime default getDate(), step varchar(200))
 -- pr_processEventLogMessages 30
 -- select * from eventLog_history where servername = 'prooradb06' order by ymd desc
 -- select * from eventLog_stage
 -- select * from notificationLog_stage
 
-ALTER procedure [dbo].[pr_processEventLogMessages] (@nUkeyGroup int)
+CREATE procedure [dbo].[pr_processEventLogMessages] (@nUkeyGroup int = null)
 as
 begin
+
+	--declare @nUkeyGroup int = null
 
 	insert into eventLog_history (notes, ukey_group) values ('Processing messages', @nUkeyGroup)
 
@@ -60,15 +59,28 @@ begin
 	--	where isnumeric(left(timeWritten, 1)) = 0
 	--		or isdate(timeWritten) = 0
 
-	select *,
+	-- drop table #eventlog
+	select a.logtype,
+		a.category,
+		a.computername,
+		a.message,
+		a.sourcename,
+		a.timewritten,
+		a.type,
+		a.auser,
+		a.monitorDate,
+		a.eventID,
 		convert(varchar(8000), '') as emailMessage,
 		convert(varchar(8000), '') as emailSubject,
 		convert(int, 3) as severity,
-		convert(bit, 1) as isInformational
+		convert(bit, 1) as isInformational,
+		convert(varchar(200), null) as ipAddress
 		into #eventLog
 		from eventLog_stage a (nolock)
+		--from eventLog a (nolock)
 		join dm_servers b (nolock) on (a.computerName = b.serverName or a.computerName = isnull(b.friendlyName, ''))
-			and b.ukey_group = @nUkeyGroup
+			and (b.ukey_group = @nUkeyGroup or @nUkeyGroup is null)
+		--where a.data_timestamp >= dateadd(hour, -1, getDate())
 
 	if @@rowcount = 0
 	begin
@@ -146,7 +158,7 @@ begin
 			and message not like '%lsa%'
 			and message not like '%login succeeded%'
 			and message not like '%dbcc checkdb%found 0 errors%'
-			and message not like '%rpc%'
+--			and message not like '%rpc%'
 			and message not like '%drive array accelerator%'
 			and message not like '%sntp%'
 			and message not like '%transaction log%'
@@ -215,8 +227,10 @@ begin
 			and message not like '%Unable to read Server Queue performance data from the Server service%'
 
 			and message not like '%max pool size was reached%'
+			and message not like '%connection from the pool%'
 			and message not like '%facebook%like.php%'
 
+			and message not like '%AppFour.Controls.Footer%'
 			and isnull(message, '') <> ''
 
 	update #eventLog
@@ -230,23 +244,33 @@ begin
 				sourceName in ('Kernel-General', 'EventLog', 'USER32', 'Microsoft-Windows-Kernel-General', 'ASP.NET 2.0.50727.0: Web Event')
 				)
 
+	update b
+		set b.severity  = a.severity,
+		b.isInformational = 0
+		From securityEventIds a with (nolock)
+		join #eventLog b on a.eventID = b.eventid
+		where a.enabled =1
+			and b.logtype = 'Security'
+
 	update #eventLog
 		set emailMessage =
 				case
 					when message like '%an unhandled exception has occurred%' and charindex('exception type', message) > 0 then
 						substring(message, charindex('exception type', message), 8000)
-					else isnull(computerName, 'BAD COMPUTER NAME') + ' @ ' + convert(varchar(20), convert(dateTime, timeWritten), 120) + char(13) + char(13) +  isnull(message, 'BAD MESSAGE')
+					else isnull(computerName, 'BAD COMPUTER NAME') + ' @ ' + convert(varchar(20), convert(dateTime, timeWritten), 120) + char(13) + char(13) + 'EventID:' + convert(varchar(10),isnull(eventID, 0))+ char(13) + char(13) + isnull(message, 'BAD MESSAGE')
 					end,
 			severity = case when
 				message not like '%sspi%'
 				and message not like '%unable to cycle%'
 				and message not like '%httpexception%'
 				and message not like '%system time has changed%'
+				and message not like '%productSearch.aspx%'
+				and message not like '%timeout expired%'
 				and (
-					message like '%temperature%'
+					(message like '%temperature%' and not message like '%argumentexception%')
 					or message like '%thermal%'
 					or message like '%shutdown%'
-					or message like '%eaas%'
+--					or message like '%eaas%'
 					or message like '%address conflict%'
 					or message like '%port blocking rule%'
 					or message like '%virus%'
@@ -256,8 +280,17 @@ begin
 					or message like '%lost communication%'
 					or message like '%network adapter%'
 					or message like '%cluster node%'
-					or message like '%sensor%'
-					or message like '%checkout_step%'
+					or (message like '%sensor%' and not message like '%unhandled exception%')
+					or (message like '%checkout_step%'
+						and (
+							message not like '%Exception Execution Timeout Expired.%'
+							and message not like '%Exception The underlying connection was closed%'
+							and message not like '%Exception The request was aborted%'
+							and message not like '%unable to connect to the remote server%cenpos%'
+							and message not like '%ukey_website=0%'
+							)
+						and (select count(*) from notificationlog (nolock) where ymd >= dateadd(hour, -1, getDate()) and isEventLog = 1 and message like '%checkout%') >= 10
+						)
 					or message like '%permission was denied%'
 					or message like '%sqsrvres%'
 					or message like '%drive array%'
@@ -268,6 +301,7 @@ begin
 					or message like '%The Event log service was started%'
 					or ((sourceName like '%clussvc%' or sourceName like '%mssqlserver%') and type = 'Error')
 					or sourceName in ('Kernel-General', 'EventLog', 'USER32', 'Microsoft-Windows-Kernel-General')
+					or message like '%configuration error has occurred%'
 					)
 				and message not like '%a validation error has occurred%'
 				then 1
@@ -279,13 +313,104 @@ begin
 					end
 		where isInformational = 0
 
+	--update to set sev=2 where it is chekout_step3 and dbnull conversion due to empty queryString
+	update #eventLog
+		set severity=2
+		where (message like '%checkout_step3.aspx?sessionID=&machineID=&ukey_website=0%' and emailSubject like '%Exception Conversion from type ''DBNull'' to type ''String'' is not valid.%')
+		or (message like '%simpledance.com/pay-my-bill.aspx%')
+
 	update #eventLog
 		set severity = 1
 		where message like '%a parser error%' --or message like '%has not been pre-compiled%'
 
 	update #eventLog
+		set severity = 3
+		where message like '%OCSP%'
+
+	update #eventLog
+		set severity = 2
+		where message like '%Many client computers have not reported back to the server%'
+			or message like '%Client computers are installing updates%'
+
+	update #eventLog
+		set severity = 1, isInformational = 0
+		where message like '%Application pool%is being automatically disabled%'
+
+	update #eventLog
+		set severity = 2, isInformational = 1
+		where message like '%controller%battery%'
+			or message like '%controller%bbu%'
+
+	update #eventlog
+		set severity = 3, isInformational = 1
+		where message like '%The Key Distribution Center (KDC) encountered a ticket that did not contain information about the account that requested the ticket%'
+			or message like '%The Application Host Helper Service encountered an error trying to process the configuration data for config history%'
+			or message like '%softflowd%'
+			or message like '%access history in hive%'
+			or message like '%hive%reorganized%'
+
+	update #eventLog
 		set severity = 1
 		where sourceName in ('SuperMicro Health Assistant')
+
+	-- anis asked for this
+	-- 2021-01-29
+	-- added so we are alerted whenever SPAO process fails
+	update #eventLog
+		set severity = 1, isInformational = 0
+		where message like '%SpaoProcessPartsOrder.exe%'
+
+	update #eventLog
+		set isInformational = 0, severity = 1
+		where [message] like '%has%not%been%pre-compiled%'
+			or [message] like '%Server farm%reached%minimum%'
+
+	--send duplicate binding or binding disable alerts to critical
+	update #eventLog
+		set isInformational = 0, severity = 1
+		where [message] like '%binding%disable%'
+
+	update #eventLog
+		set isInformational = 0, severity = 1
+		where [message] like '%checkout%' and [message] like '%timeout%'
+			and (select count(*) from #eventlog where [message] like '%checkout%' and [message] like '%timeout%') >= 3
+			and (select count(*) from notificationlog (nolock) where ymd >= dateadd(hour, -1, getDate()) and isEventLog = 1 and message like '%checkout%') >= 10
+
+	update #eventLog
+		set ipAddress = replace(substring([message], charindex('user host address', message), 100), 'user host address: ', '')
+		where charindex('user host address', message) > 0
+
+	update #eventlog
+		set ipAddress = left(ipAddress, charindex(' ', ipAddress))
+
+	update #eventLog
+		set isInformational = 1, severity = 3
+		-- select *
+		from #eventLog a
+		join sandbox.dbo.blockMalicious_clientIP b (nolock) on a.ipAddress = b.clientIP
+		where isnull(a.ipAddress, '') <> ''
+
+	update #eventLog
+		set isInformational = 0,
+			severity = 1
+		where message like '%Ambiguous column name%'
+
+	update #eventlog
+		set isInformational = 0,
+			severity = 2
+		where message like '%Lhr-Web-%application pool%is being automatically disabled%'
+			and monitorDate < '2022-07-01'	-- ignore these for a month
+
+	update b
+		set b.severity  = a.severity,
+		b.isInformational = 0
+		From securityEventIds a with (nolock)
+		join #eventLog b on a.eventID = b.eventid
+		where a.enabled =1
+			and b.logtype = 'Security'
+
+	--*********************************************************************************************************************
+	--*********************************************************************************************************************
 
 	select computerName, logType, message, sourceName, count(*) as numAlerts, min(timeWritten) as minYMD, max(timeWritten) as maxYMD
 		into #repeatingAlerts
@@ -320,6 +445,142 @@ begin
 			and a.message = b.message
 			and a.sourcename = b.sourceName
 
+	update b
+		set b.severity  = a.severity,
+		b.isInformational = 0
+		From securityEventIds a with (nolock)
+		join #eventLog b on a.eventID = b.eventid
+		where a.enabled =1
+			and b.logtype = 'Security'
+
+	update #eventlog
+		set severity = 3,
+		isInformational = 1
+		where logtype  = 'Security'
+			and message like '%WinDefend%'
+			and eventID = 4946
+
+	--*********************************************************************************************************************
+	--*********************************************************************************************************************
+
+	declare @nRowCount int
+	declare @cServerName varchar(500)
+	declare @cSubject varchar(8000)
+	declare @cMessage varchar(8000)
+	declare @dTimestamp dateTime
+	declare @serverlist table (servername varchar(500))
+
+
+	if object_id('tempdb..#apppooldisables') is not null
+		drop table #apppooldisables
+
+	select *, convert(varchar(500), null) as poolName
+		into #apppooldisables
+		--from eventlog where timeWritten >= '2023-05-24' and message like '%application pool%is being automatically disabled%'
+		from #eventlog
+		where message like '%application pool%is being automatically disabled%'
+
+	if @@rowcount >= 5
+	begin
+		update #apppooldisables
+			set poolName = substring(message, charindex('application pool', message) + 18, 100)
+
+		update #apppooldisables set poolName = left(poolName, charindex('''', poolName) - 1)
+
+		delete from @serverlist
+		set @cServerName = ''
+
+		insert into @serverlist (servername)
+		select distinct computerName from #apppooldisables
+
+		while exists (select top 1 servername from @serverlist where servername > @cServerName)
+		begin
+			select top 1 @cServerName = servername from @serverlist where servername > @cServerName order by servername
+
+			set @dTimestamp = (select max(timeWritten) from #apppooldisables where computerName = @cServerName)
+			set @nRowCount = (select count(distinct poolname) from #apppooldisables where computerName = @cServerName)
+			set @cSubject = 'Application pools disabled (' + convert(varchar(20), @nRowCount) + ')'
+			set @cMessage = ''
+
+			select @cMessage = @cMessage + @cServerName + '.[' + poolName + ']<br>'
+				from (select distinct poolName from #apppooldisables where poolName is not null) a
+
+			print @cSubject
+			print @cMessage
+			print @cServername
+			print @dTimestamp
+
+			insert into notificationLog_stage (serverName, severity, isEventLog, ymd, subject, message) values (@cServerName, 1, 1, @dTimestamp, @cSubject, @cMessage)
+		end
+
+		update #eventLog
+			set isInformational = 1, severity = 3
+			from #eventLog a
+			join #apppooldisables b on a.computerName = b.computerName
+				and a.logType = b.logType
+				and a.message = b.message
+				and a.sourcename = b.sourceName
+	end
+
+
+	if object_id('tempdb..#apppoolfailures') is not null
+		drop table #apppoolfailures
+
+	select *, convert(varchar(500), null) as poolName
+		into #apppoolfailures
+		--from eventlog where timeWritten >= '2023-05-24' and message like '%application pool%reported a failure trying to read configuration%'
+		from #eventlog
+		where message like '%application pool%reported a failure trying to read configuration%'
+
+	if @@rowcount >= 5
+	begin
+		update #apppoolfailures
+			set poolName = substring(message, charindex('application pool', message) + 18, 100)
+
+		update #apppoolfailures set poolName = left(poolName, charindex('''', poolName) - 1)
+
+		delete from @serverlist
+		set @cServerName = ''
+
+		insert into @serverlist (servername)
+		select distinct computerName from #apppoolfailures
+
+		while exists (select top 1 servername from @serverlist where servername > @cServerName)
+		begin
+			select top 1 @cServerName = servername from @serverlist where servername > @cServerName order by servername
+
+			set @dTimestamp = (select max(timeWritten) from #apppoolfailures where computerName = @cServerName)
+			set @nRowCount = (select count(distinct poolname) from #apppoolfailures where computerName = @cServerName)
+			set @cSubject = 'Application pools disabled (' + convert(varchar(20), @nRowCount) + ')'
+			set @cMessage = ''
+
+			select @cMessage = @cMessage + @cServerName + '.[' + poolName + ']<br>'
+				from (select distinct poolname from #apppoolfailures where poolName is not null) a
+
+			print @cSubject
+			print @cMessage
+			print @cServername
+			print @dTimestamp
+
+			insert into notificationLog_stage (serverName, severity, isEventLog, ymd, subject, message) values (@cServerName, 1, 1, @dTimestamp, @cSubject, @cMessage)
+		end
+
+		update #eventLog
+			set isInformational = 1, severity = 3
+			from #eventLog a
+			join #apppoolfailures b on a.computerName = b.computerName
+				and a.logType = b.logType
+				and a.message = b.message
+				and a.sourcename = b.sourceName
+
+	end
+
+
+
+
+	--*********************************************************************************************************************
+	--*********************************************************************************************************************
+
 	insert into notificationLog_stage (message, severity, subject, serverName, isEventLog, ymd)
 	select distinct
 		left('Type: ' + isnull(logtype, '') + char(13) + emailMessage, 8000) as message,
@@ -347,6 +608,38 @@ begin
 	insert into eventLog_history (notes, ukey_group) values ('Alerts staged', @nUkeyGroup)
 
 	--*********************************************************************************************************************
+	-- Check for WebException Exception The underlying connection was closed
+	-- Produces alert if there are more than 3 time out errors in the past 10 minutes.
+	--*********************************************************************************************************************
+
+	insert into notificationLog_stage (serverName, severity, isEventLog, ymd, subject, message)
+	select computername, 1, 1, max(timeWritten),
+		convert(varchar(20), count(*)) + ' checkout sql connection closed/aborted errors since ' + convert(varchar(20), min(timeWritten), 120),
+		convert(varchar(20), count(*)) + ' checkout sql connection closed/aborted errors  between ' + convert(varchar(20), min(timeWritten), 120) + ' and ' + convert(varchar(20), max(timeWritten), 120) + '. Please confirm that checkout is working as expected.'
+		from eventLog (nolock)
+		where message like '%checkout_step%'
+			and (message like '%Exception The underlying connection was closed%' or message like '%Exception The request was aborted%')
+			and timeWritten >= dateadd(minute, -1, getDate())
+		group by computername
+		having count(*) >= 3
+
+
+	--*********************************************************************************************************************
+	-- Check for Checkout Timeout issues
+	-- Produces alert if there are more than 3 time out errors in the past 10 minutes.
+	--*********************************************************************************************************************
+
+	insert into notificationLog_stage (serverName, severity, isEventLog, ymd, subject, message)
+	select computername, 1, 1, max(timeWritten),
+		convert(varchar(20), count(*)) + ' checkout sql Timeout errors since ' + convert(varchar(20), min(timeWritten), 120),
+		convert(varchar(20), count(*)) + ' checkout sql Timeout errors  between ' + convert(varchar(20), min(timeWritten), 120) + ' and ' + convert(varchar(20), max(timeWritten), 120) + '. Please confirm that checkout is working as expected.'
+		from eventLog (nolock)
+		where message like '%checkout_step%' and message like '%Exception Execution Timeout Expired.%' and timeWritten >= dateadd(minute, -1, getDate())
+		group by computername
+		having count(*) >= 3
+
+
+	--*********************************************************************************************************************
 	-- Check for DNS issues
 	--*********************************************************************************************************************
 
@@ -366,9 +659,10 @@ begin
 	delete eventLog_stage with (rowlock)
 		from eventLog_stage a
 		join dm_servers b (nolock) on (a.computerName = b.serverName or a.computerName = b.friendlyName )
-			and b.ukey_group = @nUkeyGroup
+			and (b.ukey_group = @nUkeyGroup or @nUkeyGroup is null)
 
 	insert into eventLog_history (notes, ukey_group) values ('Deleted records from EVENTLOG_STAGE', @nUkeyGroup)
 
 	drop table #eventLog
 end
+GO

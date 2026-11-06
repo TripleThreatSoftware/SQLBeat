@@ -1,9 +1,12 @@
-/****** Object:  Table [dbo].[eventLog_stage_hist]    Script Date: 05/19/2009 13:59:45 ******/
+-- ================================================================================================
+-- Notification.dbo.eventLog_stage_hist
+--
+-- This is a log table for the process of staging records from eventLog_stage into eventLog
+-- ================================================================================================
+/****** Object:  Table [dbo].[eventLog_stage_hist]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
-GO
-SET ANSI_PADDING ON
 GO
 CREATE TABLE [dbo].[eventLog_stage_hist](
 	[ukey_group] [int] NULL,
@@ -11,6 +14,5 @@ CREATE TABLE [dbo].[eventLog_stage_hist](
 	[step] [varchar](200) NULL
 ) ON [PRIMARY]
 GO
-/****** Object:  Default [DF__eventLog_st__ymd__123EB7A3]    Script Date: 05/19/2009 13:59:45 ******/
 ALTER TABLE [dbo].[eventLog_stage_hist] ADD  DEFAULT (getdate()) FOR [ymd]
 GO

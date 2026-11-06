@@ -1,4 +1,9 @@
-create procedure pr_setSMTPConfiguration (@cServerName varchar(200), @nPort int, @cUserName varchar(200), @cPassword varchar(200), @bUseSSL bit = 0)
+/****** Object:  StoredProcedure [dbo].[pr_setSMTPConfiguration]    Script Date: 11/6/2026 9:52:52 AM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+create procedure [dbo].[pr_setSMTPConfiguration] (@cServerName varchar(200), @nPort int, @cUserName varchar(200), @cPassword varchar(200), @bUseSSL bit = 0)
 as
 begin
 	if not exists (select top 1 ukey from dm_settings where settingName = 'SMTP Password')

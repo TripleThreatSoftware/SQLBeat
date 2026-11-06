@@ -1,12 +1,9 @@
-USE [Configuration]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_alert_processorLoad]    Script Date: 8/31/2018 3:55:01 PM ******/
+/****** Object:  StoredProcedure [dbo].[pr_alert_processorLoad]    Script Date: 11/6/2026 9:47:51 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
-ALTER procedure [dbo].[pr_alert_processorLoad]
+CREATE procedure [dbo].[pr_alert_processorLoad]
 as
 begin
 
@@ -60,7 +57,7 @@ begin
 			from #loadSummary
 			where serverName > @cThisServer
 				 and serverName in (
-					select serverName from #loadReadings group by serverName having max(processorLoad) > 75 and avg(processorLoad) > 60
+					select serverName from #loadReadings group by serverName having max(processorLoad) > 95 and avg(processorLoad) > 95
 					)
 		)
 	begin
@@ -72,7 +69,7 @@ begin
 			from #loadSummary
 			where serverName > @cThisServer
 				 and serverName in (
-					select serverName from #loadReadings group by serverName having max(processorLoad) > 75 and avg(processorLoad) > 60
+					select serverName from #loadReadings group by serverName having max(processorLoad) > 95 and avg(processorLoad) > 95
 					)
 			order by serverName
 
@@ -115,11 +112,12 @@ begin
 			else 1 end
 
 		-- edited to only set severity 2 for web04.  20140210 DJB.
-		if @cThisServer = 'web04'
+		if @cThisServer in( 'web04', 'sqldb31', 'storage01', 'web05')
 			set @nSeverity = 2
 
 		print @cThisSubject
 		print @cThisMessage
+
 
 		insert into notification..notificationLog_Stage (serverName, subject, message, severity) values (@cThisServer, @cThisSubject, @cThisMessage, @nSeverity)
 
@@ -130,3 +128,4 @@ begin
 	drop table #loadReadings
 
 end
+GO

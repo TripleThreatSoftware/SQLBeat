@@ -1,4 +1,10 @@
-/****** Object:  Table [dbo].[auditData_ntUsers]    Script Date: 8/6/2024 11:41:33 AM ******/
+-- ================================================================================================
+-- Audit.dbo.auditData_ntUsers
+--
+-- Holds a record of windows user accounts granted permission to SQL as snapshotted by SQLBeat. This
+-- table holds a full historical record and does not have a corresponding partitioned view.
+-- ================================================================================================
+/****** Object:  Table [dbo].[auditData_ntUsers]    Script Date: 11/6/2026 9:45:48 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -10,7 +16,7 @@ CREATE TABLE [dbo].[auditData_ntUsers](
 	[userName] [varchar](100) NULL
 ) ON [PRIMARY]
 GO
-/****** Object:  Index [ix_auditData_ntUsers_auditRun]    Script Date: 8/6/2024 11:41:33 AM ******/
+/****** Object:  Index [ix_auditData_ntUsers_auditRun]    Script Date: 11/6/2026 9:45:48 AM ******/
 CREATE CLUSTERED INDEX [ix_auditData_ntUsers_auditRun] ON [dbo].[auditData_ntUsers]
 (
 	[ukey_auditRun] ASC

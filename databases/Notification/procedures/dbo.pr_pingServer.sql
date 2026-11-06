@@ -1,18 +1,20 @@
-USE [Notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_pingServer]    Script Date: 10/9/2018 1:03:02 PM ******/
+-- ================================================================================================
+-- Notification.dbo.pr_pingServer
+--
+-- Pings a server from the command line and logs timing and packet loss to pingLog. If the ping
+-- fails it runs TRACERT and logs that too. Alerts when ping time rises sharply or the device stops
+-- responding.
+-- ================================================================================================
+/****** Object:  StoredProcedure [dbo].[pr_pingServer]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
-
-
--- select top 100 * from pingLog order by ymd desc
--- exec pr_pingServer 'web04'
+-- select top 100 * from pingResults order by ymd desc
+-- exec pr_pingServer 'appweb01'
 -- update pingResults set sqlPingResults = pingResults where sqlPingResults is null
 -- alter table pingResults drop column pingResults
-ALTER           procedure [dbo].[pr_pingServer] (@cServerName varchar(100))
+CREATE           procedure [dbo].[pr_pingServer] (@cServerName varchar(100))
 as
 begin
 	declare @cServerNamePart varchar(100)
@@ -127,7 +129,7 @@ begin
 		select @cServerMessage = @cServerMessage + isnull(results, '') + char(13) --+ case when results like '%reply from%' then char(13) else '' end
 			from #sqlPing
 
-		if (@cServerMessage not like '%received = 8%' and @cServerMessage not like '%received = 7%' and @cServerMessage not like '%received = 6%' and @cServerMessage not like '%received = 5%' and @cServerMessage not like '%received = 4%' and @cServerMessage not like '%received = 3%') or @cServerMessage like '%ttl expired in transit%'
+		if (@cServerMessage not like '%received = 8%' and @cServerMessage not like '%received = 7%' and @cServerMessage not like '%received = 6%' and @cServerMessage not like '%received = 5%' and @cServerMessage not like '%received = 4%' and @cServerMessage not like '%received = 3%') or @cServerMessage like '%ttl expired in transit%' or @cServerMessage like '%unreachable%'
 			set @bIsServerPingable = 0
 		else
 			set @bIsServerPingable = 1
@@ -251,10 +253,11 @@ begin
 
 		-- if it's business hours, or this is the third one we've seen in the last 90 minutes then raise the alert
 		insert into notificationLog_stage (message, severity, subject, serverName, isConnectivity) values (
-			@cThisMessage, case when @nTimesUnavailable > 2 or @bIsProduction = 1 then 1 else 2 end, @cThisSubject, @cFriendlyName, 1)
+			@cThisMessage, case when @nTimesUnavailable > 2 or (@bIsProduction = 1 and @nTimesUnavailable > 1) then 1 else 2 end, @cThisSubject, @cFriendlyName, 1)
 
 		return 0
 	end
 	else
 		return 1
 end
+GO

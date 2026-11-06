@@ -1,4 +1,10 @@
-/****** Object:  StoredProcedure [dbo].[pr_monitorFiles]    Script Date: 8/6/2024 11:41:33 AM ******/
+-- ================================================================================================
+-- Audit.dbo.pr_monitorFiles
+--
+-- Recursively scans a remote folder for a file mask and logs directory, path, name, date and size
+-- to auditData_files. Alerts when files differ between runs. Job: "Monitor files & SMTP".
+-- ================================================================================================
+/****** Object:  StoredProcedure [dbo].[pr_monitorFiles]    Script Date: 11/6/2026 9:45:48 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -91,8 +97,8 @@ begin
 	--declare @dScanDate dateTime
 	--set @dScanDate = getDate()
 
-	set @cTo = 'alerts@example.com'
-	set @cFrom = 'alerts@example.com'
+	set @cTo = 'cole@sqlbeat.com'
+	set @cFrom = 'monitor@sqlbeat.com'
 
 	select *
 		into #toSend

@@ -1,2 +1,0 @@
-use weblogs
-GO

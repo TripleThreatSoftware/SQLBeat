@@ -1,13 +1,16 @@
-USE [Notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_monitorDatabaseBackups]    Script Date: 8/20/2024 3:39:05 PM ******/
+-- ================================================================================================
+-- Notification.dbo.pr_monitorDatabaseBackups
+--
+-- Reads msdb.dbo.backupset and backupmediafamily on each server with
+-- dm_servers.checkDatabaseBackups set and logs backups to databaseBackupLog. Alerts on any database
+-- not backed up in the last 7 days. Job: "Monitor database backups".
+-- ================================================================================================
+/****** Object:  StoredProcedure [dbo].[pr_monitorDatabaseBackups]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
-
-ALTER procedure [dbo].[pr_monitorDatabaseBackups]
+CREATE procedure [dbo].[pr_monitorDatabaseBackups]
 as
 begin
 
@@ -137,3 +140,4 @@ begin
 	drop table #results
 	drop table #alertResults
 end
+GO

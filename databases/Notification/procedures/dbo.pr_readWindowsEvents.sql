@@ -1,5 +1,11 @@
-USE [Notification]
-GO
+-- ================================================================================================
+-- Notification.dbo.pr_readWindowsEvents
+--
+-- Scans eventLog for IIS fault conditions: application pool stops, application errors,
+-- configuration file and compilation faults, SSL errors and malicious activity, and alerts on them.
+-- Job: "EventLog Check - All Servers".
+-- ================================================================================================
+/****** Object:  StoredProcedure [dbo].[pr_readWindowsEvents]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -27,9 +33,95 @@ GO
 -- select top 500 * from notificationLog order by ymd desc
 -- exec pr_readWindowsEvents 1
 
-ALTER procedure [dbo].[pr_readWindowsEvents] (@nUkeyGroup int)
+CREATE procedure [dbo].[pr_readWindowsEvents] (@nUkeyGroup int = null)
 as
 begin
+	declare @cSQLString nvarchar(4000)
+	declare @cScriptPath varchar(500)
+	declare @cDateString varchar(500)
+	declare @dLastEventLogCheck dateTime = dateadd(minute, -15, getDate())
+	declare @cWideString varchar(8000)
+
+	if not exists (select top 1 ukey from dm_settings where settingName = 'shared folder')
+		insert into dm_settings (settingName, settingValue) values ('shared folder', 'C:\SHARED\')
+
+	set @cScriptPath = (select top 1 settingValue from dm_settings where settingName = 'shared folder')
+
+	if right(@cScriptPath, 1) <> '\'
+		set @cScriptPath = @cScriptPath + '\'
+
+	create table #results (ukey int identity, wideString varchar(8000), serverName varchar(500))
+	create clustered index ix_tmp_results on #results (ukey) with fillfactor = 60
+
+	-- if we are calling with Ryan's new logic
+	if @nUkeyGroup is null
+	begin
+
+		if datediff(hour, @dLastEventLogCheck, getDate()) > 6
+			set @dLastEventLogCheck = dateadd(hour, -6, getDate())
+
+		set @cDateString =
+				convert(varchar(4), datePart(year, @dLastEventLogCheck)) + '-' +
+				right('00' + convert(varchar(2), datePart(month, @dLastEventLogCheck)), 2) + '-' +
+				right('00' + convert(varchar(2), datePart(day, @dLastEventLogCheck)), 2) + ' ' +
+
+
+				right('00' + convert(varchar(2), datePart(hour, @dLastEventLogCheck)), 2) + ':' +
+				right('00' + convert(varchar(2), datePart(minute, @dLastEventLogCheck)), 2) + ':' +
+				right('00' + convert(varchar(2), datePart(second, @dLastEventLogCheck)), 2) + '.000'
+
+		set @cSQLString = 'powershell -file ' + @cScriptPath + 'windows_events.ps1  -cTimestamp "' + @cDateString+'"'
+
+		insert into #results (wideString)
+		exec master..xp_cmdshell @cSQLString
+
+		if exists (select top 1 widestring from #results where wideString like '%denied%' or wideString like '%error%')
+		begin
+			set @cWideString = ''
+			select @cWideString = @cWideString + wideString + '<br>' from #results where wideString like '%denied%' or wideString like '%error%'
+
+			insert into notificationLog_stage (serverName, subject, message, severity) values (@@servername, 'pr_readWindowsEvents error', @cWideString, 2)
+		end
+
+
+		if (select count(*) from RyansEventLog where DateAndTime >= @cDateString)>0
+		begin
+			insert into eventLog_stage (logType, category, computername, message, sourcename, timewritten, type, auser, monitordate, eventID)
+			select logType,
+				null,
+				left(computerName, charindex('.', computerName)-1),
+				cast([message] as varchar(8000)),
+				[source],
+				dateAndTime,
+				[level],
+				null,
+				getDate(),
+				eventID
+				from RyansEventLog (nolock)
+				where DateAndTime >= @cDateString
+		end
+
+		select distinct computername as servername
+			into #serverlist1
+			from eventLog_stage (nolock)
+
+		select distinct left(computerName, charindex('.', computerName)-1) as servername
+			into #serverlist2
+			from RyansEventLog (nolock)
+			where DateAndTime >= @cDateString
+
+		update a
+			set lastEventLogCheck = getDate()
+	--		select distinct a.serverName, b.computerName
+			from dm_servers a
+			join #serverlist2 b on a.serverName = b.servername
+			join #serverlist1 c on a.serverName = c.servername
+
+		drop table #serverlist1
+		drop table #serverlist2
+
+		return
+	end
 
 	set nocount on
 
@@ -39,9 +131,6 @@ begin
 	declare @cServerName varchar(500)
 	declare @cUserName varchar(100)
 	declare @cPassword varchar(100)
-	declare @dLastEventLogCheck dateTime
-	declare @cSQLString nvarchar(4000)
-	declare @cScriptPath varchar(2000)
 	declare @cFieldName varchar(200)
 	declare @nCategory int
 	declare @cCategoryString varchar(500)
@@ -59,23 +148,12 @@ begin
 	declare @cType varchar(100)
 	declare @cUser varchar(500)
 	declare @nUkey int
-	declare @cWideString varchar(8000)
 	declare @nRowCount int
 	declare @cLastFieldName varchar(100)
 	declare @cServerNamePart varchar(100)
-	declare @cDateString varchar(100)
 
 	set @cServerName = ''
 
-	if not exists (select top 1 ukey from dm_settings where settingName = 'shared folder')
-		insert into dm_settings (settingName, settingValue) values ('shared folder', 'C:\SHARED\')
-
-	set @cScriptPath = (select top 1 settingValue from dm_settings where settingName = 'shared folder')
-
-	if right(@cScriptPath, 1) <> '\'
-		set @cScriptPath = @cScriptPath + '\'
-
-	create table #results (ukey int identity, wideString varchar(8000), serverName varchar(500))
 	create table #events (serverName varchar(200), category bigint, categoryString varchar(200), data varchar(8000),
 		eventCode bigint, eventIdentifier bigint, eventType bigint, basicString varchar(8000), logFile varchar(500),
 		[message] varchar(8000), recordNumber bigint, sourceName varchar(500), timeGenerated dateTime, timeWritten dateTime,
@@ -184,7 +262,7 @@ begin
 
 -- select * from #results
 
-	create index ix_tmp_results on #results (ukey) with fillfactor = 90
+	--create index ix_tmp_results on #results (ukey) with fillfactor = 90
 
 --select * from #results
 
@@ -421,3 +499,4 @@ begin
 	drop table #events
 
 end
+GO

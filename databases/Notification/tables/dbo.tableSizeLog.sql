@@ -1,25 +1,29 @@
-/****** Object:  Table [dbo].[tableSizeLog]    Script Date: 05/19/2009 13:59:44 ******/
+-- ================================================================================================
+-- Notification.dbo.tableSizeLog
+--
+-- Holds a record of the number of rows and space consumed by tables as returned by sp_spaceUsed
+-- ================================================================================================
+/****** Object:  Table [dbo].[tableSizeLog]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-SET ANSI_PADDING ON
-GO
 CREATE TABLE [dbo].[tableSizeLog](
-	[ymd] [datetime] NULL,
-	[serverName] [varchar](200) NULL,
-	[databaseName] [varchar](200) NULL,
-	[tableName] [varchar](200) NULL,
-	[rows] [varchar](100) NULL,
-	[reserved] [varchar](50) NULL,
-	[data] [varchar](50) NULL,
-	[indexSize] [varchar](50) NULL,
-	[unused] [varchar](50) NULL,
-	[ukey] [int] IDENTITY(1,1) NOT NULL
+	[ymd] [datetime] NULL,	-- The date of the measurement
+	[serverName] [varchar](200) NULL,	-- The server name
+	[databaseName] [varchar](200) NULL,	-- The database name
+	[tableName] [varchar](200) NULL,	-- The table name
+	[rows] [varchar](100) NULL,	-- The number of rows in the table
+	[reserved] [varchar](50) NULL,	-- The space reserved for this table
+	[data] [varchar](50) NULL,	-- The space consumed by Data
+	[indexSize] [varchar](50) NULL,	-- The space consumed by Indexes
+	[unused] [varchar](50) NULL,	-- The amount of unused space by this table
+	[ukey] [int] IDENTITY(1,1) NOT NULL	-- An internally used incrementing identity counter; uniquely identifies this row, and may be used as a Foreign Key.
 ) ON [PRIMARY]
 GO
-SET ANSI_PADDING OFF
+SET ANSI_PADDING ON
 GO
+/****** Object:  Index [ix_tableSizeLog_serverName_databaseName_tableName_ymd_ukey]    Script Date: 11/6/2026 9:52:52 AM ******/
 CREATE CLUSTERED INDEX [ix_tableSizeLog_serverName_databaseName_tableName_ymd_ukey] ON [dbo].[tableSizeLog]
 (
 	[serverName] ASC,
@@ -27,14 +31,16 @@ CREATE CLUSTERED INDEX [ix_tableSizeLog_serverName_databaseName_tableName_ymd_uk
 	[tableName] ASC,
 	[ymd] ASC,
 	[ukey] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 60) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, FILLFACTOR = 60, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
 GO
+SET ANSI_PADDING ON
+GO
+/****** Object:  Index [ix_tableSizeLog_serverName_ymd]    Script Date: 11/6/2026 9:52:52 AM ******/
 CREATE NONCLUSTERED INDEX [ix_tableSizeLog_serverName_ymd] ON [dbo].[tableSizeLog]
 (
 	[serverName] ASC,
 	[ymd] ASC
-)WITH (PAD_INDEX  = OFF, STATISTICS_NORECOMPUTE  = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS  = ON, ALLOW_PAGE_LOCKS  = ON, FILLFACTOR = 70) ON [PRIMARY]
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, FILLFACTOR = 70, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
 GO
-/****** Object:  Default [DF__tableSizeLo__ymd__691B419B]    Script Date: 05/19/2009 13:59:44 ******/
 ALTER TABLE [dbo].[tableSizeLog] ADD  DEFAULT (getdate()) FOR [ymd]
 GO

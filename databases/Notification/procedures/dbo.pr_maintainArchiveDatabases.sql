@@ -1,4 +1,4 @@
-/****** Object:  StoredProcedure [dbo].[pr_maintainArchiveDatabases]    Script Date: 05/19/2009 13:59:45 ******/
+/****** Object:  StoredProcedure [dbo].[pr_maintainArchiveDatabases]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -6,18 +6,19 @@ GO
 CREATE procedure [dbo].[pr_maintainArchiveDatabases]
 as
 begin
+	declare @nThisUkey int
+	declare @cSQLString nvarchar(4000)
+
 	select
 		[name],
 		identity(int) as ukey
 		into #archiveDatabases
 		from master.dbo.sysdatabases (nolock)
-		where [name] like '%notification%'
-			and [name] <> 'notification'
+		where [name] like '%' + db_name() + '%'
+			and [name] <> db_name()
 		order by [name] desc
 
-	declare @nThisUkey int
-	declare @cSQLString nvarchar(4000)
-	set @nThisUkey = 3
+	set @nThisUkey = 12
 
 	while exists (select top 1 [name] from #archiveDatabases where ukey > @nThisUkey)
 	begin

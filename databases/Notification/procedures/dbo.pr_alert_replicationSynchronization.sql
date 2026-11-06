@@ -1,7 +1,12 @@
+/****** Object:  StoredProcedure [dbo].[pr_alert_replicationSynchronization]    Script Date: 11/6/2026 9:52:52 AM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
 -- exec pr_alert_replicationSynchronization 'mssql-ny', 'mssql_slv-ny', 'transactions_ap'
 -- exec pr_alert_replicationSynchronization 'mssql-ny', 'mssql_slv-ny', 'transactions_hk'
 
-ALTER procedure [dbo].[pr_alert_replicationSynchronization] (@cServerName_Publisher varchar(100), @cServerName_Subscriber varchar(100),
+CREATE procedure [dbo].[pr_alert_replicationSynchronization] (@cServerName_Publisher varchar(100), @cServerName_Subscriber varchar(100),
 	@cDatabaseName varchar(100), @cTableName varchar(100) = 'transactions', @cDateField varchar(100) = 'dateCreated')
 as
 begin

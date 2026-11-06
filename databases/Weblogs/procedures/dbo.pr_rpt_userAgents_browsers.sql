@@ -1,18 +1,15 @@
-USE [Weblogs]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_rpt_userAgents_browsers]    Script Date: 9/30/2013 3:52:02 PM ******/
+/****** Object:  StoredProcedure [dbo].[pr_rpt_userAgents_browsers]    Script Date: 11/6/2026 9:48:28 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
 -- exec pr_rpt_userAgents_browsers 'AppDb'
 -- exec weblogs..pr_rpt_userAgents_browsers 'AppDb'
 -- select * from dm_sites
 -- select * from dm_userAgent where browserName like '%safari%' and userAgent not like '%htc%safari%' and userAgent not like '%blackberry%safari%' and userAgent not like '%droid%safari%' and userAgent not like '%iphone%safari%' and userAgent not like '%ipad%safari%' and userAgent not like '%chrome%safari%' order by dateAdded desc
 -- select * from dm_userAgent where useragent like '%trident%rv%11%' order by dateAdded desc
 
-ALTER procedure [dbo].[pr_rpt_userAgents_browsers] (@cSiteName varchar(100))
+CREATE procedure [dbo].[pr_rpt_userAgents_browsers] (@cSiteName varchar(100))
 as
 begin
 
@@ -108,3 +105,4 @@ begin
 		order by requests desc
 
 end
+GO

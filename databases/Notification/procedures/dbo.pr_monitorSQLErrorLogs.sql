@@ -1,15 +1,12 @@
-USE [Notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_monitorSQLErrorLogs]    Script Date: 8/20/2024 10:39:21 AM ******/
+/****** Object:  StoredProcedure [dbo].[pr_monitorSQLErrorLogs]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
 --select top 10 * from notificationLog_Stage
 -- truncate table notificationLog_Stage
 
-ALTER procedure [dbo].[pr_monitorSQLErrorLogs]
+CREATE procedure [dbo].[pr_monitorSQLErrorLogs]
 as
 begin
 	declare @dMinDate dateTime
@@ -26,7 +23,7 @@ begin
 		where ymd >= @dMinDate
 			and (
 				logMessage like '%deadlock%'
-				or logMessage like '%login failed%'
+				or (logMessage like '%login failed%' and not logMessage like '%network packet payload did not match%')
 				or (logMessage like '%error%' and logMessage not like '%0 errors%' and logMessage not like '%without errors%')
 				or logMessage like '%a significant part%'
 				or logMessage like '%terminating%'
@@ -38,6 +35,7 @@ begin
 				or logMessage like '%execution of%'
 				or processInfo = 'Server'
 				)
+			and not logMessage like '%unspecified error%'
 			and logMessage not like '%reinitialized%'
 			and logMessage not like '%logging sql server messages%'
 			and logMessage not like 'RBPEX::NotifyFileShutdown: Called for database ID%'
@@ -68,7 +66,8 @@ begin
 			and not logMessage like 'UTC Adjustment%'
 			and not logMessage like 'Microsoft SQL Server %'
 			and not logMessage like 'Parallel redo is shutdown for database%'
-			--and not logMessage like '%%'
+
+			and not logMessage like '%CHECKDB found 0 allocation errors and 0 consistency errors%'
 			--and not logMessage like '%%'
 			--and not logMessage like '%%'
 			--and not logMessage like '%%'
@@ -124,6 +123,8 @@ begin
 					and charindex('client:', logMessage) > 0
 					and logMessage not like '%sspi%'
 					and not (logMessage like '%network packet payload did not match number of bytes read%' and logMessage like '%10.1.10.50%')
+					and not logMessage like '%network packet payload did not match%'
+					and not logMessage like '%packet used to open the connection is structurally invalid%'
 			) a
 
 	-- only report on failures since the last attempt
@@ -295,3 +296,4 @@ begin
 	drop table #deadlocks
 	drop table #otherErrors
 end
+GO

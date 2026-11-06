@@ -1,13 +1,16 @@
-USE [Notification]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_checkIndexes]    Script Date: 8/11/2024 9:27:33 AM ******/
+-- ================================================================================================
+-- Notification.dbo.pr_checkIndexes
+--
+-- For each server with dm_servers.indexCheck set, logs table and index updates, seeks, scans and
+-- lookups from sys.indexes and dm_db_index_usage_stats to indexPerformanceLog. Data only, no
+-- alerts. Job: "Monitor Indexing".
+-- ================================================================================================
+/****** Object:  StoredProcedure [dbo].[pr_checkIndexes]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
-
-
-ALTER procedure [dbo].[pr_checkIndexes]
+CREATE procedure [dbo].[pr_checkIndexes]
 as
 begin
 	set nocount on
@@ -176,3 +179,4 @@ begin
 
 	drop table #performance
 end
+GO

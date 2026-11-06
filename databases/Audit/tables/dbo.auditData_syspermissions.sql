@@ -1,4 +1,10 @@
-/****** Object:  Table [dbo].[auditData_syspermissions]    Script Date: 8/6/2024 11:41:33 AM ******/
+-- ================================================================================================
+-- Audit.dbo.auditData_syspermissions
+--
+-- Holds a record of SYSPERMISSIONS as snapshotted by SQLBeat. This table holds a full historical
+-- record and does not have a corresponding partitioned view.
+-- ================================================================================================
+/****** Object:  Table [dbo].[auditData_syspermissions]    Script Date: 11/6/2026 9:45:48 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -23,7 +29,7 @@ CREATE TABLE [dbo].[auditData_syspermissions](
 GO
 SET ANSI_PADDING ON
 GO
-/****** Object:  Index [ix_auditData_sysPermissions_auditRun_server_databaseName_id]    Script Date: 8/6/2024 11:41:33 AM ******/
+/****** Object:  Index [ix_auditData_sysPermissions_auditRun_server_databaseName_id]    Script Date: 11/6/2026 9:45:48 AM ******/
 CREATE CLUSTERED INDEX [ix_auditData_sysPermissions_auditRun_server_databaseName_id] ON [dbo].[auditData_syspermissions]
 (
 	[ukey_auditRun] ASC,

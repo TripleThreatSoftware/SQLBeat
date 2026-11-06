@@ -1,4 +1,10 @@
-/****** Object:  Table [dbo].[auditData_indexes]    Script Date: 8/6/2024 11:41:33 AM ******/
+-- ================================================================================================
+-- Audit.dbo.auditData_indexes
+--
+-- Holds a record of index definition snapshotted by SQLBeat. This table holds a full historical
+-- record and does not have a corresponding partitioned view.
+-- ================================================================================================
+/****** Object:  Table [dbo].[auditData_indexes]    Script Date: 11/6/2026 9:45:48 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -21,7 +27,7 @@ CREATE TABLE [dbo].[auditData_indexes](
 GO
 SET ANSI_PADDING ON
 GO
-/****** Object:  Index [ix_indexes_servername_databasename_tablename_indexname]    Script Date: 8/6/2024 11:41:33 AM ******/
+/****** Object:  Index [ix_indexes_servername_databasename_tablename_indexname]    Script Date: 11/6/2026 9:45:48 AM ******/
 CREATE CLUSTERED INDEX [ix_indexes_servername_databasename_tablename_indexname] ON [dbo].[auditData_indexes]
 (
 	[serverName] ASC,

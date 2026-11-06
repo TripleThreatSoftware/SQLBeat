@@ -1,4 +1,10 @@
-/****** Object:  StoredProcedure [dbo].[pr_monitorActiveServers]    Script Date: 8/6/2024 11:41:33 AM ******/
+-- ================================================================================================
+-- Audit.dbo.pr_monitorActiveServers
+--
+-- Runs pr_monitorFiles against C$\Windows\System32\drivers\etc on every server, so key Windows
+-- configuration files are watched even before anyone configures them.
+-- ================================================================================================
+/****** Object:  StoredProcedure [dbo].[pr_monitorActiveServers]    Script Date: 11/6/2026 9:45:48 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON

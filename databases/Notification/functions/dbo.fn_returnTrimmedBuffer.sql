@@ -1,9 +1,9 @@
-/****** Object:  UserDefinedFunction [dbo].[fn_returnTrimmedBuffer]    Script Date: 05/19/2009 13:59:45 ******/
+/****** Object:  UserDefinedFunction [dbo].[fn_returnTrimmedBuffer]    Script Date: 11/6/2026 9:52:52 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
---select dbo.fn_returnTrimmedBuffer(' /* Object: Stored Procedure dbo.usp_CFA_Select_ProgramInformation  */ -- ================================================================================================== -- Author:Vinayak Pai -- Created date: 10/19/2007 -- Description:SP to be utilised for GetProgramCode in BudgetDA -- ================================================================================================== CREATE    PROCEDURE [dbo].[usp_CFA_Select_ProgramInformation] @AppFundID int AS BEGIN SET NOCOUNT ON;  SELECT B.PROGRAM_CODE, B.CATEG ORY_ID, ISNULL(B.DC_SIGNOFF_FLAG,0) AS DC_SIGNOFF_FLAG, ISNULL(B.INCLUDE_BUDGETRULES,0) AS INCLUDE_BUDGETRULES, ISNULL(B.VALIDATE_PLAN_STATUS,0) AS VALIDATE_PLAN_STATUS, A.PROGRAM_ID, A.APP_FUND_ID, B.FISCALYEAR, CASE WHEN A.AMENDMENT_NUM = 0 THEN "Original" ELSE "Ame ndment No. " + CONVERT(VARCHAR,A.AMENDMENT_NUM) END AS PROGRAM_TYPE, B.[PROGRAM_NAME], A.APP_TYPE_IND, CASE WHEN A.APP_TYPE_IND = 1 THEN "Single District" ELSE "Consortium" END AS APPLIED_AS, ISNULL(C.fname,"") + " " + ISNULL(C.lname,"") AS [name], LTRIM(RTRI M(A.CONTACT_ID)) AS CONTACT_ID, CASE WHEN A.APP_FUND_ID = A.ORG_APP_FUND_ID THEN 1 ELSE 0 END AS consort_status, A.ORG_APP_FUND_ID, B.CATEGORY_ID, D.STATUS_DESC, A.APP_ID, A.LAST_SIGNOFF_DATE, A.SUPER_SIGNOFF_DATE, MAIN_ALL_SYSTEM.SYSTEM_ID + " - " + SYSTEM_NAME AS [SYSTEM] FROM CFA_APP_FUND A INNER JOIN CFA_PROGRAM_CODES_FY B ON B.PROGRAM_ID = A.PROGRAM_ID LEFT OUTER JOIN WEB_USERS C ON C.[USER_ID] = A.CONTACT_ID INNER JOIN CFA_STATUS D ON D.STATUS_ID = A.STATUS INNER JOIN CFA_APPLICATION ON A.APP_ID = CFA_APPLICATION.APP_ ID INNER JOIN MAIN_ALL_SYSTEM ON CFA_APPLICATION.SYSTEM_ID = MAIN_ALL_SYSTEM.SYSTEM_ID WHERE A.Active = 1 AND A.APP_FUND_ID = @AppFundID  END ')
+--select dbo.fn_returnTrimmedBuffer(' ---- =========================================================================== ---- Author:<Author:   a contractor> ---- Create date: <Create Date: 03:17:2008> ---- Updated date : Siva: 07:16:2008 - Tested the Summer process ---- Description:<Description: Save Summer Claims and Financial Data > ---- ============================================================================ CREATE PROCEDURE [dbo].[usp_SNSummerProcess] @PFiscalYear int, @ClaimMonth int, @SystemId Varchar(3), @UserId varchar(128) as --declare @PFiscalYear int,@ClaimMonth i nt,@SystemId Varchar(3),@UserId varchar(128) ---- --select @PFiscalYear=0,@ClaimMonth=6,@SystemId="621",@UserId="user@example.org"  declare @FiscalYear int declare @FinCnt int declare @ClmCnt int declare @DE107Cnt int declare @SFACount int declare @SchoolId varchar(4) declare @SchoolName varchar(100) declare @ErrMsgFin Varchar(max) declare @ErrMsgClm Varchar(max) declare @PrevClaimMonth int declare @PrevFiscalYear int declare @NeedDE107 int declare @SchoolInformationId int declare @FinancialInformationID int declare @SystemReimbursementClaimID int decla re @MealCountId int Declare @KeyValue Int Declare @CalendarDate datetime  DECLARE @SSClosedSAPP table ( SchoolAppParticipationProgramDetailID int )   begin set @ErrMsgFin="" set @ErrMsgClm="" SET @FiscalYear=@PFiscalYear if @PFiscalYear=0 and @ClaimMonth=7 set @Fisca lYear=year(getdate())+1  if @PFiscalYear=0 and @ClaimMonth=6 set @FiscalYear=year(getdate())  --Select @FiscalYear=2009 --Remove After Testing  if @ClaimMonth=7 begin set @PrevFiscalYear=@FiscalYear-1 set @PrevClaimMonth=6 end if @ClaimMonth=6 begin set @PrevFisc alYear=@FiscalYear set @PrevClaimMonth=5 end  SELECT @CalendarDate=Convert(datetime,(Select Case when (@ClaimMonth > 6 and @ClaimMonth <=12) Then convert(varchar,@ClaimMonth) + "/" + "01" + "/" + convert(varchar,@FiscalYear-1) Else convert(varchar,@ClaimMonth) + "/" + "01" + "/" + convert(varchar,@FiscalYear) End)) --Print @CalendarDate   --Print @FiscalYear --Print @PrevFiscalYear --Print @PrevClaimMonth  -- Check Claims Allowed for this FiscalYear Select @KeyValue=ClaimsAllowed from dbo.SNFiscalYear where FiscalYear=@Fisca lYear IF(ISNull(@KeyValue,0)=0) Begin Select "All data entry forms have been disabled at this time. Please contact Claim Administrator." as ErrMsg return End  -- Check SAM Status Select @SFACount=Count(SystemCertificationID) From ( SELECT SystemCertificationID,SFA.Fi scalYear, SFA.SystemID, WS.WFObjectTypeID, WS.WFStatusID FROM  SNSystemCertification AS SFA INNER JOIN WFObjectStatus AS WS ON SFA.SystemCertificationID = WS.WFObjectID WHERESFA.FiscalYear=@FiscalYear and SFA.SystemID=@SystemId and WS.WFObjectTypeID = 3 and WS. WFStatusID = 5 ) as A  if @SFACount=0 begin select"<B>SAM has not been approved for ')
 
 CREATE function [dbo].[fn_returnTrimmedBuffer] (@cBufferContents varchar(8000))
 returns varchar(500)
@@ -12,6 +12,12 @@ begin
 	declare @cReturnString varchar(500)
 	declare @nTrimPosition int
 	declare @cWorkingBuffer varchar(8000)
+	declare @nCounter int
+
+	if @cBufferContents like 'begin tran%'
+		return 'AdHoc User Code'
+
+	set @nCounter = 0
 
 	-- trim comments
 	while left(@cBufferContents, 2) = '--'
@@ -20,6 +26,7 @@ begin
 			or charindex(space(2), substring(@cBufferContents, 3, 8000)) > 0
 			or charindex('--', substring(@cBufferContents, 3, 8000)) > 0
 			)
+		and @nCounter < 500
 	begin
 		set @nTrimPosition = 9999
 		if charindex(char(13), substring(@cBufferContents, 3, 8000)) < @nTrimPosition and charindex(char(13), substring(@cBufferContents, 3, 8000)) <> 0
@@ -31,9 +38,11 @@ begin
 
 		set @cBufferContents = ltrim(rtrim(substring(@cBufferContents, @nTrimPosition , 8000)))
 --		set @nTrimCounter = @nTrimCounter + 1
+
+		set @nCounter = @nCounter + 1
 	end
 
-	set @cBufferContents = rtrim(ltrim(replace(replace(replace(replace(replace(replace(replace(@cBufferContents, char(9), ' '), char(13), ' '), char(10), ' '), ']', ''), '[', ''), 'dbo.', ''), '~', '')))
+	set @cBufferContents = rtrim(ltrim(replace(replace(replace(replace(replace(replace(replace(replace(replace(@cBufferContents, char(9), ' '), char(13), ' '), char(10), ' '), ']', ''), '[', ''), 'dbo.', ''), '~', ''), 'CREATE PROC ', 'CREATE PROCEDURE '), 'exec ', '')))
 
 	set @cBufferContents =
 		replace(replace(
@@ -124,6 +133,7 @@ begin
 			(patindex('%createprocedure%', @cWorkingBuffer) < patindex('%insertinto%', @cWorkingBuffer) or patindex('%insertinto%', @cWorkingBuffer) = 0)
 			and (patindex('%createprocedure%', @cWorkingBuffer) < patindex('%select%from%', @cWorkingBuffer) or patindex('%select%from%', @cWorkingBuffer) = 0)
 			and (patindex('%createprocedure%', @cWorkingBuffer) < patindex('%update%set%', @cWorkingBuffer) or patindex('%update%set%', @cWorkingBuffer) = 0)
+			and (patindex('%createprocedure%', @cWorkingBuffer) < charindex('@', @cWorkingBuffer) or charindex('@', @cWorkingBuffer) = 0)
 			and patindex('%createprocedure%', @cWorkingBuffer) > 0
 		)
 		or (
@@ -134,6 +144,10 @@ begin
 		)
 	begin
 		set @cBufferContents = replace(@cBufferContents, 'with ', '$$')
+
+		if charindex(' as ', @cBufferContents) > 0
+			set @cBufferContents = left(@cBufferContents, charindex(' as ', @cBufferContents) - 1)
+
 		set @cBufferContents = replace(replace(replace(replace(replace(@cBufferContents, space(1), space(0)), char(9), space(0)), char(13), space(0)), char(10), space(0)), ascii(32), '')
 		set @cBufferContents = replace(replace(replace(replace(@cBufferContents, 'createprocedure', '~~'), 'createproc', '~~'), 'createfunction', '~~'), 'createfunc', '~~')
 
@@ -149,6 +163,8 @@ begin
 			set @cBufferContents = left(@cBufferContents, charindex('@', @cBufferContents) - 1)
 		if charindex('asbegin', @cBufferContents) > 0
 			set @cBufferContents = left(@cBufferContents, charindex('asbegin', @cBufferContents) - 1)
+		if charindex('asdeclare', @cBufferContents) > 0
+			set @cBufferContents = left(@cBufferContents, charindex('asdeclare', @cBufferContents) - 1)
 		else
 			if charindex('asselect', @cBufferContents) > 0
 				set @cBufferContents = left(@cBufferContents, charindex('asselect', @cBufferContents) - 1)

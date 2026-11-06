@@ -1,12 +1,10 @@
-USE [Weblogs]
-GO
-/****** Object:  StoredProcedure [dbo].[pr_createIndexOnAllPartitionTables]    Script Date: 6/9/2017 9:53:00 AM ******/
+/****** Object:  StoredProcedure [dbo].[pr_createIndexOnAllPartitionTables]    Script Date: 11/6/2026 9:48:28 AM ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
 -- exec pr_createIndexOnAllPartitionTables 'fact_weblogs', 'ukeySite', 'ukey_site, ukey_sourceFile, ymd', 70
-ALTER procedure [dbo].[pr_createIndexOnAllPartitionTables] (@cTableMask varchar(100), @cIndexName varchar(500), @cIndexFields varchar(500), @nFillFactor int)
+CREATE procedure [dbo].[pr_createIndexOnAllPartitionTables] (@cTableMask varchar(100), @cIndexName varchar(500), @cIndexFields varchar(500), @nFillFactor int)
 as
 begin
 
@@ -72,3 +70,4 @@ begin
 	drop table #databases
 	drop table #tables
 end
+GO
