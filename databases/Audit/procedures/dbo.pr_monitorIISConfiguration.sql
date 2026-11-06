@@ -32,8 +32,8 @@ begin
 	declare @cBody varchar(4000)
 	declare @nChangedFiles int
 
-	set @cTo = 'cole@sqlbeat.com'
-	set @cFrom = 'monitor@sqlbeat.com'
+	set @cTo = 'DBA'		-- pr_sendMessage sends DBA to the 'Default Email To' setting
+	set @cFrom = ''		-- blank uses the 'Default Email From' setting
 
 	set nocount on
 

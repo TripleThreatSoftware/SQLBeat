@@ -116,7 +116,7 @@ begin
 		--print @cSubject
 		--print @cBody
 
-		exec notification.dbo.pr_sendMessage 'monitor@sqlbeat.com', 'cole@sqlbeat.com', @cSubject, @cBody
+		exec notification.dbo.pr_sendMessage '', 'DBA', @cSubject, @cBody
 	end
 
 	drop table #results

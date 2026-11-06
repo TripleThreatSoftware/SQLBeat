@@ -5,7 +5,7 @@ SET QUOTED_IDENTIFIER ON
 GO
 --declare @cMessage varchar(8000)
 --set @cMessage = 'this' + char(13) + 'is a test'
---exec pr_sendMessage 'monitor@sqlbeat.com', 'cole@sqlbeat.com', 'Test message', @cMessage, 1
+--exec pr_sendMessage '', 'DBA', 'Test message', @cMessage, 1
 
 CREATE procedure [dbo].[pr_sendMessage] (@cFrom varchar(100), @cTo varchar(500), @cSubject varchar(2000), @cBody varchar(max), @bSendHTML bit = 1)
 as
@@ -38,10 +38,7 @@ begin
 	begin
 		set @cBody = '<div style="font-family:Courier; font-size: x-small;">' + replace(@cBody, char(13), '<br>') + '</div>' + '
 <hr>
-<table width="100%" border="0" cellspacing="0" cellpadding="0"><tr>
-<td align="left"><div style="font-family:Verdana; font-size:x-small; margin:0;">SQLBeat</div></td>
-<td align="right"><div style="font-family:Verdana; font-size:x-small; margin:0;"><a href="http://' + @@servername + '/sqlControlPanel.aspx">Control Panel</a></div></td>
-</tr></table>'
+<div style="font-family:Verdana; font-size:x-small; margin:0;">SQLBeat on ' + @@servername + '</div>'
 
 
 		exec sp_send_cdosysmail @cFrom, @cTo, @cSubject, '', '', @cBody
