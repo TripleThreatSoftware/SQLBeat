@@ -4,7 +4,7 @@ Agentless, source-available monitoring and SIEM for Microsoft SQL Server, built 
 in SQL Server: tables, stored procedures, functions, triggers and SQL Agent jobs.
 A product of TTS LLC. https://www.sqlbeat.com
 
-> **Status:** private while the code is prepared for release. Not yet installable from this repo.
+> **Status:** private while the code is prepared for release. The installer is new and not yet tested end to end.
 
 ## Layout
 
@@ -42,12 +42,19 @@ alongside SQLBeat is left out.
 
 ## Installing
 
-Two install paths are planned:
+- **SQL Server Standard edition or above:** run `install/Install-SQLBeat.ps1` from an elevated PowerShell 7 prompt.
+  Jobs run on the built-in SQL Server Agent. `Get-Help .\install\Install-SQLBeat.ps1 -Full` lists every option;
+  add `-WhatIf` to see what it would do. Full guide: https://www.sqlbeat.com/install.html
+- **SQL Server Express:** jobs will run on [SQL Free Agent](https://www.sqlfreeagent.com). This path is not available yet.
 
-- **SQL Server Standard edition or above:** jobs run on the built-in SQL Server Agent.
-- **SQL Server Express:** jobs run on [SQL Free Agent](https://www.sqlfreeagent.com). This path is not defined yet.
+```powershell
+.\install\Install-SQLBeat.ps1 -SqlInstance SQLBEAT01 -SharedFolder D:\SQLBeat\Shared `
+    -SharedFolderUnc \\SQLBEAT01\SQLBeatShared -CreateShare `
+    -AlertEmail dba@example.com -SmtpServer smtp.example.com `
+    -FirstServer SQLPROD01 -FirstServerType 'SQL Server'
+```
 
-### Install sequence (from the legacy installer)
+### What the installer does (from the legacy installer's steps)
 
 The old Inno Setup installer also installed SQL Server Express and an ASP.NET control panel;
 neither is part of SQLBeat any more. The rest of its steps still apply:
@@ -59,7 +66,8 @@ neither is part of SQLBeat any more. The rest of its steps still apply:
 4. **Create the databases** Audit, Configuration, Notification and Weblogs and their objects.
 5. **Settings** in `Notification..dm_settings`: job owner, machine name, SMTP server/port/credentials/SSL,
    default from/to email, shared folder path, partition data and log paths, thresholds.
-6. **Monitoring login** used by SQLBeat, mapped into its databases.
+6. **Monitoring credentials:** SQLBeat reaches monitored servers as its SQL Server service account,
+   or with per-server SQL and WMI credentials stored in `dm_servers`.
 7. **Shared folder** on the SQLBeat server, holding `shared/`, readable by the service accounts of
    the monitored servers; record its UNC and local paths in `dm_settings`.
 8. **Base jobs** from `jobs/`.
@@ -72,4 +80,9 @@ neither is part of SQLBeat any more. The rest of its steps still apply:
 
 ## License
 
-To be added before release.
+Free for non-commercial use under the [PolyForm Noncommercial License 1.0.0](LICENSE.md).
+Commercial use needs a license from TTS LLC: see [COMMERCIAL.md](COMMERCIAL.md).
+
+## Help
+
+Questions go in [Discussions](https://github.com/TripleThreatSoftware/SQLBeat/discussions); see [SUPPORT.md](SUPPORT.md).
