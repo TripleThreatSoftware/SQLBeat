@@ -42,7 +42,8 @@ alongside SQLBeat is left out.
 
 ## Installing
 
-- **SQL Server Standard edition or above:** run `install/Install-SQLBeat.ps1` from an elevated PowerShell 7 prompt.
+- **SQL Server Standard edition or above:** run `install/Install-SQLBeat.ps1` from an elevated PowerShell prompt
+  (Windows PowerShell 5.1 or PowerShell 7).
   Jobs run on the built-in SQL Server Agent. `Get-Help .\install\Install-SQLBeat.ps1 -Full` lists every option;
   add `-WhatIf` to see what it would do. Full guide: https://www.sqlbeat.com/install.html
 - **SQL Server Express:** jobs will run on [SQL Free Agent](https://www.sqlfreeagent.com). This path is not available yet.
@@ -61,7 +62,8 @@ neither is part of SQLBeat any more. The rest of its steps still apply:
 
 1. **SQL Server instance** dedicated to SQLBeat, SQL authentication enabled, TCP and named pipes on,
    default collation.
-2. **Prerequisites** on the SQLBeat server: PowerShell 7, Visual C++ runtime, Microsoft OLE DB Driver for SQL Server.
+2. **Prerequisites:** none beyond Windows PowerShell, which SQLBeat's checks call. (The old installer also added
+   PowerShell 7, the Visual C++ runtime and the OLE DB driver for the SQL Express install and dashboards.)
 3. **Server options:** enable `xp_cmdshell`, `Agent XPs` and `Ole Automation Procedures`.
 4. **Create the databases** Audit, Configuration, Notification and Weblogs and their objects.
 5. **Settings** in `Notification..dm_settings`: job owner, machine name, SMTP server/port/credentials/SSL,
